@@ -18,6 +18,7 @@ import CustomersPage from "./pages/CustomersPage";
 import CRMPage from "./pages/CRMPage";
 import AssistenciaPage from "./pages/AssistenciaPage";
 import BIDashboardPage from "./pages/BIDashboardPage";
+import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />
             <Route path="/assistencia" element={<ProtectedApp><AssistenciaPage /></ProtectedApp>} />
             <Route path="/bi" element={<ProtectedApp adminOnly><BIDashboardPage /></ProtectedApp>} />
+            <Route path="/usuarios" element={<ProtectedApp adminOnly><UsersPage /></ProtectedApp>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

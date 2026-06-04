@@ -57,11 +57,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 // ---- Tipos de usuário ----
+export type UserRole = "admin" | "vendedor" | "tecnico";
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "vendedor" | "tecnico";
+  role: UserRole;
+}
+
+export interface ManagedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+  createdAt?: string;
 }
 
 // ---- Mapeamento de dados (banco → tipos do front) ----
@@ -184,6 +195,22 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<{ user: AuthUser }>("/auth/me"),
+
+  // Usuários (admin)
+  listUsers: () => request<{ users: ManagedUser[] }>("/users").then((d) => d.users),
+  createUser: (input: { name: string; email: string; password: string; role: UserRole }) =>
+    request<{ user: AuthUser }>("/users", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((d) => d.user),
+  updateUser: (
+    id: string,
+    patch: { name?: string; role?: UserRole; active?: boolean; password?: string }
+  ) =>
+    request<{ user: ManagedUser }>(`/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }).then((d) => d.user),
 
   // Devices
   listDevices: () =>
