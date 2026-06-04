@@ -1,0 +1,62 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { InventoryProvider } from "@/contexts/InventoryContext";
+import { CRMProvider } from "@/contexts/CRMContext";
+import { ServiceOrderProvider } from "@/contexts/ServiceOrderContext";
+import LoginPage from "./pages/LoginPage";
+import Dashboard from "./pages/Dashboard";
+import DevicesPage from "./pages/DevicesPage";
+import AccessoriesPage from "./pages/AccessoriesPage";
+import PDVPage from "./pages/PDVPage";
+import CustomersPage from "./pages/CustomersPage";
+import CRMPage from "./pages/CRMPage";
+import AssistenciaPage from "./pages/AssistenciaPage";
+import BIDashboardPage from "./pages/BIDashboardPage";
+import NotFound from "./pages/NotFound";
+
+const queryClient = new QueryClient();
+
+// Agrupa os providers de dados que só fazem sentido após o login
+function ProtectedApp({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <InventoryProvider>
+        <CRMProvider>
+          <ServiceOrderProvider>{children}</ServiceOrderProvider>
+        </CRMProvider>
+      </InventoryProvider>
+    </ProtectedRoute>
+  );
+}
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<ProtectedApp><Dashboard /></ProtectedApp>} />
+            <Route path="/pdv" element={<ProtectedApp><PDVPage /></ProtectedApp>} />
+            <Route path="/devices" element={<ProtectedApp><DevicesPage /></ProtectedApp>} />
+            <Route path="/accessories" element={<ProtectedApp><AccessoriesPage /></ProtectedApp>} />
+            <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
+            <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />
+            <Route path="/assistencia" element={<ProtectedApp><AssistenciaPage /></ProtectedApp>} />
+            <Route path="/bi" element={<ProtectedApp><BIDashboardPage /></ProtectedApp>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;

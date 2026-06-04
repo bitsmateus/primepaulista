@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 11%;
+
+    --primary: 211 100% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 5% 97%;
+    --secondary-foreground: 0 0% 11%;
+
+    --muted: 240 5% 97%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 240 5% 97%;
+    --accent-foreground: 0 0% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 11%;
+
+    --border: 240 6% 83%;
+    --input: 240 6% 83%;
+    --ring: 211 100% 45%;
+
+    --radius: 0.625rem;
+
+    --sidebar-background: 240 5% 97%;
+    --sidebar-foreground: 0 0% 11%;
+    --sidebar-primary: 211 100% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 5% 93%;
+    --sidebar-accent-foreground: 0 0% 11%;
+    --sidebar-border: 240 6% 83%;
+    --sidebar-ring: 211 100% 45%;
+
+    /* Status colors */
+    --status-available: 160 84% 39%;
+    --status-sold: 0 0% 45%;
+    --status-maintenance: 38 92% 50%;
+    --status-reserved: 25 95% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
