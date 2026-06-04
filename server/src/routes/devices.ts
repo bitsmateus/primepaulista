@@ -14,6 +14,7 @@ const deviceInput = z.object({
   batteryHealth: z.coerce.number().int().min(0).max(100).default(100),
   supplier: z.string().optional().default(""),
   cost: z.coerce.number().min(0).default(0),
+  salePrice: z.coerce.number().min(0).optional(),
   serialImei: z.string().optional().default(""),
   internalSerial: z.string().optional().default(""),
   status: z
@@ -42,7 +43,11 @@ export async function deviceRoutes(app: FastifyInstance) {
     const row = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(devices)
-        .values({ ...d, cost: String(d.cost) })
+        .values({
+          ...d,
+          cost: String(d.cost),
+          salePrice: d.salePrice !== undefined ? String(d.salePrice) : null,
+        })
         .returning();
       await tx.insert(stockMovements).values({
         productType: "device",
@@ -67,6 +72,7 @@ export async function deviceRoutes(app: FastifyInstance) {
     const data = partial.data;
     const values: Record<string, unknown> = { ...data };
     if (data.cost !== undefined) values.cost = String(data.cost);
+    if (data.salePrice !== undefined) values.salePrice = String(data.salePrice);
     const [row] = await db
       .update(devices)
       .set(values)

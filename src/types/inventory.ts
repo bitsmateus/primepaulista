@@ -13,6 +13,7 @@ export interface Device {
   batteryHealth: number;
   supplier: string;
   cost: number;
+  salePrice?: number;
   serialImei: string;
   internalSerial: string;
   status: DeviceStatus;

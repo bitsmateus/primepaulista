@@ -26,6 +26,7 @@ export const devices = pgTable("devices", {
   batteryHealth: integer("battery_health").notNull().default(100),
   supplier: text("supplier"),
   cost: numeric("cost", { precision: 12, scale: 2 }).notNull().default("0"),
+  salePrice: numeric("sale_price", { precision: 12, scale: 2 }), // preço de venda (para margem)
   serialImei: text("serial_imei"),
   internalSerial: text("internal_serial"),
   status: deviceStatusEnum("status").notNull().default("Disponível"),

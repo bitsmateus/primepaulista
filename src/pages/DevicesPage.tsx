@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Plus, ScanLine, Shuffle, Trash2, Pencil, Search } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Plus, ScanLine, Shuffle, Trash2, Pencil, Search, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
@@ -47,6 +47,9 @@ const statusVariantMap: Record<DeviceStatus, "available" | "sold" | "maintenance
 };
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const daysInStock = (createdAt: Date) =>
+  Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
+const PAGE_SIZE = 20;
 
 export default function DevicesPage() {
   const {
@@ -73,13 +76,15 @@ export default function DevicesPage() {
   const [batteryHealth, setBatteryHealth] = useState("100");
   const [supplier, setSupplier] = useState("");
   const [cost, setCost] = useState("");
+  const [salePrice, setSalePrice] = useState("");
   const [serialImei, setSerialImei] = useState("");
   const [internalSerial, setInternalSerial] = useState("");
+  const [page, setPage] = useState(1);
 
   const resetForm = () => {
     setCategory("iPhone"); setModel("");
     setCapacity(""); setColor(""); setCondition("Lacrado");
-    setBatteryHealth("100"); setSupplier(""); setCost("");
+    setBatteryHealth("100"); setSupplier(""); setCost(""); setSalePrice("");
     setSerialImei(""); setInternalSerial("");
   };
 
@@ -99,6 +104,7 @@ export default function DevicesPage() {
     setBatteryHealth(String(d.batteryHealth ?? 100));
     setSupplier(d.supplier || "");
     setCost(String(d.cost ?? ""));
+    setSalePrice(d.salePrice != null ? String(d.salePrice) : "");
     setSerialImei(d.serialImei || "");
     setInternalSerial(d.internalSerial || "");
     setOpen(true);
@@ -118,6 +124,7 @@ export default function DevicesPage() {
       batteryHealth: Number(batteryHealth),
       supplier,
       cost: Number(cost),
+      salePrice: salePrice ? Number(salePrice) : undefined,
       serialImei,
       internalSerial,
     };
@@ -151,6 +158,11 @@ export default function DevicesPage() {
   const report = useMemo(() => {
     const inStock = devices.filter((d) => d.status === "Disponível" || d.status === "Reservado");
     const stockValue = inStock.reduce((s, d) => s + (d.cost || 0), 0);
+    // Margem potencial: (preço de venda - custo) dos aparelhos em loja que têm preço definido
+    const potentialMargin = inStock.reduce(
+      (s, d) => s + (d.salePrice != null ? d.salePrice - d.cost : 0),
+      0
+    );
     const byCategory: Record<string, number> = {};
     for (const d of devices) {
       const c = d.category || "iPhone";
@@ -162,9 +174,44 @@ export default function DevicesPage() {
       sold: devices.filter((d) => d.status === "Vendido").length,
       maintenance: devices.filter((d) => d.status === "Em Manutenção").length,
       stockValue,
+      potentialMargin,
       byCategory,
     };
   }, [devices]);
+
+  // ----- Paginação -----
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterStatus, filterCategory]);
+  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
+  const pageDevices = filteredDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // ----- Exportar CSV (lista filtrada) -----
+  const exportCSV = () => {
+    const headers = [
+      "Categoria", "Modelo", "Capacidade", "Cor", "Condição", "Bateria %",
+      "Serial/IMEI", "Fornecedor", "Custo", "Preço de venda", "Margem",
+      "Status", "Dias em estoque", "Cadastro",
+    ];
+    const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const rows = filteredDevices.map((d) => [
+      d.category || "iPhone", d.model, d.capacity, d.color, d.condition, d.batteryHealth,
+      d.serialImei || d.internalSerial, d.supplier || "",
+      d.cost.toFixed(2),
+      d.salePrice != null ? d.salePrice.toFixed(2) : "",
+      d.salePrice != null ? (d.salePrice - d.cost).toFixed(2) : "",
+      d.status, daysInStock(d.createdAt),
+      new Date(d.createdAt).toLocaleDateString("pt-BR"),
+    ].map((c) => esc(String(c))).join(";"));
+    const csv = "﻿" + [headers.map(esc).join(";"), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aparelhos-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <AppLayout>
@@ -183,13 +230,14 @@ export default function DevicesPage() {
         </div>
 
         {/* Resumo / relatório */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             { label: "Total", value: report.total },
             { label: "Em loja", value: report.inStock },
             { label: "Vendidos", value: report.sold },
             { label: "Em manutenção", value: report.maintenance },
-            { label: "Valor em estoque", value: fmt(report.stockValue) },
+            { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
+            { label: "Margem potencial", value: fmt(report.potentialMargin) },
           ].map((c) => (
             <Card key={c.label} className="border shadow-none">
               <CardContent className="p-4">
@@ -209,15 +257,20 @@ export default function DevicesPage() {
           ))}
         </div>
 
-        {/* Busca */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por modelo, IMEI, cor, fornecedor..."
-            className="pl-9"
-          />
+        {/* Busca + exportar */}
+        <div className="flex items-center gap-2">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por modelo, IMEI, cor, fornecedor..."
+              className="pl-9"
+            />
+          </div>
+          <Button variant="outline" onClick={exportCSV} className="gap-2 shrink-0">
+            <Download className="h-4 w-4" /> Exportar CSV
+          </Button>
         </div>
 
         {/* Filtros */}
@@ -263,12 +316,15 @@ export default function DevicesPage() {
                     <TableHead>Bateria</TableHead>
                     <TableHead>Serial/IMEI</TableHead>
                     <TableHead>Custo</TableHead>
+                    <TableHead>Preço</TableHead>
+                    <TableHead>Margem</TableHead>
+                    <TableHead>Dias</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDevices.map((d) => (
+                  {pageDevices.map((d) => (
                     <TableRow key={d.id}>
                       <TableCell className="text-muted-foreground">{d.category || "iPhone"}</TableCell>
                       <TableCell className="font-medium">{d.model}</TableCell>
@@ -280,6 +336,13 @@ export default function DevicesPage() {
                         {d.serialImei || d.internalSerial}
                       </TableCell>
                       <TableCell>{fmt(d.cost)}</TableCell>
+                      <TableCell>{d.salePrice != null ? fmt(d.salePrice) : "—"}</TableCell>
+                      <TableCell className={d.salePrice != null && d.salePrice - d.cost < 0 ? "text-destructive" : "text-success"}>
+                        {d.salePrice != null ? fmt(d.salePrice - d.cost) : "—"}
+                      </TableCell>
+                      <TableCell className={daysInStock(d.createdAt) > 30 ? "text-warning font-medium" : ""}>
+                        {d.status === "Vendido" ? "—" : `${daysInStock(d.createdAt)}d`}
+                      </TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -310,7 +373,7 @@ export default function DevicesPage() {
                   ))}
                   {filteredDevices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
                         Nenhum aparelho encontrado.
                       </TableCell>
                     </TableRow>
@@ -320,6 +383,35 @@ export default function DevicesPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Paginação */}
+        {filteredDevices.length > 0 && (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Mostrando {(page - 1) * PAGE_SIZE + 1}–
+              {Math.min(page * PAGE_SIZE, filteredDevices.length)} de {filteredDevices.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span>Página {page} de {totalPages}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dialog: criar / editar */}
@@ -397,6 +489,11 @@ export default function DevicesPage() {
             <div className="space-y-2">
               <Label>Custo (R$)</Label>
               <Input type="number" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Preço de venda (R$)</Label>
+              <Input type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="0,00 (opcional)" />
             </div>
 
             <div className="col-span-2 space-y-2">
