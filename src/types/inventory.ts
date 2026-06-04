@@ -1,8 +1,11 @@
 export type DeviceCondition = "Lacrado" | "Seminovo";
 export type DeviceStatus = "Disponível" | "Vendido" | "Em Manutenção" | "Reservado";
 
+export type DeviceCategory = "iPhone" | "iPad" | "Apple Watch" | "Mac" | "AirPods" | "Outro";
+
 export interface Device {
   id: string;
+  category: string;
   model: string;
   capacity: string;
   color: string;

@@ -17,8 +17,10 @@ import { profiles } from "./auth";
 
 export const devices = pgTable("devices", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Categoria do dispositivo: iPhone, iPad, Apple Watch, Mac, AirPods, Outro
+  category: text("category").notNull().default("iPhone"),
   model: text("model").notNull(),
-  capacity: text("capacity").notNull(),
+  capacity: text("capacity").notNull().default(""),
   color: text("color").notNull(),
   condition: deviceConditionEnum("condition").notNull(),
   batteryHealth: integer("battery_health").notNull().default(100),

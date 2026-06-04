@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Plus, ScanLine, Shuffle, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
+import { toast } from "sonner";
 import { useInventoryContext } from "@/contexts/InventoryContext";
-import { DeviceStatus } from "@/types/inventory";
+import { DeviceStatus, DeviceCategory } from "@/types/inventory";
+import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,19 +46,6 @@ const statusVariantMap: Record<DeviceStatus, "available" | "sold" | "maintenance
   "Reservado": "reserved",
 };
 
-const MODELS = [
-  "iPhone 16 Pro Max", "iPhone 16 Pro", "iPhone 16 Plus", "iPhone 16",
-  "iPhone 15 Pro Max", "iPhone 15 Pro", "iPhone 15 Plus", "iPhone 15",
-  "iPhone 14 Pro Max", "iPhone 14 Pro", "iPhone 14 Plus", "iPhone 14",
-  "iPhone 13 Pro Max", "iPhone 13 Pro", "iPhone 13 Mini", "iPhone 13",
-  "iPhone 12 Pro Max", "iPhone 12 Pro", "iPhone 12 Mini", "iPhone 12",
-  "iPhone SE (3ª geração)", "iPhone SE (2ª geração)",
-];
-
-const CUSTOM_MODEL_VALUE = "__custom__";
-
-const CAPACITIES = ["64", "128", "256", "512", "1024"];
-
 export default function DevicesPage() {
   const {
     devices,
@@ -68,11 +57,11 @@ export default function DevicesPage() {
 
   const [open, setOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
 
   // Form state
+  const [category, setCategory] = useState<DeviceCategory>("iPhone");
   const [model, setModel] = useState("");
-  const [customModel, setCustomModel] = useState("");
-  const [isCustomModel, setIsCustomModel] = useState(false);
   const [capacity, setCapacity] = useState("");
   const [color, setColor] = useState("");
   const [condition, setCondition] = useState<"Lacrado" | "Seminovo">("Lacrado");
@@ -83,17 +72,20 @@ export default function DevicesPage() {
   const [internalSerial, setInternalSerial] = useState("");
 
   const resetForm = () => {
-    setModel(""); setCustomModel(""); setIsCustomModel(false);
+    setCategory("iPhone"); setModel("");
     setCapacity(""); setColor(""); setCondition("Lacrado");
     setBatteryHealth("100"); setSupplier(""); setCost("");
     setSerialImei(""); setInternalSerial("");
   };
 
   const handleSubmit = () => {
-    const finalModel = isCustomModel ? customModel : model;
-    if (!finalModel || !capacity || (!serialImei && !internalSerial)) return;
+    if (!model.trim() || (!serialImei && !internalSerial)) {
+      toast.error("Informe o modelo e o serial/IMEI (ou gere um serial interno).");
+      return;
+    }
     addDevice({
-      model: finalModel,
+      category,
+      model: model.trim(),
       capacity,
       color,
       condition,
@@ -108,10 +100,11 @@ export default function DevicesPage() {
     setOpen(false);
   };
 
-  const filteredDevices =
-    filterStatus === "all"
-      ? devices
-      : devices.filter((d) => d.status === filterStatus);
+  const filteredDevices = devices.filter((d) => {
+    if (filterStatus !== "all" && d.status !== filterStatus) return false;
+    if (filterCategory !== "all" && (d.category || "iPhone") !== filterCategory) return false;
+    return true;
+  });
 
   return (
     <AppLayout>
@@ -120,7 +113,7 @@ export default function DevicesPage() {
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Aparelhos</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Gerencie o estoque de iPhones
+              Estoque de iPhone, iPad, Apple Watch, Mac, AirPods e outros
             </p>
           </div>
 
@@ -137,53 +130,48 @@ export default function DevicesPage() {
               </DialogHeader>
               <div className="grid grid-cols-2 gap-4 py-4">
                 <div className="space-y-2">
-                  <Label>Modelo</Label>
-                  {isCustomModel ? (
-                    <div className="flex gap-2">
-                      <Input
-                        value={customModel}
-                        onChange={(e) => setCustomModel(e.target.value)}
-                        placeholder="Digite o modelo manualmente"
-                      />
-                      <Button
-                        variant="outline"
-                        type="button"
-                        onClick={() => { setIsCustomModel(false); setCustomModel(""); }}
-                      >
-                        Lista
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Select value={model} onValueChange={setModel}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          {MODELS.map((m) => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        variant="outline"
-                        type="button"
-                        onClick={() => { setIsCustomModel(true); setModel(""); }}
-                      >
-                        Manual
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Capacidade (GB)</Label>
-                  <Select value={capacity} onValueChange={setCapacity}>
-                    <SelectTrigger><SelectValue placeholder="GB" /></SelectTrigger>
+                  <Label>Categoria</Label>
+                  <Select
+                    value={category}
+                    onValueChange={(v) => { setCategory(v as DeviceCategory); setModel(""); setCapacity(""); }}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {CAPACITIES.map((c) => (
-                        <SelectItem key={c} value={c}>{c} GB</SelectItem>
+                      {DEVICE_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Modelo</Label>
+                  <Input
+                    list="model-suggestions"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    placeholder="Selecione ou digite o modelo"
+                  />
+                  <datalist id="model-suggestions">
+                    {(MODELS_BY_CATEGORY[category] || []).map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Capacidade / Tamanho</Label>
+                  <Input
+                    list="capacity-suggestions"
+                    value={capacity}
+                    onChange={(e) => setCapacity(e.target.value)}
+                    placeholder="Ex: 256, 1TB, 45mm…"
+                  />
+                  <datalist id="capacity-suggestions">
+                    {(CAPACITIES_BY_CATEGORY[category] || []).map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div className="space-y-2">
@@ -256,18 +244,32 @@ export default function DevicesPage() {
           </Dialog>
         </div>
 
-        {/* Filter */}
-        <div className="flex gap-2">
-          {["all", "Disponível", "Vendido", "Em Manutenção", "Reservado"].map((s) => (
-            <Button
-              key={s}
-              variant={filterStatus === s ? "default" : "outline"}
-              size="sm"
-              onClick={() => setFilterStatus(s)}
-            >
-              {s === "all" ? "Todos" : s}
-            </Button>
-          ))}
+        {/* Filtros */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {["all", ...DEVICE_CATEGORIES].map((c) => (
+              <Button
+                key={c}
+                variant={filterCategory === c ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilterCategory(c)}
+              >
+                {c === "all" ? "Todas categorias" : c}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {["all", "Disponível", "Vendido", "Em Manutenção", "Reservado"].map((s) => (
+              <Button
+                key={s}
+                variant={filterStatus === s ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilterStatus(s)}
+              >
+                {s === "all" ? "Todos status" : s}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {/* Table */}
@@ -277,8 +279,9 @@ export default function DevicesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Categoria</TableHead>
                     <TableHead>Modelo</TableHead>
-                    <TableHead>GB</TableHead>
+                    <TableHead>Capac.</TableHead>
                     <TableHead>Cor</TableHead>
                     <TableHead>Condição</TableHead>
                     <TableHead>Bateria</TableHead>
@@ -291,6 +294,7 @@ export default function DevicesPage() {
                 <TableBody>
                   {filteredDevices.map((d) => (
                     <TableRow key={d.id}>
+                      <TableCell className="text-muted-foreground">{d.category || "iPhone"}</TableCell>
                       <TableCell className="font-medium">{d.model}</TableCell>
                       <TableCell>{d.capacity}</TableCell>
                       <TableCell>{d.color}</TableCell>
@@ -334,7 +338,7 @@ export default function DevicesPage() {
                   ))}
                   {filteredDevices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                         Nenhum aparelho encontrado.
                       </TableCell>
                     </TableRow>

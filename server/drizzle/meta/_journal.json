@@ -43,6 +43,13 @@
       "when": 1780603785757,
       "tag": "0005_fin_drop_seller_id",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780612003130,
+      "tag": "0006_device_category",
+      "breakpoints": true
     }
   ]
 }

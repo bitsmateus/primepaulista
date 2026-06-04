@@ -7,6 +7,7 @@ import {
 } from "@/types/inventory";
 import { printReceipt } from "@/utils/receiptGenerator";
 import { ApiError } from "@/lib/api";
+import { formatCapacity } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -141,7 +142,7 @@ export default function PDVPage() {
       id: crypto.randomUUID(),
       type: "device",
       deviceId: device.id,
-      name: `${device.model} ${device.capacity}GB ${device.color}`,
+      name: `${device.model} ${formatCapacity(device.capacity)} ${device.color}`.trim(),
       serial: device.serialImei || device.internalSerial,
       price: device.cost,
       quantity: 1,
@@ -374,7 +375,7 @@ export default function PDVPage() {
                         >
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-foreground">
-                              {d.model} · {d.capacity}GB · {d.color}
+                              {d.model} · {formatCapacity(d.capacity)} · {d.color}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {d.condition} · Bateria: {d.batteryHealth}% · {d.serialImei || d.internalSerial}

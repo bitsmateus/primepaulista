@@ -6,9 +6,10 @@ import { devices, stockMovements } from "../db/schema/index";
 import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
 const deviceInput = z.object({
-  model: z.string().min(1),
-  capacity: z.string().min(1),
-  color: z.string().min(1),
+  category: z.string().max(50).optional().default("iPhone"),
+  model: z.string().min(1).max(100),
+  capacity: z.string().max(50).optional().default(""),
+  color: z.string().max(60).optional().default(""),
   condition: z.enum(["Lacrado", "Seminovo"]),
   batteryHealth: z.coerce.number().int().min(0).max(100).default(100),
   supplier: z.string().optional().default(""),

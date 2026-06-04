@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PackageX, AlertTriangle } from "lucide-react";
+import { formatCapacity } from "@/lib/utils";
 
 interface Props {
   financial: any;
@@ -47,7 +48,7 @@ export function InventoryAnalysisTab({ financial }: Props) {
                 <div key={d.id} className="flex items-center justify-between rounded-lg border px-4 py-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">{d.model} · {d.color}</p>
-                    <p className="text-xs text-muted-foreground">{d.capacity}GB · {d.condition}</p>
+                    <p className="text-xs text-muted-foreground">{formatCapacity(d.capacity)} · {d.condition}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <p className="text-sm font-semibold text-foreground">{fmt(d.cost)}</p>
