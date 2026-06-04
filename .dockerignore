@@ -1,0 +1,9 @@
+# Build do frontend não precisa do backend nem de artefatos locais
+node_modules
+dist
+dist-ssr
+server
+.env
+.env.local
+.git
+*.log
