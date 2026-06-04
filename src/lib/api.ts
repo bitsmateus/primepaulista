@@ -1,5 +1,7 @@
-import { Device, Accessory, Customer, Sale } from "@/types/inventory";
+import { Device, Accessory, Customer, Sale, CartItem, PaymentEntry, PaymentMethod, Seller } from "@/types/inventory";
 import { ServiceOrder } from "@/types/serviceOrder";
+import { Lead, FunnelColumn, MessageLog } from "@/types/crm";
+import { Expense, Sangria, SellerCommissionConfig } from "@/types/financial";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
 const TOKEN_KEY = "pp_token";
@@ -232,6 +234,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }).then((d) => d.saleId),
+  listSalesFull: () =>
+    request<{ sales: SaleFullRow[] }>("/sales/full").then((d) => d.sales.map(mapSaleFull)),
 
   // Service Orders
   listServiceOrders: () =>
@@ -268,7 +272,227 @@ export const api = {
     request<{ ok: true }>(`/service-orders/${osId}/photos/${photoId}`, {
       method: "DELETE",
     }),
+
+  // ===== CRM: funil =====
+  listFunnelColumns: () =>
+    request<{ funnelColumns: FunnelColumn[] }>("/funnel-columns").then(
+      (d) => d.funnelColumns
+    ),
+  createFunnelColumn: (name: string, color: string) =>
+    request<{ funnelColumn: FunnelColumn }>("/funnel-columns", {
+      method: "POST",
+      body: JSON.stringify({ name, color }),
+    }).then((d) => d.funnelColumn),
+  updateFunnelColumn: (id: string, patch: { name?: string; color?: string; position?: number }) =>
+    request<{ funnelColumn: FunnelColumn }>(`/funnel-columns/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }).then((d) => d.funnelColumn),
+  deleteFunnelColumn: (id: string) =>
+    request<{ ok: true }>(`/funnel-columns/${id}`, { method: "DELETE" }),
+
+  // ===== CRM: leads =====
+  listLeads: () =>
+    request<{ leads: LeadRow[] }>("/leads").then((d) => d.leads.map(mapLead)),
+  createLead: (input: Omit<Lead, "id" | "createdAt">) =>
+    request<{ lead: LeadRow }>("/leads", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((d) => mapLead(d.lead)),
+  updateLead: (id: string, patch: Partial<Omit<Lead, "id" | "createdAt">>) =>
+    request<{ lead: LeadRow }>(`/leads/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }).then((d) => mapLead(d.lead)),
+  deleteLead: (id: string) =>
+    request<{ ok: true }>(`/leads/${id}`, { method: "DELETE" }),
+
+  // ===== CRM: logs de mensagens =====
+  listMessageLogs: () =>
+    request<{ messageLogs: MessageLogRow[] }>("/message-logs").then((d) =>
+      d.messageLogs.map(mapMessageLog)
+    ),
+  createMessageLog: (input: Omit<MessageLog, "id" | "sentAt">) =>
+    request<{ messageLog: MessageLogRow }>("/message-logs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((d) => mapMessageLog(d.messageLog)),
+
+  // ===== WhatsApp (proxy seguro pelo backend) =====
+  getWhatsappConfig: () =>
+    request<{ config: WhatsappConfig }>("/whatsapp/config").then((d) => d.config),
+  saveWhatsappConfig: (config: WhatsappConfig) =>
+    request<{ config: WhatsappConfig }>("/whatsapp/config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }).then((d) => d.config),
+  whatsappStatus: () =>
+    request<{ status: string }>("/whatsapp/status").then((d) => d.status),
+  whatsappQrCode: () =>
+    request<{ qrcode: string | null }>("/whatsapp/qrcode").then((d) => d.qrcode),
+  whatsappDisconnect: () =>
+    request<{ ok: true }>("/whatsapp/disconnect", { method: "POST" }),
+  whatsappRestart: () =>
+    request<{ ok: true }>("/whatsapp/restart", { method: "POST" }),
+  whatsappSend: (phone: string, message: string) =>
+    request<{ success: boolean }>("/whatsapp/send", {
+      method: "POST",
+      body: JSON.stringify({ phone, message }),
+    }).then((d) => d.success),
+
+  // ===== CRM automático =====
+  listAutomations: () =>
+    request<{ automations: Automation[] }>("/automations").then((d) => d.automations),
+  updateAutomation: (
+    key: string,
+    patch: { enabled?: boolean; daysAfter?: number; message?: string }
+  ) =>
+    request<{ automation: Automation }>(`/automations/${key}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }).then((d) => d.automation),
+  runAutomations: () =>
+    request<{ summary: AutomationRunSummary }>("/automations/run", {
+      method: "POST",
+    }).then((d) => d.summary),
+
+  // ===== Financeiro =====
+  listExpenses: () =>
+    request<{ expenses: ExpenseRow[] }>("/expenses").then((d) => d.expenses.map(mapExpense)),
+  createExpense: (input: Omit<Expense, "id">) =>
+    request<{ expense: ExpenseRow }>("/expenses", {
+      method: "POST",
+      body: JSON.stringify({ ...input, date: input.date.toISOString() }),
+    }).then((d) => mapExpense(d.expense)),
+  deleteExpense: (id: string) =>
+    request<{ ok: true }>(`/expenses/${id}`, { method: "DELETE" }),
+
+  listSangrias: () =>
+    request<{ sangrias: SangriaRow[] }>("/sangrias").then((d) => d.sangrias.map(mapSangria)),
+  createSangria: (input: Omit<Sangria, "id">) =>
+    request<{ sangria: SangriaRow }>("/sangrias", {
+      method: "POST",
+      body: JSON.stringify({ ...input, date: input.date.toISOString() }),
+    }).then((d) => mapSangria(d.sangria)),
+
+  listCommissions: () =>
+    request<{ commissions: CommissionRow[] }>("/seller-commissions").then((d) =>
+      d.commissions.map(mapCommission)
+    ),
+  updateCommission: (sellerName: string, patch: { devicePercent?: number; accessoryPercent?: number }) =>
+    request<{ commission: CommissionRow }>(`/seller-commissions/${encodeURIComponent(sellerName)}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }).then((d) => mapCommission(d.commission)),
+
+  listReceivables: () =>
+    request<{ receivables: ReceivableRow[] }>("/receivables").then((d) =>
+      d.receivables.map(mapReceivable)
+    ),
+  createReceivable: (input: { customerId?: string; saleId?: string; amount: number; dueDate?: string }) =>
+    request<{ receivable: ReceivableRow }>("/receivables", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((d) => mapReceivable(d.receivable)),
+  updateReceivableStatus: (id: string, status: Receivable["status"]) =>
+    request<{ receivable: ReceivableRow }>(`/receivables/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }).then((d) => mapReceivable(d.receivable)),
+  deleteReceivable: (id: string) =>
+    request<{ ok: true }>(`/receivables/${id}`, { method: "DELETE" }),
 };
+
+// ----- Mapeamento financeiro -----
+type ExpenseRow = Omit<Expense, "amount" | "date"> & { amount: string; date: string };
+type SangriaRow = Omit<Sangria, "amount" | "date"> & { amount: string; date: string };
+interface CommissionRow {
+  sellerName: string;
+  devicePercent: string;
+  accessoryPercent: string;
+}
+export interface Receivable {
+  id: string;
+  customerId: string | null;
+  saleId: string | null;
+  amount: number;
+  dueDate: Date | null;
+  status: "pendente" | "pago" | "atrasado";
+  paidAt: Date | null;
+  createdAt: Date;
+}
+interface ReceivableRow {
+  id: string;
+  customerId: string | null;
+  saleId: string | null;
+  amount: string;
+  dueDate: string | null;
+  status: "pendente" | "pago" | "atrasado";
+  paidAt: string | null;
+  createdAt: string;
+}
+
+function mapExpense(r: ExpenseRow): Expense {
+  return { ...r, amount: Number(r.amount), date: new Date(r.date) };
+}
+function mapSangria(r: SangriaRow): Sangria {
+  return { ...r, amount: Number(r.amount), date: new Date(r.date), justification: r.justification ?? "" };
+}
+function mapCommission(r: CommissionRow): SellerCommissionConfig {
+  return {
+    seller: r.sellerName,
+    devicePercent: Number(r.devicePercent),
+    accessoryPercent: Number(r.accessoryPercent),
+  };
+}
+function mapReceivable(r: ReceivableRow): Receivable {
+  return {
+    ...r,
+    amount: Number(r.amount),
+    dueDate: r.dueDate ? new Date(r.dueDate) : null,
+    paidAt: r.paidAt ? new Date(r.paidAt) : null,
+    createdAt: new Date(r.createdAt),
+  };
+}
+
+export interface WhatsappConfig {
+  apiKey: string;
+  instanceUrl: string;
+  instanceName: string;
+}
+
+export interface Automation {
+  id: string;
+  key: string;
+  enabled: boolean;
+  daysAfter: number;
+  message: string;
+  updatedAt: string;
+}
+
+export interface AutomationRunSummary {
+  whatsappConfigured: boolean;
+  posVenda: { attempted: number; sent: number };
+  reativacao: { attempted: number; sent: number };
+}
+
+// ----- Mapeamento CRM (datas como string → Date) -----
+type LeadRow = Omit<Lead, "createdAt"> & { createdAt: string };
+type MessageLogRow = Omit<MessageLog, "sentAt"> & { sentAt: string };
+
+function mapLead(r: LeadRow): Lead {
+  return {
+    ...r,
+    phone: r.phone ?? "",
+    modelInterest: r.modelInterest ?? "",
+    origin: r.origin ?? "",
+    notes: r.notes ?? "",
+    createdAt: new Date(r.createdAt),
+  };
+}
+function mapMessageLog(r: MessageLogRow): MessageLog {
+  return { ...r, sentAt: new Date(r.sentAt) };
+}
 
 export interface OrderPhoto {
   id: string;
@@ -297,3 +521,61 @@ export interface SalePayload {
 }
 
 export type { Sale };
+
+// ----- Venda completa (aninhada) → tipo Sale do front -----
+interface SaleFullRow {
+  id: string;
+  sellerName: string | null;
+  subtotal: string;
+  tradeInDiscount: string;
+  total: string;
+  createdAt: string;
+  customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
+  items: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number }[];
+  payments: { id: string; method: string; amount: string; installments: number | null }[];
+  tradeIn: { imei: string | null; model: string | null; healthDescription: string | null; value: string } | null;
+}
+
+function mapSaleFull(r: SaleFullRow): Sale {
+  const customer: Customer = r.customer
+    ? mapCustomer(r.customer)
+    : { id: "", name: "Cliente", cpf: "", whatsapp: "", birthday: "", leadOrigin: "Instagram", createdAt: new Date() };
+
+  const items: CartItem[] = r.items.map((it) => ({
+    id: it.id,
+    type: it.productType,
+    deviceId: it.productType === "device" ? it.productId ?? undefined : undefined,
+    accessoryId: it.productType === "accessory" ? it.productId ?? undefined : undefined,
+    name: it.name,
+    serial: it.serial ?? undefined,
+    price: Number(it.price),
+    quantity: it.quantity,
+  }));
+
+  const payments: PaymentEntry[] = r.payments.map((p) => ({
+    id: p.id,
+    method: p.method as PaymentMethod,
+    amount: Number(p.amount),
+    installments: p.installments ?? undefined,
+  }));
+
+  return {
+    id: r.id,
+    customer,
+    items,
+    payments,
+    tradeIn: r.tradeIn
+      ? {
+          imei: r.tradeIn.imei ?? "",
+          model: r.tradeIn.model ?? "",
+          healthDescription: r.tradeIn.healthDescription ?? "",
+          value: Number(r.tradeIn.value),
+        }
+      : undefined,
+    seller: (r.sellerName ?? "") as Seller,
+    subtotal: Number(r.subtotal),
+    tradeInDiscount: Number(r.tradeInDiscount),
+    total: Number(r.total),
+    createdAt: new Date(r.createdAt),
+  };
+}

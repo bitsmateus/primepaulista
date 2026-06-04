@@ -9,6 +9,8 @@ import { CashClosingTab } from "@/components/bi/CashClosingTab";
 import { ExpensesTab } from "@/components/bi/ExpensesTab";
 import { TeamTab } from "@/components/bi/TeamTab";
 import { InventoryAnalysisTab } from "@/components/bi/InventoryAnalysisTab";
+import { CustomerAnalysisTab } from "@/components/bi/CustomerAnalysisTab";
+import { ReceivablesTab } from "@/components/bi/ReceivablesTab";
 
 export default function BIDashboardPage() {
   const { devices, accessories, sales } = useInventoryContext();
@@ -32,6 +34,8 @@ export default function BIDashboardPage() {
             <TabsTrigger value="expenses">Despesas</TabsTrigger>
             <TabsTrigger value="team">Equipe</TabsTrigger>
             <TabsTrigger value="inventory">Inventário</TabsTrigger>
+            <TabsTrigger value="customers">Clientes</TabsTrigger>
+            <TabsTrigger value="receivables">A Receber</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -48,6 +52,12 @@ export default function BIDashboardPage() {
           </TabsContent>
           <TabsContent value="inventory">
             <InventoryAnalysisTab financial={financial} />
+          </TabsContent>
+          <TabsContent value="customers">
+            <CustomerAnalysisTab />
+          </TabsContent>
+          <TabsContent value="receivables">
+            <ReceivablesTab />
           </TabsContent>
         </Tabs>
       </div>

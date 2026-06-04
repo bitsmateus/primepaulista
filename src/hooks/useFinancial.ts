@@ -1,45 +1,44 @@
-import { useState, useMemo } from "react";
-import { Expense, ExpenseCategory, Sangria, SellerCommissionConfig, DailyCashEntry } from "@/types/financial";
+import { useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Expense, Sangria, DailyCashEntry } from "@/types/financial";
 import { Sale, Seller } from "@/types/inventory";
 import { ServiceOrder } from "@/types/serviceOrder";
 import { Device, Accessory } from "@/types/inventory";
+import { api } from "@/lib/api";
 import { format, subDays, differenceInDays, isWithinInterval, startOfDay, endOfDay, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
-const defaultCommissions: SellerCommissionConfig[] = [
-  { seller: "Gabriel", devicePercent: 3, accessoryPercent: 10 },
-  { seller: "Matheus", devicePercent: 3, accessoryPercent: 10 },
-  { seller: "Tassio", devicePercent: 3, accessoryPercent: 10 },
-];
-
-const sampleExpenses: Expense[] = [
-  { id: "1", description: "Aluguel da loja", category: "Aluguel", amount: 4500, date: new Date(), recurring: true },
-  { id: "2", description: "Condomínio", category: "Condomínio", amount: 800, date: new Date(), recurring: true },
-  { id: "3", description: "DAS MEI", category: "Impostos (MEI)", amount: 71.60, date: new Date(), recurring: true },
-  { id: "4", description: "Facebook Ads", category: "Tráfego Pago", amount: 1200, date: new Date(), recurring: true },
-  { id: "5", description: "Pro-labore", category: "Pro-labore", amount: 3000, date: new Date(), recurring: true },
-];
-
 export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devices: Device[], accessories: Accessory[]) {
-  const [expenses, setExpenses] = useState<Expense[]>(sampleExpenses);
-  const [sangrias, setSangrias] = useState<Sangria[]>([]);
-  const [commissionConfigs, setCommissionConfigs] = useState<SellerCommissionConfig[]>(defaultCommissions);
-  const [cardTaxRate] = useState(2.5);
+  const qc = useQueryClient();
 
-  const addExpense = (expense: Omit<Expense, "id">) => {
-    setExpenses(prev => [{ ...expense, id: crypto.randomUUID() }, ...prev]);
-  };
+  // Dados financeiros persistidos no banco
+  const { data: expenses = [] } = useQuery({ queryKey: ["expenses"], queryFn: api.listExpenses });
+  const { data: sangrias = [] } = useQuery({ queryKey: ["sangrias"], queryFn: api.listSangrias });
+  const { data: commissionConfigs = [] } = useQuery({ queryKey: ["commissions"], queryFn: api.listCommissions });
+  const cardTaxRate = 2.5;
 
-  const deleteExpense = (id: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== id));
-  };
+  const addExpenseMut = useMutation({
+    mutationFn: (e: Omit<Expense, "id">) => api.createExpense(e),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+  const deleteExpenseMut = useMutation({
+    mutationFn: (id: string) => api.deleteExpense(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+  const addSangriaMut = useMutation({
+    mutationFn: (s: Omit<Sangria, "id">) => api.createSangria(s),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sangrias"] }),
+  });
+  const updateCommissionMut = useMutation({
+    mutationFn: ({ seller, patch }: { seller: string; patch: { devicePercent?: number; accessoryPercent?: number } }) =>
+      api.updateCommission(seller, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["commissions"] }),
+  });
 
-  const addSangria = (sangria: Omit<Sangria, "id">) => {
-    setSangrias(prev => [{ ...sangria, id: crypto.randomUUID() }, ...prev]);
-  };
-
-  const updateCommission = (seller: string, field: "devicePercent" | "accessoryPercent", value: number) => {
-    setCommissionConfigs(prev => prev.map(c => c.seller === seller ? { ...c, [field]: value } : c));
-  };
+  const addExpense = (expense: Omit<Expense, "id">) => addExpenseMut.mutate(expense);
+  const deleteExpense = (id: string) => deleteExpenseMut.mutate(id);
+  const addSangria = (sangria: Omit<Sangria, "id">) => addSangriaMut.mutate(sangria);
+  const updateCommission = (seller: string, field: "devicePercent" | "accessoryPercent", value: number) =>
+    updateCommissionMut.mutate({ seller, patch: { [field]: value } });
 
   // Current month
   const now = new Date();

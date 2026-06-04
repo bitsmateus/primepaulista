@@ -41,9 +41,8 @@ export const accountsReceivable = pgTable("accounts_receivable", {
 
 export const sellerCommissions = pgTable("seller_commissions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  sellerId: uuid("seller_id")
-    .notNull()
-    .references(() => profiles.id, { onDelete: "cascade" }),
+  // Configuração por nome do vendedor (mesmo modelo do PDV/relatórios)
+  sellerName: text("seller_name").notNull().unique(),
   devicePercent: numeric("device_percent", { precision: 5, scale: 2 })
     .notNull()
     .default("0"),

@@ -11,6 +11,10 @@ import { customerRoutes } from "./routes/customers";
 import { saleRoutes } from "./routes/sales";
 import { serviceOrderRoutes } from "./routes/serviceOrders";
 import { serviceOrderPhotoRoutes } from "./routes/serviceOrderPhotos";
+import { crmRoutes } from "./routes/crm";
+import { whatsappRoutes } from "./routes/whatsapp";
+import { automationRoutes } from "./routes/automations";
+import { financeRoutes } from "./routes/finance";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -44,6 +48,10 @@ export function buildApp() {
   app.register(saleRoutes);
   app.register(serviceOrderRoutes);
   app.register(serviceOrderPhotoRoutes);
+  app.register(crmRoutes);
+  app.register(whatsappRoutes);
+  app.register(automationRoutes);
+  app.register(financeRoutes);
 
   return app;
 }

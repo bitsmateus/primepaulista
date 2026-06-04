@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Device, Accessory, Customer, Sale } from "@/types/inventory";
@@ -29,8 +28,11 @@ export function useInventory() {
   const invalidateCustomers = () =>
     qc.invalidateQueries({ queryKey: ["customers"] });
 
-  // ----- Vendas: persistidas no banco; cópia local da sessão alimenta o BI -----
-  const [sales, setSales] = useState<Sale[]>([]);
+  // ----- Vendas: lidas do banco (com itens/pagamentos) para o BI/financeiro -----
+  const { data: sales = [] } = useQuery({
+    queryKey: ["sales"],
+    queryFn: api.listSalesFull,
+  });
 
   // ----- Mutations: aparelhos -----
   const addDeviceMut = useMutation({
@@ -152,12 +154,12 @@ export function useInventory() {
       tradeIn: sale.tradeIn,
     });
 
-    // Estoque mudou no servidor (baixa transacional) → recarrega listas
+    // Estoque e vendas mudaram no servidor → recarrega listas
     invalidateDevices();
     invalidateAccessories();
+    qc.invalidateQueries({ queryKey: ["sales"] });
 
     const newSale: Sale = { ...sale, id: saleId, createdAt: new Date() };
-    setSales((prev) => [newSale, ...prev]); // alimenta o BI da sessão
     return newSale;
   };
 

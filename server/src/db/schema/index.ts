@@ -7,3 +7,5 @@ export * from "./sales";
 export * from "./service";
 export * from "./crm";
 export * from "./finance";
+export * from "./whatsapp";
+export * from "./automations";

@@ -21,12 +21,12 @@ export default function WhatsAppTab() {
   const [instanceName, setInstanceName] = useState(uazapiConfig.instanceName);
   const [loading, setLoading] = useState(false);
 
+  // Preenche os campos quando a config chega do banco
   useEffect(() => {
-    const config = loadConfig();
-    setApiKey(config.apiKey);
-    setInstanceUrl(config.instanceUrl);
-    setInstanceName(config.instanceName);
-  }, []);
+    setApiKey(uazapiConfig.apiKey);
+    setInstanceUrl(uazapiConfig.instanceUrl);
+    setInstanceName(uazapiConfig.instanceName);
+  }, [uazapiConfig]);
 
   const handleSave = () => {
     if (!apiKey.trim() || !instanceUrl.trim() || !instanceName.trim()) {

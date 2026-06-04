@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import {
@@ -10,6 +10,7 @@ import {
   devices,
   accessories,
   stockMovements,
+  customers,
 } from "../db/schema/index";
 import { authenticate, type JwtUser } from "../plugins/auth";
 
@@ -57,6 +58,44 @@ export async function saleRoutes(app: FastifyInstance) {
   app.get("/sales", async () => {
     const rows = await db.select().from(sales).orderBy(desc(sales.createdAt));
     return { sales: rows };
+  });
+
+  // GET /sales/full — vendas com itens, pagamentos, troca e cliente aninhados (para BI)
+  app.get("/sales/full", async () => {
+    const saleRows = await db.select().from(sales).orderBy(desc(sales.createdAt));
+    if (saleRows.length === 0) return { sales: [] };
+
+    const ids = saleRows.map((s) => s.id);
+    const custIds = [...new Set(saleRows.map((s) => s.customerId).filter(Boolean))] as string[];
+
+    const [items, pays, trades, custs] = await Promise.all([
+      db.select().from(saleItems).where(inArray(saleItems.saleId, ids)),
+      db.select().from(payments).where(inArray(payments.saleId, ids)),
+      db.select().from(tradeIns).where(inArray(tradeIns.saleId, ids)),
+      custIds.length
+        ? db.select().from(customers).where(inArray(customers.id, custIds))
+        : Promise.resolve([]),
+    ]);
+
+    const byId = <T extends { saleId: string }>(arr: T[]) => {
+      const map: Record<string, T[]> = {};
+      for (const r of arr) (map[r.saleId] ??= []).push(r);
+      return map;
+    };
+    const itemsBySale = byId(items);
+    const paysBySale = byId(pays);
+    const tradeBySale = byId(trades);
+    const custById = Object.fromEntries(custs.map((c) => [c.id, c]));
+
+    const result = saleRows.map((s) => ({
+      ...s,
+      customer: s.customerId ? custById[s.customerId] ?? null : null,
+      items: itemsBySale[s.id] ?? [],
+      payments: paysBySale[s.id] ?? [],
+      tradeIn: tradeBySale[s.id]?.[0] ?? null,
+    }));
+
+    return { sales: result };
   });
 
   // POST /sales — finaliza a venda de forma transacional

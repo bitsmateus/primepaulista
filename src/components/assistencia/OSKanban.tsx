@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { GripVertical, Clock, Eye, Trash2, Send } from "lucide-react";
+import { GripVertical, Clock, Eye, Trash2, Send, Printer } from "lucide-react";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { OSStatus } from "@/types/serviceOrder";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ServiceOrderPhotos } from "@/components/assistencia/ServiceOrderPhotos";
+import { printOSReceipt } from "@/utils/osReceiptGenerator";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -39,16 +40,10 @@ export default function OSKanban() {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
     updateOrderStatus(orderId, "Entregue / Finalizado");
-    
-    // Generate receipt
-    const receiptHTML = generateServiceReceiptHTML(order);
-    const win = window.open("", "_blank", "width=420,height=700");
-    if (win) {
-      win.document.write(receiptHTML);
-      win.document.close();
-      setTimeout(() => win.print(), 500);
-    }
-    
+
+    // Recibo com certificado de garantia
+    printOSReceipt({ ...order, status: "Entregue / Finalizado", completedAt: new Date() });
+
     // Notify via WhatsApp
     if (connectionStatus === "connected" && order.customerPhone) {
       await sendMessage(order.customerPhone, `Olá ${order.customerName}! 🍎 Seu aparelho (${order.model}) está pronto para retirada na Prime Paulista! Nosso horário de funcionamento: Seg-Sáb 9h-18h.`);
@@ -243,6 +238,13 @@ export default function OSKanban() {
                   <Send className="h-4 w-4 mr-1" /> Finalizar e Entregar
                 </Button>
               )}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => printOSReceipt(selectedOrder)}
+              >
+                <Printer className="h-4 w-4 mr-1" /> Imprimir Recibo / Garantia
+              </Button>
               <p className="text-xs text-muted-foreground text-center">
                 Criada em {format(selectedOrder.createdAt, "dd/MM/yyyy HH:mm")}
               </p>
@@ -252,66 +254,4 @@ export default function OSKanban() {
       </Dialog>
     </div>
   );
-}
-
-function generateServiceReceiptHTML(order: any): string {
-  const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const profit = order.chargedAmount - order.partCost - order.taxes;
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Recibo OS – ${order.id.slice(0, 8)}</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Inter',-apple-system,sans-serif; color:#1c1c1e; padding:32px; max-width:380px; margin:auto; font-size:13px; }
-    .header { text-align:center; border-bottom:2px solid #1c1c1e; padding-bottom:16px; margin-bottom:16px; }
-    .header h1 { font-size:18px; font-weight:700; }
-    .header p { font-size:11px; color:#6e6e73; margin-top:2px; }
-    .section { margin-bottom:16px; }
-    .section-title { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#6e6e73; margin-bottom:8px; font-weight:600; }
-    .row { display:flex; justify-content:space-between; padding:4px 0; }
-    .row.total { font-weight:700; font-size:16px; border-top:2px solid #1c1c1e; padding-top:8px; margin-top:8px; }
-    .warranty { border:1px solid #30d158; border-radius:8px; padding:12px; margin-top:8px; background:#f0fff4; }
-    .warranty p { font-size:13px; font-weight:600; color:#30d158; }
-    .footer { text-align:center; margin-top:24px; font-size:10px; color:#6e6e73; border-top:1px dashed #ccc; padding-top:12px; }
-    @media print { body { padding:8px; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>Prime Paulista</h1>
-    <p>Assistência Técnica Apple</p>
-    <p style="margin-top:8px;font-size:12px;">RECIBO DE SERVIÇO</p>
-  </div>
-  <div class="section">
-    <div class="section-title">Cliente</div>
-    <div class="row"><span>Nome</span><span>${order.customerName}</span></div>
-    <div class="row"><span>WhatsApp</span><span>${order.customerPhone}</span></div>
-  </div>
-  <div class="section">
-    <div class="section-title">Aparelho</div>
-    <div class="row"><span>Modelo</span><span>${order.model}</span></div>
-    <div class="row"><span>Cor</span><span>${order.color}</span></div>
-    <div class="row"><span>IMEI/Serial</span><span>${order.serialImei}</span></div>
-  </div>
-  <div class="section">
-    <div class="section-title">Serviço Realizado</div>
-    <div class="row"><span>Defeito</span><span>${order.reportedIssue}</span></div>
-    ${order.partDescription ? `<div class="row"><span>Peça</span><span>${order.partDescription}</span></div>` : ""}
-    <div class="row"><span>Mão de Obra</span><span>${formatCurrency(order.laborCost)}</span></div>
-    <div class="row total"><span>Total Cobrado</span><span>${formatCurrency(order.chargedAmount)}</span></div>
-  </div>
-  <div class="section">
-    <div class="warranty">
-      <p>Garantia de 90 dias sobre a peça substituída</p>
-      <p style="font-size:11px;font-weight:400;color:#666;margin-top:4px;">Válida a partir da data de entrega. Não cobre danos físicos, contato com líquidos ou mau uso.</p>
-    </div>
-  </div>
-  <div class="footer">
-    <p>Prime Paulista – Obrigado pela preferência!</p>
-  </div>
-</body>
-</html>`;
 }
