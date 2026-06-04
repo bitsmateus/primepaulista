@@ -31,6 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Sessão expirada em qualquer requisição → desloga (ProtectedRoute redireciona)
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener("pp:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("pp:unauthorized", onUnauthorized);
+  }, []);
+
   const login = async (email: string, password: string) => {
     const res = await api.login(email, password);
     setToken(res.token);

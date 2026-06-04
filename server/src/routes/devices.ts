@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
-import { devices } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { devices, stockMovements } from "../db/schema/index";
+import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
 const deviceInput = z.object({
   model: z.string().min(1),
@@ -38,10 +38,21 @@ export async function deviceRoutes(app: FastifyInstance) {
         .send({ error: "Dados inválidos", details: parsed.error.flatten().fieldErrors });
     }
     const d = parsed.data;
-    const [row] = await db
-      .insert(devices)
-      .values({ ...d, cost: String(d.cost) })
-      .returning();
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(devices)
+        .values({ ...d, cost: String(d.cost) })
+        .returning();
+      await tx.insert(stockMovements).values({
+        productType: "device",
+        productId: created.id,
+        movementType: "entrada",
+        quantity: 1,
+        reason: "Cadastro",
+        userId: (req.user as JwtUser).sub,
+      });
+      return created;
+    });
     return reply.code(201).send({ device: row });
   });
 
@@ -64,8 +75,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     return { device: row };
   });
 
-  // DELETE /devices/:id
-  app.delete("/devices/:id", async (req) => {
+  // DELETE /devices/:id (somente admin)
+  app.delete("/devices/:id", { preHandler: requireRole("admin") }, async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(devices).where(eq(devices.id, id));
     return { ok: true };

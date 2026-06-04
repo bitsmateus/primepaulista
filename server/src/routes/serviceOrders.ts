@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
-import { serviceOrders } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { serviceOrders, accessories, stockMovements } from "../db/schema/index";
+import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
 const osStatus = z.enum([
   "Aguardando Diagnóstico",
@@ -16,15 +16,15 @@ const osStatus = z.enum([
 // Wire format = colunas planas (checklist separado), dinheiro como número
 const osInput = z.object({
   customerId: z.string().uuid().optional().nullable(),
-  customerName: z.string().min(1),
-  customerPhone: z.string().optional().default(""),
-  customerCpf: z.string().optional().default(""),
-  model: z.string().min(1),
-  color: z.string().optional().default(""),
-  serialImei: z.string().optional().default(""),
+  customerName: z.string().min(1).max(200),
+  customerPhone: z.string().max(30).optional().default(""),
+  customerCpf: z.string().max(20).optional().default(""),
+  model: z.string().min(1).max(100),
+  color: z.string().max(60).optional().default(""),
+  serialImei: z.string().max(60).optional().default(""),
   batteryHealth: z.coerce.number().int().min(0).max(100).optional(),
-  reportedIssue: z.string().min(1),
-  technicalNotes: z.string().optional().default(""),
+  reportedIssue: z.string().min(1).max(2000),
+  technicalNotes: z.string().max(4000).optional().default(""),
   checklistCapa: z.boolean().optional().default(false),
   checklistChip: z.boolean().optional().default(false),
   checklistCarregador: z.boolean().optional().default(false),
@@ -32,7 +32,7 @@ const osInput = z.object({
   priority: z.enum(["Normal", "Urgente", "Crítico"]).default("Normal"),
   partCost: z.coerce.number().min(0).default(0),
   laborCost: z.coerce.number().min(0).default(0),
-  partDescription: z.string().optional().default(""),
+  partDescription: z.string().max(300).optional().default(""),
   partFromStock: z.boolean().optional().default(false),
   stockAccessoryId: z.string().uuid().optional().nullable(),
   chargedAmount: z.coerce.number().min(0).default(0),
@@ -74,8 +74,46 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
     if (parsed.data.status === "Entregue / Finalizado") {
       data.completedAt = sql`now()`;
     }
-    const [row] = await db.insert(serviceOrders).values(data as never).returning();
-    return reply.code(201).send({ serviceOrder: row });
+    const usePart = parsed.data.partFromStock && parsed.data.stockAccessoryId;
+
+    try {
+      const row = await db.transaction(async (tx) => {
+        // Baixa da peça do estoque (se usada), travando a linha
+        if (usePart) {
+          const accId = parsed.data.stockAccessoryId!;
+          const [acc] = await tx
+            .select({ quantity: accessories.quantity })
+            .from(accessories)
+            .where(eq(accessories.id, accId))
+            .for("update")
+            .limit(1);
+          if (!acc || acc.quantity < 1) {
+            throw Object.assign(new Error("Peça sem estoque disponível."), {
+              statusCode: 409,
+            });
+          }
+          await tx
+            .update(accessories)
+            .set({ quantity: acc.quantity - 1 })
+            .where(eq(accessories.id, accId));
+          await tx.insert(stockMovements).values({
+            productType: "accessory",
+            productId: accId,
+            movementType: "saida",
+            quantity: 1,
+            reason: "Peça de OS",
+            userId: (req.user as JwtUser).sub,
+          });
+        }
+        const [created] = await tx.insert(serviceOrders).values(data as never).returning();
+        return created;
+      });
+      return reply.code(201).send({ serviceOrder: row });
+    } catch (err) {
+      const code = (err as { statusCode?: number }).statusCode;
+      if (code === 409) return reply.code(409).send({ error: (err as Error).message });
+      throw err;
+    }
   });
 
   // PATCH /service-orders/:id
@@ -100,8 +138,8 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
     return { serviceOrder: row };
   });
 
-  // DELETE /service-orders/:id
-  app.delete("/service-orders/:id", async (req) => {
+  // DELETE /service-orders/:id (somente admin)
+  app.delete("/service-orders/:id", { preHandler: requireRole("admin") }, async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(serviceOrders).where(eq(serviceOrders.id, id));
     return { ok: true };

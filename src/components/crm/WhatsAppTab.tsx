@@ -29,16 +29,21 @@ export default function WhatsAppTab() {
   }, [uazapiConfig]);
 
   const handleSave = () => {
-    if (!apiKey.trim() || !instanceUrl.trim() || !instanceName.trim()) {
-      toast.error("Preencha todos os campos");
+    if (!instanceUrl.trim() || !instanceName.trim()) {
+      toast.error("Preencha a URL e o nome da instância");
       return;
     }
+    if (!uazapiConfig.configured && !apiKey.trim()) {
+      toast.error("Informe a API Key na primeira configuração");
+      return;
+    }
+    // apiKey em branco mantém a chave atual no servidor
     saveConfig({ apiKey, instanceUrl, instanceName });
     toast.success("Configuração salva!");
   };
 
   const handleGenerateQR = async () => {
-    if (!uazapiConfig.apiKey) {
+    if (!uazapiConfig.configured) {
       toast.error("Salve a configuração primeiro");
       return;
     }
@@ -54,7 +59,7 @@ export default function WhatsAppTab() {
   };
 
   const handleCheckStatus = async () => {
-    if (!uazapiConfig.apiKey) {
+    if (!uazapiConfig.configured) {
       toast.error("Salve a configuração primeiro");
       return;
     }
@@ -204,7 +209,7 @@ export default function WhatsAppTab() {
             <Button
               className="w-full"
               onClick={handleGenerateQR}
-              disabled={loading || !uazapiConfig.apiKey}
+              disabled={loading || !uazapiConfig.configured}
             >
               {loading ? (
                 <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Gerando...</>

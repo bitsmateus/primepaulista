@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
-import { accessories } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { accessories, stockMovements } from "../db/schema/index";
+import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
 const accessoryInput = z.object({
   name: z.string().min(1),
@@ -35,14 +35,27 @@ export async function accessoryRoutes(app: FastifyInstance) {
         .send({ error: "Dados inválidos", details: parsed.error.flatten().fieldErrors });
     }
     const a = parsed.data;
-    const [row] = await db
-      .insert(accessories)
-      .values({
-        ...a,
-        cost: String(a.cost),
-        price: a.price !== undefined ? String(a.price) : null,
-      })
-      .returning();
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(accessories)
+        .values({
+          ...a,
+          cost: String(a.cost),
+          price: a.price !== undefined ? String(a.price) : null,
+        })
+        .returning();
+      if (created.quantity > 0) {
+        await tx.insert(stockMovements).values({
+          productType: "accessory",
+          productId: created.id,
+          movementType: "entrada",
+          quantity: created.quantity,
+          reason: "Cadastro",
+          userId: (req.user as JwtUser).sub,
+        });
+      }
+      return created;
+    });
     return reply.code(201).send({ accessory: row });
   });
 
@@ -66,8 +79,8 @@ export async function accessoryRoutes(app: FastifyInstance) {
     return { accessory: row };
   });
 
-  // DELETE /accessories/:id
-  app.delete("/accessories/:id", async (req) => {
+  // DELETE /accessories/:id (somente admin)
+  app.delete("/accessories/:id", { preHandler: requireRole("admin") }, async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(accessories).where(eq(accessories.id, id));
     return { ok: true };

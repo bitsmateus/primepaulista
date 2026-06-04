@@ -6,6 +6,7 @@ import {
   Customer, CartItem, PaymentEntry, TradeIn, PaymentMethod, LeadOrigin, Seller,
 } from "@/types/inventory";
 import { printReceipt } from "@/utils/receiptGenerator";
+import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -258,8 +259,10 @@ export default function PDVPage() {
       // Reset
       setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
       setCustomerQuery(""); setImeiQuery("");
-    } catch {
-      toast.error("Falha ao registrar a venda. Tente novamente.");
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Falha ao registrar a venda. Tente novamente."
+      );
     } finally {
       setFinalizing(false);
     }

@@ -115,10 +115,12 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
     return { date: dateStr, pix, dinheiro, creditCard, debitCard, sangrias: sangriaTotal, total: pix + dinheiro + creditCard + debitCard - sangriaTotal };
   };
 
-  // Seller performance
+  // Seller performance — vendedores derivados das comissões + vendas (não fixo)
   const sellerPerformance = useMemo(() => {
-    const sellers: Seller[] = ["Gabriel", "Matheus", "Tassio"];
-    return sellers.map(seller => {
+    const names = new Set<string>();
+    commissionConfigs.forEach(c => names.add(c.seller));
+    currentMonthSales.forEach(s => { if (s.seller) names.add(s.seller); });
+    return Array.from(names).map(seller => {
       const sellerSales = currentMonthSales.filter(s => s.seller === seller);
       const totalRevenue = sellerSales.reduce((s, sale) => s + sale.total, 0);
       const totalItems = sellerSales.reduce((s, sale) => s + sale.items.length, 0);
@@ -137,7 +139,7 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
         commission: sellerCommissions[seller] || 0,
       };
     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
-  }, [currentMonthSales, sellerCommissions]);
+  }, [currentMonthSales, sellerCommissions, commissionConfigs]);
 
   // Inventory ABC / Stale
   const staleDevices = useMemo(() => {

@@ -17,7 +17,7 @@ const navItems = [
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/crm", label: "CRM", icon: MessageSquare },
   { to: "/assistencia", label: "Assistência", icon: Wrench },
-  { to: "/bi", label: "BI Financeiro", icon: BarChart3 },
+  { to: "/bi", label: "BI Financeiro", icon: BarChart3, adminOnly: true },
 ];
 
 export function AppSidebar() {
@@ -38,7 +38,9 @@ export function AppSidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navItems.map(({ to, label, icon: Icon }) => {
+        {navItems
+          .filter((item) => !item.adminOnly || user?.role === "admin")
+          .map(({ to, label, icon: Icon }) => {
           const isActive = location.pathname === to;
           return (
             <NavLink

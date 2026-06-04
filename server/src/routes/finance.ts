@@ -8,7 +8,7 @@ import {
   sellerCommissions,
   accountsReceivable,
 } from "../db/schema/index";
-import { authenticate, type JwtUser } from "../plugins/auth";
+import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
 const EXPENSE_CATEGORIES = [
   "Aluguel",
@@ -27,7 +27,9 @@ const DEFAULT_COMMISSIONS = [
 ];
 
 export async function financeRoutes(app: FastifyInstance) {
+  // Financeiro é restrito a administradores
   app.addHook("preHandler", authenticate);
+  app.addHook("preHandler", requireRole("admin"));
 
   // ===== Despesas =====
   app.get("/expenses", async () => {
@@ -38,7 +40,7 @@ export async function financeRoutes(app: FastifyInstance) {
   app.post("/expenses", async (req, reply) => {
     const p = z
       .object({
-        description: z.string().min(1),
+        description: z.string().min(1).max(300),
         category: z.enum(EXPENSE_CATEGORIES),
         amount: z.coerce.number().min(0),
         date: z.string().optional(),
@@ -75,7 +77,7 @@ export async function financeRoutes(app: FastifyInstance) {
     const p = z
       .object({
         amount: z.coerce.number().min(0),
-        justification: z.string().optional().default(""),
+        justification: z.string().max(500).optional().default(""),
         date: z.string().optional(),
       })
       .safeParse(req.body);

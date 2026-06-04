@@ -111,6 +111,33 @@ export async function saleRoutes(app: FastifyInstance) {
 
     try {
       const saleId = await db.transaction(async (tx) => {
+        // 0) Trava e valida disponibilidade/estoque (evita venda dupla / estoque negativo)
+        for (const it of s.items) {
+          if (it.productType === "device") {
+            const [dev] = await tx
+              .select({ status: devices.status })
+              .from(devices)
+              .where(eq(devices.id, it.productId))
+              .for("update")
+              .limit(1);
+            if (!dev) throw saleError(`Aparelho não encontrado: ${it.name}`);
+            if (dev.status === "Vendido")
+              throw saleError(`O aparelho "${it.name}" já foi vendido.`);
+          } else {
+            const [acc] = await tx
+              .select({ quantity: accessories.quantity })
+              .from(accessories)
+              .where(eq(accessories.id, it.productId))
+              .for("update")
+              .limit(1);
+            if (!acc) throw saleError(`Acessório não encontrado: ${it.name}`);
+            if (acc.quantity < it.quantity)
+              throw saleError(
+                `Estoque insuficiente de "${it.name}" (disponível: ${acc.quantity}).`
+              );
+          }
+        }
+
         // 1) Cabeçalho da venda
         const [sale] = await tx
           .insert(sales)
@@ -193,8 +220,17 @@ export async function saleRoutes(app: FastifyInstance) {
 
       return reply.code(201).send({ saleId });
     } catch (err) {
+      const code = (err as { statusCode?: number }).statusCode;
+      if (code === 409) {
+        return reply.code(409).send({ error: (err as Error).message });
+      }
       app.log.error(err);
       return reply.code(500).send({ error: "Falha ao registrar a venda" });
     }
   });
+}
+
+// Erro de validação de venda (estoque/disponibilidade) → 409
+function saleError(message: string) {
+  return Object.assign(new Error(message), { statusCode: 409 });
 }

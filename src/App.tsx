@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { ApiError } from "@/lib/api";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,12 +20,26 @@ import AssistenciaPage from "./pages/AssistenciaPage";
 import BIDashboardPage from "./pages/BIDashboardPage";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Não repete em sessão expirada (401); demais erros, 1 tentativa
+      retry: (failureCount, error) =>
+        !(error instanceof ApiError && error.status === 401) && failureCount < 1,
+    },
+  },
+});
 
 // Agrupa os providers de dados que só fazem sentido após o login
-function ProtectedApp({ children }: { children: React.ReactNode }) {
+function ProtectedApp({
+  children,
+  adminOnly = false,
+}: {
+  children: React.ReactNode;
+  adminOnly?: boolean;
+}) {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireAdmin={adminOnly}>
       <InventoryProvider>
         <CRMProvider>
           <ServiceOrderProvider>{children}</ServiceOrderProvider>
@@ -50,7 +65,7 @@ const App = () => (
             <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
             <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />
             <Route path="/assistencia" element={<ProtectedApp><AssistenciaPage /></ProtectedApp>} />
-            <Route path="/bi" element={<ProtectedApp><BIDashboardPage /></ProtectedApp>} />
+            <Route path="/bi" element={<ProtectedApp adminOnly><BIDashboardPage /></ProtectedApp>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

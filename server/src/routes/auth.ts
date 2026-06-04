@@ -12,8 +12,11 @@ const loginSchema = z.object({
 });
 
 export async function authRoutes(app: FastifyInstance) {
-  // POST /auth/login
-  app.post("/auth/login", async (req, reply) => {
+  // POST /auth/login — limite estrito contra força bruta
+  app.post(
+    "/auth/login",
+    { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } },
+    async (req, reply) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "E-mail ou senha inválidos" });

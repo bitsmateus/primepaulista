@@ -3,7 +3,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { whatsappConfig } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireRole } from "../plugins/auth";
+import { callUazapi } from "../services/whatsapp";
 
 // Busca (ou cria) a linha única de configuração
 async function getConfig() {
@@ -13,58 +14,52 @@ async function getConfig() {
   return created;
 }
 
-function baseUrl(url: string) {
-  return url.replace(/\/$/, "");
-}
-
-// Chama a API da Uazapi usando a config salva
-async function uazapi(
-  path: string,
-  method: "GET" | "POST",
-  cfg: { apiKey: string; instanceUrl: string },
-  body?: unknown
-) {
-  const res = await fetch(`${baseUrl(cfg.instanceUrl)}${path}`, {
-    method,
-    headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
-
 export async function whatsappRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
-  // GET /whatsapp/config
+  // GET /whatsapp/config — NUNCA devolve a apiKey (apenas se está configurada)
   app.get("/whatsapp/config", async () => {
     const cfg = await getConfig();
     return {
       config: {
-        apiKey: cfg.apiKey,
+        apiKey: "", // mascarada: deixe em branco para manter a atual
         instanceUrl: cfg.instanceUrl,
         instanceName: cfg.instanceName,
+        configured: Boolean(cfg.apiKey && cfg.instanceUrl),
       },
     };
   });
 
-  // PUT /whatsapp/config
-  app.put("/whatsapp/config", async (req, reply) => {
+  // PUT /whatsapp/config — somente admin; apiKey vazia mantém a atual
+  app.put("/whatsapp/config", { preHandler: requireRole("admin") }, async (req, reply) => {
     const p = z
       .object({
-        apiKey: z.string().default(""),
-        instanceUrl: z.string().default(""),
-        instanceName: z.string().default(""),
+        apiKey: z.string().max(500).optional().default(""),
+        instanceUrl: z.string().max(500).default(""),
+        instanceName: z.string().max(200).default(""),
       })
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
     const cfg = await getConfig();
     const [row] = await db
       .update(whatsappConfig)
-      .set({ ...p.data, updatedAt: new Date() })
+      .set({
+        // só troca a apiKey se uma nova foi enviada
+        apiKey: p.data.apiKey.trim() ? p.data.apiKey : cfg.apiKey,
+        instanceUrl: p.data.instanceUrl,
+        instanceName: p.data.instanceName,
+        updatedAt: new Date(),
+      })
       .where(eq(whatsappConfig.id, cfg.id))
       .returning();
-    return { config: { apiKey: row.apiKey, instanceUrl: row.instanceUrl, instanceName: row.instanceName } };
+    return {
+      config: {
+        apiKey: "",
+        instanceUrl: row.instanceUrl,
+        instanceName: row.instanceName,
+        configured: Boolean(row.apiKey && row.instanceUrl),
+      },
+    };
   });
 
   // Garante que há config antes de chamar a Uazapi
@@ -82,7 +77,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
     const cfg = await requireConfig(reply);
     if (!cfg) return;
     try {
-      const r = await uazapi("/instance/status", "GET", cfg);
+      const r = await callUazapi(cfg, "/instance/status", "GET");
       const status = r.data?.state || r.data?.status || "disconnected";
       return { status };
     } catch {
@@ -94,7 +89,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
   app.get("/whatsapp/qrcode", async (_req, reply) => {
     const cfg = await requireConfig(reply);
     if (!cfg) return;
-    const r = await uazapi("/instance/qrcode", "GET", cfg);
+    const r = await callUazapi(cfg, "/instance/qrcode", "GET");
     if (!r.ok) return reply.code(502).send({ error: "Falha ao gerar QR Code" });
     return { qrcode: r.data?.qrcode || r.data?.base64 || r.data?.code || null };
   });
@@ -103,7 +98,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
   app.post("/whatsapp/disconnect", async (_req, reply) => {
     const cfg = await requireConfig(reply);
     if (!cfg) return;
-    await uazapi("/instance/logout", "POST", cfg);
+    await callUazapi(cfg, "/instance/logout", "POST");
     return { ok: true };
   });
 
@@ -111,7 +106,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
   app.post("/whatsapp/restart", async (_req, reply) => {
     const cfg = await requireConfig(reply);
     if (!cfg) return;
-    await uazapi("/instance/restart", "POST", cfg);
+    await callUazapi(cfg, "/instance/restart", "POST");
     return { ok: true };
   });
 
@@ -123,7 +118,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
     if (!cfg) return;
     const cleanPhone = p.data.phone.replace(/\D/g, "");
     try {
-      const r = await uazapi("/message/text", "POST", cfg, {
+      const r = await callUazapi(cfg, "/message/text", "POST", {
         number: cleanPhone,
         text: p.data.message,
       });

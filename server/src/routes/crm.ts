@@ -14,20 +14,20 @@ const DEFAULT_COLUMNS = [
 ];
 
 const leadInput = z.object({
-  name: z.string().min(1),
-  phone: z.string().optional().default(""),
-  modelInterest: z.string().optional().default(""),
-  origin: z.string().optional().default(""),
-  status: z.string().optional().default("Novo"),
-  notes: z.string().optional().default(""),
+  name: z.string().min(1).max(200),
+  phone: z.string().max(30).optional().default(""),
+  modelInterest: z.string().max(100).optional().default(""),
+  origin: z.string().max(100).optional().default(""),
+  status: z.string().max(100).optional().default("Novo"),
+  notes: z.string().max(2000).optional().default(""),
 });
 
 const messageLogInput = z.object({
   recipientId: z.string().uuid().optional().nullable(),
-  recipientName: z.string().optional().default(""),
-  recipientPhone: z.string().optional().default(""),
-  templateType: z.string().optional().default(""),
-  message: z.string().optional().default(""),
+  recipientName: z.string().max(200).optional().default(""),
+  recipientPhone: z.string().max(30).optional().default(""),
+  templateType: z.string().max(100).optional().default(""),
+  message: z.string().max(4000).optional().default(""),
   status: z.enum(["sent", "failed", "pending"]).optional().default("sent"),
 });
 

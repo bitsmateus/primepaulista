@@ -2,6 +2,8 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 import { env } from "./env";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/users";
@@ -19,7 +21,14 @@ import { financeRoutes } from "./routes/finance";
 export function buildApp() {
   const app = Fastify({ logger: true });
 
-  app.register(cors, { origin: true, credentials: true });
+  // Origens permitidas: lista do env, ou todas (dev) se não configurado
+  const corsOrigins = env.CORS_ORIGIN
+    ? env.CORS_ORIGIN.split(",").map((o) => o.trim())
+    : true;
+
+  app.register(helmet, { contentSecurityPolicy: false }); // headers de segurança
+  app.register(cors, { origin: corsOrigins, credentials: true });
+  app.register(rateLimit, { max: 200, timeWindow: "1 minute" }); // limite global
   app.register(jwt, { secret: env.JWT_SECRET });
   app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024 } }); // até 15MB por foto
 

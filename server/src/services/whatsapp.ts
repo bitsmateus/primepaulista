@@ -10,18 +10,32 @@ export function isWhatsappConfigured(cfg: { instanceUrl: string; apiKey: string 
   return Boolean(cfg && cfg.instanceUrl && cfg.apiKey);
 }
 
+// Chamada genérica à API da Uazapi (usada pelas rotas e pelas automações)
+export async function callUazapi(
+  cfg: { apiKey: string; instanceUrl: string },
+  path: string,
+  method: "GET" | "POST",
+  body?: unknown
+) {
+  const res = await fetch(`${cfg.instanceUrl.replace(/\/$/, "")}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
 // Envia uma mensagem de texto via Uazapi. Retorna true/false (não lança).
 export async function sendWhatsappMessage(phone: string, message: string): Promise<boolean> {
   const cfg = await loadWhatsappConfig();
   if (!isWhatsappConfigured(cfg)) return false;
-  const cleanPhone = phone.replace(/\D/g, "");
   try {
-    const res = await fetch(`${cfg!.instanceUrl.replace(/\/$/, "")}/message/text`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: cfg!.apiKey },
-      body: JSON.stringify({ number: cleanPhone, text: message }),
+    const r = await callUazapi(cfg!, "/message/text", "POST", {
+      number: phone.replace(/\D/g, ""),
+      text: message,
     });
-    return res.ok;
+    return r.ok;
   } catch {
     return false;
   }

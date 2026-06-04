@@ -50,7 +50,8 @@ export function ReceivablesTab() {
       api.createReceivable({
         amount: parseFloat(amount) || 0,
         customerId: customerId !== "none" ? customerId : undefined,
-        dueDate: dueDate || undefined,
+        // ancora ao meio-dia local para não "voltar" um dia por fuso horário
+        dueDate: dueDate ? new Date(dueDate + "T12:00:00").toISOString() : undefined,
       }),
     onSuccess: () => {
       invalidate();

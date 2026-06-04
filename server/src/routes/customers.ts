@@ -3,13 +3,13 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { customers } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireRole } from "../plugins/auth";
 
 const customerInput = z.object({
-  name: z.string().min(1),
-  cpf: z.string().optional().default(""),
-  whatsapp: z.string().optional().default(""),
-  birthday: z.string().optional().default(""),
+  name: z.string().min(1).max(200),
+  cpf: z.string().max(20).optional().default(""),
+  whatsapp: z.string().max(30).optional().default(""),
+  birthday: z.string().max(20).optional().default(""),
   leadOrigin: z.enum(["Instagram", "Indicação", "Tráfego Pago"]).optional(),
 });
 
@@ -34,8 +34,8 @@ export async function customerRoutes(app: FastifyInstance) {
     return reply.code(201).send({ customer: row });
   });
 
-  // DELETE /customers/:id
-  app.delete("/customers/:id", async (req, reply) => {
+  // DELETE /customers/:id (somente admin)
+  app.delete("/customers/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       await db.delete(customers).where(eq(customers.id, id));

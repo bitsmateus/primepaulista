@@ -14,7 +14,10 @@ export function useServiceOrders() {
   const addOrderMut = useMutation({
     mutationFn: (order: Omit<ServiceOrder, "id" | "createdAt" | "updatedAt">) =>
       api.createServiceOrder(order),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["accessories"] }); // peça pode ter baixado
+    },
   });
   const updateOrderMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ServiceOrder> }) =>

@@ -39,6 +39,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 401) {
     clearToken();
+    // Avisa a aplicação para deslogar/redirecionar
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("pp:unauthorized"));
+    }
     throw new ApiError(401, "Sessão expirada");
   }
 
@@ -459,6 +463,7 @@ export interface WhatsappConfig {
   apiKey: string;
   instanceUrl: string;
   instanceName: string;
+  configured?: boolean;
 }
 
 export interface Automation {

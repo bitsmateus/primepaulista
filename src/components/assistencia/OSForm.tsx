@@ -4,6 +4,7 @@ import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { OSPriority } from "@/types/serviceOrder";
+import { ApiError } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,7 @@ interface OSFormProps {
 
 export default function OSForm({ onCreated }: OSFormProps) {
   const { addOrder } = useServiceOrderContext();
-  const { customers, accessories, updateAccessoryQuantity } = useInventoryContext();
+  const { customers, accessories } = useInventoryContext();
   const { leads } = useCRMContext();
 
   // Customer search
@@ -63,7 +64,7 @@ export default function OSForm({ onCreated }: OSFormProps) {
       ].filter((v, i, a) => a.findIndex((x) => x.phone === v.phone) === i).slice(0, 5)
     : [];
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedCustomer) {
       toast.error("Selecione um cliente");
       return;
@@ -73,35 +74,33 @@ export default function OSForm({ onCreated }: OSFormProps) {
       return;
     }
 
-    // Deduct from stock if needed
-    if (partFromStock && stockAccessoryId) {
-      const acc = accessories.find((a) => a.id === stockAccessoryId);
-      if (acc && acc.quantity > 0) {
-        updateAccessoryQuantity(acc.id, acc.quantity - 1);
-      }
+    // A baixa da peça do estoque é feita pelo backend, de forma transacional
+    try {
+      await addOrder({
+        customerName: selectedCustomer.name,
+        customerPhone: selectedCustomer.phone,
+        customerCpf: selectedCustomer.cpf,
+        model,
+        color,
+        serialImei,
+        batteryHealth: Number(batteryHealth),
+        reportedIssue,
+        technicalNotes,
+        checklist: { capa: checkCapa, chip: checkChip, carregador: checkCarregador },
+        status: "Aguardando Diagnóstico",
+        priority,
+        partCost: Number(partCost) || 0,
+        laborCost: Number(laborCost) || 0,
+        partDescription,
+        partFromStock,
+        stockAccessoryId: partFromStock ? stockAccessoryId : undefined,
+        chargedAmount: Number(chargedAmount) || 0,
+        taxes: Number(taxes) || 0,
+      });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Falha ao criar a OS.");
+      return;
     }
-
-    addOrder({
-      customerName: selectedCustomer.name,
-      customerPhone: selectedCustomer.phone,
-      customerCpf: selectedCustomer.cpf,
-      model,
-      color,
-      serialImei,
-      batteryHealth: Number(batteryHealth),
-      reportedIssue,
-      technicalNotes,
-      checklist: { capa: checkCapa, chip: checkChip, carregador: checkCarregador },
-      status: "Aguardando Diagnóstico",
-      priority,
-      partCost: Number(partCost) || 0,
-      laborCost: Number(laborCost) || 0,
-      partDescription,
-      partFromStock,
-      stockAccessoryId: partFromStock ? stockAccessoryId : undefined,
-      chargedAmount: Number(chargedAmount) || 0,
-      taxes: Number(taxes) || 0,
-    });
 
     toast.success("Ordem de Serviço criada!");
     // Reset form
