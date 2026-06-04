@@ -3,8 +3,9 @@ import { Search, ScanLine, ShoppingCart, Plus, Trash2, Repeat, Printer, UserPlus
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import {
-  Customer, CartItem, PaymentEntry, TradeIn, PaymentMethod, LeadOrigin, Seller,
+  Customer, CartItem, PaymentEntry, TradeIn, PaymentMethod, LeadOrigin, Seller, DeviceCategory, DeviceCondition,
 } from "@/types/inventory";
+import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { printReceipt } from "@/utils/receiptGenerator";
 import { ApiError } from "@/lib/api";
 import { formatCapacity } from "@/lib/utils";
@@ -56,10 +57,21 @@ export default function PDVPage() {
   // Trade-in
   const [showTradeIn, setShowTradeIn] = useState(false);
   const [tradeIn, setTradeIn] = useState<TradeIn | null>(null);
+  const [tradeCategory, setTradeCategory] = useState<DeviceCategory>("iPhone");
   const [tradeImei, setTradeImei] = useState("");
   const [tradeModel, setTradeModel] = useState("");
+  const [tradeCapacity, setTradeCapacity] = useState("");
+  const [tradeColor, setTradeColor] = useState("");
+  const [tradeCondition, setTradeCondition] = useState<DeviceCondition>("Seminovo");
+  const [tradeBattery, setTradeBattery] = useState("100");
   const [tradeHealth, setTradeHealth] = useState("");
   const [tradeValue, setTradeValue] = useState("");
+
+  const resetTradeForm = () => {
+    setTradeCategory("iPhone"); setTradeImei(""); setTradeModel("");
+    setTradeCapacity(""); setTradeColor(""); setTradeCondition("Seminovo");
+    setTradeBattery("100"); setTradeHealth(""); setTradeValue("");
+  };
 
   // Seller
   const [seller, setSeller] = useState<Seller>("Gabriel");
@@ -221,10 +233,24 @@ export default function PDVPage() {
   // ---------- Trade-in ----------
   const handleAddTradeIn = () => {
     const val = Number(tradeValue);
-    if (!tradeModel || !val) return;
-    setTradeIn({ imei: tradeImei, model: tradeModel, healthDescription: tradeHealth, value: val });
+    if (!tradeModel.trim() || !val) {
+      toast.error("Informe ao menos o modelo e o valor da troca.");
+      return;
+    }
+    setTradeIn({
+      imei: tradeImei,
+      model: tradeModel.trim(),
+      healthDescription: tradeHealth,
+      value: val,
+      category: tradeCategory,
+      capacity: tradeCapacity,
+      color: tradeColor,
+      condition: tradeCondition,
+      batteryHealth: Number(tradeBattery) || 0,
+    });
     setShowTradeIn(false);
-    toast.success("Aparelho de troca adicionado.");
+    resetTradeForm();
+    toast.success("Aparelho de troca adicionado (entrará no estoque ao finalizar).");
   };
 
   // ---------- Totals ----------
@@ -665,34 +691,77 @@ export default function PDVPage() {
 
       {/* Trade-in Modal */}
       <Dialog open={showTradeIn} onOpenChange={setShowTradeIn}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Repeat className="h-5 w-5 text-primary" />
               Aparelho de Troca
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <p className="text-xs text-muted-foreground">
+            Preencha os dados do aparelho recebido — ele entra no estoque como disponível.
+          </p>
+          <div className="grid grid-cols-2 gap-3 py-2">
             <div className="space-y-1">
-              <Label>IMEI do Aparelho</Label>
-              <Input value={tradeImei} onChange={(e) => setTradeImei(e.target.value)} placeholder="IMEI" />
+              <Label>Categoria</Label>
+              <Select
+                value={tradeCategory}
+                onValueChange={(v) => { setTradeCategory(v as DeviceCategory); setTradeModel(""); setTradeCapacity(""); }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DEVICE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Modelo</Label>
-              <Input value={tradeModel} onChange={(e) => setTradeModel(e.target.value)} placeholder="Ex: iPhone 12 64GB" />
+              <Input list="trade-model" value={tradeModel} onChange={(e) => setTradeModel(e.target.value)} placeholder="Selecione ou digite" />
+              <datalist id="trade-model">
+                {(MODELS_BY_CATEGORY[tradeCategory] || []).map((m) => <option key={m} value={m} />)}
+              </datalist>
             </div>
             <div className="space-y-1">
-              <Label>Descrição / Saúde da Bateria</Label>
-              <Input value={tradeHealth} onChange={(e) => setTradeHealth(e.target.value)} placeholder="Ex: Bateria 85%, tela ok" />
+              <Label>Capacidade / Tamanho</Label>
+              <Input list="trade-capacity" value={tradeCapacity} onChange={(e) => setTradeCapacity(e.target.value)} placeholder="Ex: 128, 45mm…" />
+              <datalist id="trade-capacity">
+                {(CAPACITIES_BY_CATEGORY[tradeCategory] || []).map((c) => <option key={c} value={c} />)}
+              </datalist>
             </div>
             <div className="space-y-1">
-              <Label>Valor da Avaliação (R$)</Label>
+              <Label>Cor</Label>
+              <Input value={tradeColor} onChange={(e) => setTradeColor(e.target.value)} placeholder="Ex: Preto" />
+            </div>
+            <div className="space-y-1">
+              <Label>Condição</Label>
+              <Select value={tradeCondition} onValueChange={(v) => setTradeCondition(v as DeviceCondition)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Seminovo">Seminovo</SelectItem>
+                  <SelectItem value="Lacrado">Lacrado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Saúde da Bateria (%)</Label>
+              <Input type="number" min={0} max={100} value={tradeBattery} onChange={(e) => setTradeBattery(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>IMEI / Serial</Label>
+              <Input value={tradeImei} onChange={(e) => setTradeImei(e.target.value)} placeholder="IMEI ou serial" />
+            </div>
+            <div className="space-y-1">
+              <Label>Valor da Troca (R$)</Label>
               <Input type="number" value={tradeValue} onChange={(e) => setTradeValue(e.target.value)} placeholder="0,00" />
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setShowTradeIn(false)}>Cancelar</Button>
-              <Button onClick={handleAddTradeIn}>Confirmar Troca</Button>
+            <div className="col-span-2 space-y-1">
+              <Label>Observações (estado do aparelho)</Label>
+              <Input value={tradeHealth} onChange={(e) => setTradeHealth(e.target.value)} placeholder="Ex: tela ok, pequeno risco na traseira" />
             </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowTradeIn(false)}>Cancelar</Button>
+            <Button onClick={handleAddTradeIn}>Confirmar Troca</Button>
           </div>
         </DialogContent>
       </Dialog>

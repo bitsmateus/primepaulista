@@ -43,10 +43,15 @@ const saleInput = z.object({
     .min(1),
   tradeIn: z
     .object({
-      imei: z.string().optional().default(""),
-      model: z.string(),
-      healthDescription: z.string().optional().default(""),
+      imei: z.string().max(60).optional().default(""),
+      model: z.string().max(100),
+      healthDescription: z.string().max(300).optional().default(""),
       value: z.coerce.number().min(0),
+      category: z.string().max(50).optional().default("iPhone"),
+      capacity: z.string().max(50).optional().default(""),
+      color: z.string().max(60).optional().default(""),
+      condition: z.enum(["Lacrado", "Seminovo"]).optional().default("Seminovo"),
+      batteryHealth: z.coerce.number().int().min(0).max(100).optional().default(100),
     })
     .optional(),
 });
@@ -174,7 +179,7 @@ export async function saleRoutes(app: FastifyInstance) {
           }))
         );
 
-        // 4) Aparelho de troca (opcional)
+        // 4) Aparelho de troca (opcional) — registra a troca e entra no estoque
         if (s.tradeIn) {
           await tx.insert(tradeIns).values({
             saleId: sale.id,
@@ -182,6 +187,30 @@ export async function saleRoutes(app: FastifyInstance) {
             model: s.tradeIn.model,
             healthDescription: s.tradeIn.healthDescription,
             value: String(s.tradeIn.value),
+          });
+          // Cria o aparelho de troca como novo dispositivo disponível
+          const [tradeDevice] = await tx
+            .insert(devices)
+            .values({
+              category: s.tradeIn.category,
+              model: s.tradeIn.model,
+              capacity: s.tradeIn.capacity,
+              color: s.tradeIn.color,
+              condition: s.tradeIn.condition,
+              batteryHealth: s.tradeIn.batteryHealth,
+              cost: String(s.tradeIn.value),
+              serialImei: s.tradeIn.imei,
+              supplier: "Troca (PDV)",
+              status: "Disponível",
+            })
+            .returning({ id: devices.id });
+          await tx.insert(stockMovements).values({
+            productType: "device",
+            productId: tradeDevice.id,
+            movementType: "entrada",
+            quantity: 1,
+            reason: "Aparelho de troca",
+            userId: sellerId,
           });
         }
 

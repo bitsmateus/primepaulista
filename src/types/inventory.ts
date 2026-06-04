@@ -77,6 +77,12 @@ export interface TradeIn {
   model: string;
   healthDescription: string;
   value: number;
+  // Dados completos do aparelho (entra no estoque como novo dispositivo)
+  category?: string;
+  capacity?: string;
+  color?: string;
+  condition?: DeviceCondition;
+  batteryHealth?: number;
 }
 
 export interface Sale {

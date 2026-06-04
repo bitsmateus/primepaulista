@@ -549,7 +549,17 @@ export interface SalePayload {
     quantity: number;
   }[];
   payments: { method: string; amount: number; installments?: number }[];
-  tradeIn?: { imei: string; model: string; healthDescription: string; value: number };
+  tradeIn?: {
+    imei: string;
+    model: string;
+    healthDescription: string;
+    value: number;
+    category?: string;
+    capacity?: string;
+    color?: string;
+    condition?: "Lacrado" | "Seminovo";
+    batteryHealth?: number;
+  };
 }
 
 export type { Sale };
