@@ -44,6 +44,11 @@ export function useInventory() {
       api.updateDevice(id, { status }),
     onSuccess: invalidateDevices,
   });
+  const updateDeviceMut = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Omit<Device, "id" | "createdAt">> }) =>
+      api.updateDevice(id, patch),
+    onSuccess: invalidateDevices,
+  });
   const deleteDeviceMut = useMutation({
     mutationFn: (id: string) => api.deleteDevice(id),
     onSuccess: invalidateDevices,
@@ -53,6 +58,8 @@ export function useInventory() {
     addDeviceMut.mutate(device);
   const updateDeviceStatus = (id: string, status: Device["status"]) =>
     updateDeviceStatusMut.mutate({ id, status });
+  const updateDevice = (id: string, patch: Partial<Omit<Device, "id" | "createdAt">>) =>
+    updateDeviceMut.mutateAsync({ id, patch });
   const deleteDevice = (id: string) => deleteDeviceMut.mutate(id);
 
   // ----- Mutations: acessórios -----
@@ -197,6 +204,7 @@ export function useInventory() {
     sales,
     addDevice,
     updateDeviceStatus,
+    updateDevice,
     deleteDevice,
     addAccessory,
     updateAccessoryQuantity,

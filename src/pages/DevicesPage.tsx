@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Plus, ScanLine, Shuffle, Trash2 } from "lucide-react";
-import { AppLayout } from "@/components/AppLayout";
+import { useState, useMemo } from "react";
+import { Plus, ScanLine, Shuffle, Trash2, Pencil, Search } from "lucide-react";
 import { toast } from "sonner";
+import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
-import { DeviceStatus, DeviceCategory } from "@/types/inventory";
+import { DeviceStatus, DeviceCategory, DeviceCondition, Device } from "@/types/inventory";
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
+import { formatCapacity } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,7 +23,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -46,16 +46,21 @@ const statusVariantMap: Record<DeviceStatus, "available" | "sold" | "maintenance
   "Reservado": "reserved",
 };
 
+const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 export default function DevicesPage() {
   const {
     devices,
     addDevice,
+    updateDevice,
     updateDeviceStatus,
     deleteDevice,
     generateInternalSerial,
   } = useInventoryContext();
 
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
 
@@ -64,7 +69,7 @@ export default function DevicesPage() {
   const [model, setModel] = useState("");
   const [capacity, setCapacity] = useState("");
   const [color, setColor] = useState("");
-  const [condition, setCondition] = useState<"Lacrado" | "Seminovo">("Lacrado");
+  const [condition, setCondition] = useState<DeviceCondition>("Lacrado");
   const [batteryHealth, setBatteryHealth] = useState("100");
   const [supplier, setSupplier] = useState("");
   const [cost, setCost] = useState("");
@@ -78,12 +83,33 @@ export default function DevicesPage() {
     setSerialImei(""); setInternalSerial("");
   };
 
+  const openCreate = () => {
+    resetForm();
+    setEditingId(null);
+    setOpen(true);
+  };
+
+  const openEdit = (d: Device) => {
+    setEditingId(d.id);
+    setCategory((d.category as DeviceCategory) || "iPhone");
+    setModel(d.model);
+    setCapacity(d.capacity || "");
+    setColor(d.color || "");
+    setCondition(d.condition);
+    setBatteryHealth(String(d.batteryHealth ?? 100));
+    setSupplier(d.supplier || "");
+    setCost(String(d.cost ?? ""));
+    setSerialImei(d.serialImei || "");
+    setInternalSerial(d.internalSerial || "");
+    setOpen(true);
+  };
+
   const handleSubmit = () => {
     if (!model.trim() || (!serialImei && !internalSerial)) {
       toast.error("Informe o modelo e o serial/IMEI (ou gere um serial interno).");
       return;
     }
-    addDevice({
+    const payload = {
       category,
       model: model.trim(),
       capacity,
@@ -94,17 +120,51 @@ export default function DevicesPage() {
       cost: Number(cost),
       serialImei,
       internalSerial,
-      status: "Disponível",
-    });
+    };
+    if (editingId) {
+      updateDevice(editingId, payload);
+      toast.success("Aparelho atualizado!");
+    } else {
+      addDevice({ ...payload, status: "Disponível" });
+      toast.success("Aparelho cadastrado!");
+    }
     resetForm();
+    setEditingId(null);
     setOpen(false);
   };
 
-  const filteredDevices = devices.filter((d) => {
-    if (filterStatus !== "all" && d.status !== filterStatus) return false;
-    if (filterCategory !== "all" && (d.category || "iPhone") !== filterCategory) return false;
-    return true;
-  });
+  // ----- Filtros + busca -----
+  const filteredDevices = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return devices.filter((d) => {
+      if (filterStatus !== "all" && d.status !== filterStatus) return false;
+      if (filterCategory !== "all" && (d.category || "iPhone") !== filterCategory) return false;
+      if (q) {
+        const hay = `${d.model} ${d.color} ${d.capacity} ${d.serialImei} ${d.internalSerial} ${d.supplier}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [devices, filterStatus, filterCategory, search]);
+
+  // ----- Relatório / resumo -----
+  const report = useMemo(() => {
+    const inStock = devices.filter((d) => d.status === "Disponível" || d.status === "Reservado");
+    const stockValue = inStock.reduce((s, d) => s + (d.cost || 0), 0);
+    const byCategory: Record<string, number> = {};
+    for (const d of devices) {
+      const c = d.category || "iPhone";
+      byCategory[c] = (byCategory[c] || 0) + 1;
+    }
+    return {
+      total: devices.length,
+      inStock: inStock.length,
+      sold: devices.filter((d) => d.status === "Vendido").length,
+      maintenance: devices.filter((d) => d.status === "Em Manutenção").length,
+      stockValue,
+      byCategory,
+    };
+  }, [devices]);
 
   return (
     <AppLayout>
@@ -116,132 +176,48 @@ export default function DevicesPage() {
               Estoque de iPhone, iPad, Apple Watch, Mac, AirPods e outros
             </p>
           </div>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Aparelho
+          </Button>
+        </div>
 
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Aparelho
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Cadastrar Aparelho</DialogTitle>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4">
-                <div className="space-y-2">
-                  <Label>Categoria</Label>
-                  <Select
-                    value={category}
-                    onValueChange={(v) => { setCategory(v as DeviceCategory); setModel(""); setCapacity(""); }}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DEVICE_CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+        {/* Resumo / relatório */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            { label: "Total", value: report.total },
+            { label: "Em loja", value: report.inStock },
+            { label: "Vendidos", value: report.sold },
+            { label: "Em manutenção", value: report.maintenance },
+            { label: "Valor em estoque", value: fmt(report.stockValue) },
+          ].map((c) => (
+            <Card key={c.label} className="border shadow-none">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">{c.label}</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">{c.value}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-                <div className="space-y-2">
-                  <Label>Modelo</Label>
-                  <Input
-                    list="model-suggestions"
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    placeholder="Selecione ou digite o modelo"
-                  />
-                  <datalist id="model-suggestions">
-                    {(MODELS_BY_CATEGORY[category] || []).map((m) => (
-                      <option key={m} value={m} />
-                    ))}
-                  </datalist>
-                </div>
+        {/* Quebra por categoria */}
+        <div className="flex flex-wrap gap-2">
+          {DEVICE_CATEGORIES.filter((c) => report.byCategory[c]).map((c) => (
+            <Badge key={c} variant="outline" className="text-xs">
+              {c}: {report.byCategory[c]}
+            </Badge>
+          ))}
+        </div>
 
-                <div className="space-y-2">
-                  <Label>Capacidade / Tamanho</Label>
-                  <Input
-                    list="capacity-suggestions"
-                    value={capacity}
-                    onChange={(e) => setCapacity(e.target.value)}
-                    placeholder="Ex: 256, 1TB, 45mm…"
-                  />
-                  <datalist id="capacity-suggestions">
-                    {(CAPACITIES_BY_CATEGORY[category] || []).map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Cor</Label>
-                  <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="Ex: Titânio Natural" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Condição</Label>
-                  <Select value={condition} onValueChange={(v) => setCondition(v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Lacrado">Lacrado</SelectItem>
-                      <SelectItem value="Seminovo">Seminovo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Saúde da Bateria (%)</Label>
-                  <Input type="number" min={0} max={100} value={batteryHealth} onChange={(e) => setBatteryHealth(e.target.value)} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Fornecedor</Label>
-                  <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Nome do fornecedor" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Custo (R$)</Label>
-                  <Input type="number" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
-                </div>
-
-                <div className="col-span-2 space-y-2">
-                  <Label>Serial / IMEI</Label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        value={serialImei}
-                        onChange={(e) => setSerialImei(e.target.value)}
-                        placeholder="Escaneie ou digite o IMEI"
-                        className="pr-10"
-                      />
-                      <ScanLine className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    </div>
-                    <Button
-                      variant="outline"
-                      type="button"
-                      onClick={() => setInternalSerial(generateInternalSerial())}
-                    >
-                      <Shuffle className="mr-2 h-4 w-4" />
-                      Gerar Serial
-                    </Button>
-                  </div>
-                  {internalSerial && (
-                    <p className="text-xs text-muted-foreground">
-                      Serial interno: <span className="font-mono font-medium text-foreground">{internalSerial}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => { resetForm(); setOpen(false); }}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleSubmit}>Cadastrar</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+        {/* Busca */}
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por modelo, IMEI, cor, fornecedor..."
+            className="pl-9"
+          />
         </div>
 
         {/* Filtros */}
@@ -272,7 +248,7 @@ export default function DevicesPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Tabela */}
         <Card className="border shadow-none">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -288,7 +264,7 @@ export default function DevicesPage() {
                     <TableHead>Serial/IMEI</TableHead>
                     <TableHead>Custo</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -296,16 +272,14 @@ export default function DevicesPage() {
                     <TableRow key={d.id}>
                       <TableCell className="text-muted-foreground">{d.category || "iPhone"}</TableCell>
                       <TableCell className="font-medium">{d.model}</TableCell>
-                      <TableCell>{d.capacity}</TableCell>
+                      <TableCell>{formatCapacity(d.capacity)}</TableCell>
                       <TableCell>{d.color}</TableCell>
                       <TableCell>{d.condition}</TableCell>
                       <TableCell>{d.batteryHealth}%</TableCell>
                       <TableCell className="font-mono text-xs">
                         {d.serialImei || d.internalSerial}
                       </TableCell>
-                      <TableCell>
-                        {d.cost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </TableCell>
+                      <TableCell>{fmt(d.cost)}</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -315,10 +289,7 @@ export default function DevicesPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
                             {(["Disponível", "Vendido", "Em Manutenção", "Reservado"] as DeviceStatus[]).map((s) => (
-                              <DropdownMenuItem
-                                key={s}
-                                onClick={() => updateDeviceStatus(d.id, s)}
-                              >
+                              <DropdownMenuItem key={s} onClick={() => updateDeviceStatus(d.id, s)}>
                                 {s}
                               </DropdownMenuItem>
                             ))}
@@ -326,13 +297,14 @@ export default function DevicesPage() {
                         </DropdownMenu>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteDevice(d.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
+                        <div className="flex">
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(d)} title="Editar">
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteDevice(d.id)} title="Excluir">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -349,6 +321,117 @@ export default function DevicesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialog: criar / editar */}
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { resetForm(); setEditingId(null); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Editar Aparelho" : "Cadastrar Aparelho"}</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select
+                value={category}
+                onValueChange={(v) => { setCategory(v as DeviceCategory); if (!editingId) { setModel(""); setCapacity(""); } }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DEVICE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Modelo</Label>
+              <Input
+                list="model-suggestions"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="Selecione ou digite o modelo"
+              />
+              <datalist id="model-suggestions">
+                {(MODELS_BY_CATEGORY[category] || []).map((m) => <option key={m} value={m} />)}
+              </datalist>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Capacidade / Tamanho</Label>
+              <Input
+                list="capacity-suggestions"
+                value={capacity}
+                onChange={(e) => setCapacity(e.target.value)}
+                placeholder="Ex: 256, 1TB, 45mm…"
+              />
+              <datalist id="capacity-suggestions">
+                {(CAPACITIES_BY_CATEGORY[category] || []).map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cor</Label>
+              <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="Ex: Titânio Natural" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Condição</Label>
+              <Select value={condition} onValueChange={(v) => setCondition(v as DeviceCondition)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Lacrado">Lacrado</SelectItem>
+                  <SelectItem value="Seminovo">Seminovo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Saúde da Bateria (%)</Label>
+              <Input type="number" min={0} max={100} value={batteryHealth} onChange={(e) => setBatteryHealth(e.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fornecedor</Label>
+              <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Nome do fornecedor" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Custo (R$)</Label>
+              <Input type="number" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
+            </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label>Serial / IMEI</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    value={serialImei}
+                    onChange={(e) => setSerialImei(e.target.value)}
+                    placeholder="Escaneie ou digite o IMEI"
+                    className="pr-10"
+                  />
+                  <ScanLine className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+                <Button variant="outline" type="button" onClick={() => setInternalSerial(generateInternalSerial())}>
+                  <Shuffle className="mr-2 h-4 w-4" />
+                  Gerar Serial
+                </Button>
+              </div>
+              {internalSerial && (
+                <p className="text-xs text-muted-foreground">
+                  Serial interno: <span className="font-mono font-medium text-foreground">{internalSerial}</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { resetForm(); setEditingId(null); setOpen(false); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit}>{editingId ? "Salvar" : "Cadastrar"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
