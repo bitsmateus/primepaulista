@@ -6,6 +6,7 @@ import {
   saleTotal,
   remainingToPay,
   changeDue,
+  resolveDiscount,
 } from "@/lib/pdv";
 import { CartItem } from "@/types/inventory";
 
@@ -46,6 +47,26 @@ describe("PDV — totais", () => {
 
   it("total nunca fica negativo", () => {
     expect(saleTotal(1000, 1500)).toBe(0);
+  });
+
+  it("total desconta troca e desconto geral", () => {
+    expect(saleTotal(6160, 1000, 160)).toBe(5000);
+  });
+});
+
+describe("PDV — desconto geral (R$/%)", () => {
+  it("desconto em reais", () => {
+    expect(resolveDiscount(1000, 150, "R$")).toBe(150);
+  });
+  it("desconto em porcentagem", () => {
+    expect(resolveDiscount(1000, 10, "%")).toBe(100);
+  });
+  it("não passa do valor base", () => {
+    expect(resolveDiscount(1000, 1500, "R$")).toBe(1000);
+  });
+  it("zero ou negativo = sem desconto", () => {
+    expect(resolveDiscount(1000, 0, "R$")).toBe(0);
+    expect(resolveDiscount(1000, -50, "%")).toBe(0);
   });
 
   it("restante = total - pago", () => {
