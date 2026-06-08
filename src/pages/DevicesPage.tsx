@@ -112,7 +112,8 @@ export default function DevicesPage() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
 
   // Form state
-  const [category, setCategory] = useState<DeviceCategory>("iPhone");
+  const [category, setCategory] = useState<string>("iPhone");
+  const [newCategory, setNewCategory] = useState(""); // ao criar uma categoria manual
   const [model, setModel] = useState("");
   const [capacity, setCapacity] = useState("");
   const [color, setColor] = useState("");
@@ -126,7 +127,7 @@ export default function DevicesPage() {
   const [page, setPage] = useState(1);
 
   const resetForm = () => {
-    setCategory("iPhone"); setModel("");
+    setCategory("iPhone"); setNewCategory(""); setModel("");
     setCapacity(""); setColor(""); setCondition("Lacrado");
     setBatteryHealth("100"); setSupplier(""); setCost(""); setSalePrice("");
     setSerialImei(""); setInternalSerial("");
@@ -165,8 +166,13 @@ export default function DevicesPage() {
       toast.error("Custo e preço não podem ser negativos.");
       return;
     }
+    const finalCategory = category === "__nova__" ? newCategory.trim() : category;
+    if (!finalCategory) {
+      toast.error("Informe a categoria.");
+      return;
+    }
     const payload = {
-      category,
+      category: finalCategory,
       model: model.trim(),
       capacity,
       color,
@@ -214,12 +220,33 @@ export default function DevicesPage() {
   // ----- Relatório / resumo -----
   const report = useMemo(() => buildStockReport(devices), [devices]);
 
+  // Categorias = padrão + as criadas manualmente (já usadas em algum aparelho)
+  const allCategories = useMemo(() => {
+    const set = new Set<string>(DEVICE_CATEGORIES);
+    devices.forEach((d) => { if (d.category) set.add(d.category); });
+    return Array.from(set);
+  }, [devices]);
+
   // ----- Paginação -----
   useEffect(() => {
     setPage(1);
   }, [search, filterStatus, filterCategory]);
   const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
   const pageDevices = filteredDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // ----- Baixar modelo de CSV para importação -----
+  const downloadTemplate = () => {
+    const headers = "Categoria;Modelo;Capacidade;Cor;Condição;Bateria;Serial/IMEI;Fornecedor;Custo;Preço de venda";
+    const exemplo = "iPhone;iPhone 15 Pro;256;Titânio Natural;Lacrado;100;359000000000000;Fornecedor X;6000;7500";
+    const csv = "﻿" + headers + "\n" + exemplo + "\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "modelo-importacao-aparelhos.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // ----- Exportar CSV (lista filtrada) -----
   const exportCSV = () => {
@@ -316,31 +343,28 @@ export default function DevicesPage() {
         </div>
 
         {/* Filtros */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            {["all", ...DEVICE_CATEGORIES].map((c) => (
-              <Button
-                key={c}
-                variant={filterCategory === c ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilterCategory(c)}
-              >
-                {c === "all" ? "Todas categorias" : c}
-              </Button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {["all", "Disponível", "Vendido", "Em Manutenção", "Reservado"].map((s) => (
-              <Button
-                key={s}
-                variant={filterStatus === s ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilterStatus(s)}
-              >
-                {s === "all" ? "Todos status" : s}
-              </Button>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-52"><SelectValue placeholder="Categoria" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as categorias</SelectItem>
+              {allCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-52"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os status</SelectItem>
+              {["Disponível", "Vendido", "Em Manutenção", "Reservado"].map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(filterCategory !== "all" || filterStatus !== "all") && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterCategory("all"); setFilterStatus("all"); }}>
+              Limpar filtros
+            </Button>
+          )}
         </div>
 
         {/* Tabela */}
@@ -479,13 +503,22 @@ export default function DevicesPage() {
               <Label>Categoria</Label>
               <Select
                 value={category}
-                onValueChange={(v) => { setCategory(v as DeviceCategory); if (!editingId) { setModel(""); setCapacity(""); } }}
+                onValueChange={(v) => { setCategory(v); if (!editingId) { setModel(""); setCapacity(""); } }}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {DEVICE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {allCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  <SelectItem value="__nova__">➕ Nova categoria…</SelectItem>
                 </SelectContent>
               </Select>
+              {category === "__nova__" && (
+                <Input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  placeholder="Nome da nova categoria (ex: Caixa de som)"
+                  autoFocus
+                />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -497,7 +530,7 @@ export default function DevicesPage() {
                 placeholder="Selecione ou digite o modelo"
               />
               <datalist id="model-suggestions">
-                {(MODELS_BY_CATEGORY[category] || []).map((m) => <option key={m} value={m} />)}
+                {(MODELS_BY_CATEGORY[category as DeviceCategory] || []).map((m) => <option key={m} value={m} />)}
               </datalist>
             </div>
 
@@ -510,7 +543,7 @@ export default function DevicesPage() {
                 placeholder="Ex: 256, 1TB, 45mm…"
               />
               <datalist id="capacity-suggestions">
-                {(CAPACITIES_BY_CATEGORY[category] || []).map((c) => <option key={c} value={c} />)}
+                {(CAPACITIES_BY_CATEGORY[category as DeviceCategory] || []).map((c) => <option key={c} value={c} />)}
               </datalist>
             </div>
 
@@ -602,8 +635,11 @@ export default function DevicesPage() {
             <p className="text-sm text-muted-foreground">
               Envie um arquivo CSV com cabeçalho. Colunas reconhecidas:
               <span className="font-medium text-foreground"> Categoria, Modelo, Capacidade, Cor, Condição, Bateria, Serial/IMEI, Fornecedor, Custo, Preço de venda</span>.
-              Apenas <strong>Modelo</strong> é obrigatório. Dica: exporte um CSV primeiro para usar de modelo.
+              Apenas <strong>Modelo</strong> é obrigatório.
             </p>
+            <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-2">
+              <Download className="h-4 w-4" /> Baixar modelo CSV
+            </Button>
             <input
               ref={importInputRef}
               type="file"
