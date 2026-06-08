@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Megaphone, Send, FileText, Shield, Clock, Filter } from "lucide-react";
+import { useState, useRef } from "react";
+import { Send, FileText, Shield, Clock, X } from "lucide-react";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { buildRecipients, filterRecipients, personalizeMessage } from "@/lib/crm";
 
 const TEMPLATES = [
   { id: "receipt", label: "Recibo de Venda", icon: FileText, message: "Olá {nome}! Segue o recibo da sua compra na Prime Paulista. Obrigado pela preferência! 🍎" },
@@ -21,34 +24,29 @@ const TEMPLATES = [
 ];
 
 export default function CampaignsTab() {
-  const { leads, sendMessage, addMessageLog, connectionStatus } = useCRMContext();
+  const { leads, sendMessage, addMessageLog, connectionStatus, messageLogs } = useCRMContext();
   const { customers, devices } = useInventoryContext();
 
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [customMessage, setCustomMessage] = useState("");
   const [filterModel, setFilterModel] = useState<string>("all");
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
-  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [intervalMs, setIntervalMs] = useState(3000);
+  const cancelRef = useRef(false);
 
-  // Combine leads + customers as possible recipients
-  const allRecipients = [
-    ...leads.map((l) => ({ id: l.id, name: l.name, phone: l.phone, model: l.modelInterest, origin: l.origin, source: "lead" as const })),
-    ...customers.map((c) => ({ id: c.id, name: c.name, phone: c.whatsapp, model: "", origin: c.leadOrigin, source: "customer" as const })),
-  ];
-
-  const filteredRecipients = allRecipients.filter((r) => {
-    if (filterModel !== "all" && !r.model.toLowerCase().includes(filterModel.toLowerCase())) return false;
-    if (filterOrigin !== "all" && r.origin !== filterOrigin) return false;
-    return true;
-  });
-
+  const allRecipients = buildRecipients(leads, customers);
+  const filteredRecipients = filterRecipients(allRecipients, { model: filterModel, origin: filterOrigin });
   const deviceModels = [...new Set(devices.map((d) => d.model))];
   const origins = [...new Set(allRecipients.map((r) => r.origin).filter(Boolean))];
 
+  // Selecionados que ainda estão visíveis no filtro atual (contador coerente)
+  const selectedInView = filteredRecipients.filter((r) => selectedIds.has(r.id));
+
   const toggleSelect = (id: string) => {
-    setSelectedLeads((prev) => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
@@ -56,59 +54,56 @@ export default function CampaignsTab() {
   };
 
   const selectAll = () => {
-    if (selectedLeads.size === filteredRecipients.length) {
-      setSelectedLeads(new Set());
+    if (selectedInView.length === filteredRecipients.length) {
+      setSelectedIds(new Set());
     } else {
-      setSelectedLeads(new Set(filteredRecipients.map((r) => r.id)));
+      setSelectedIds(new Set(filteredRecipients.map((r) => r.id)));
     }
   };
 
-  const getMessage = () => {
-    if (selectedTemplate) {
-      const tpl = TEMPLATES.find((t) => t.id === selectedTemplate);
-      return tpl?.message || "";
-    }
-    return customMessage;
-  };
+  const getMessage = () =>
+    selectedTemplate ? TEMPLATES.find((t) => t.id === selectedTemplate)?.message || "" : customMessage;
 
   const handleBulkSend = async () => {
     const msg = getMessage();
     if (!msg.trim()) { toast.error("Defina uma mensagem"); return; }
-    if (selectedLeads.size === 0) { toast.error("Selecione pelo menos um destinatário"); return; }
+    if (selectedInView.length === 0) { toast.error("Selecione pelo menos um destinatário"); return; }
     if (connectionStatus !== "connected") { toast.error("WhatsApp não conectado"); return; }
 
+    cancelRef.current = false;
     setSending(true);
-    let sent = 0;
-    let failed = 0;
-    const recipients = filteredRecipients.filter((r) => selectedLeads.has(r.id));
+    let sent = 0, failed = 0;
+    const recipients = selectedInView;
+    setProgress({ done: 0, total: recipients.length });
 
     for (let i = 0; i < recipients.length; i++) {
+      if (cancelRef.current) break;
       const r = recipients[i];
-      const personalizedMsg = msg.replace(/{nome}/g, r.name.split(" ")[0]);
+      const personalizedMsg = personalizeMessage(msg, r.name);
       const success = await sendMessage(r.phone, personalizedMsg);
       addMessageLog({
-        recipientId: r.id,
-        recipientName: r.name,
-        recipientPhone: r.phone,
+        recipientId: r.source === "lead" ? r.id : null,
+        recipientName: r.name, recipientPhone: r.phone,
         templateType: selectedTemplate || "Campanha",
-        message: personalizedMsg,
-        status: success ? "sent" : "failed",
+        message: personalizedMsg, status: success ? "sent" : "failed",
       });
       if (success) sent++; else failed++;
-      // Intervalo entre mensagens para evitar bloqueio
-      if (i < recipients.length - 1) {
+      setProgress({ done: i + 1, total: recipients.length });
+      if (i < recipients.length - 1 && !cancelRef.current) {
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
     }
 
     setSending(false);
-    setSelectedLeads(new Set());
-    toast.success(`Disparo concluído: ${sent} enviadas, ${failed} falhas`);
+    setProgress(null);
+    setSelectedIds(new Set());
+    const cancelled = cancelRef.current;
+    toast.success(`${cancelled ? "Disparo cancelado" : "Disparo concluído"}: ${sent} enviadas, ${failed} falhas`);
   };
 
   return (
     <div className="space-y-6">
-      {/* Templates */}
+      {/* Modelos de mensagem */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Modelos de Mensagem</CardTitle>
@@ -134,18 +129,16 @@ export default function CampaignsTab() {
             })}
           </div>
 
-          {selectedTemplate && (
+          {selectedTemplate ? (
             <div className="rounded-lg bg-muted p-3 text-sm">
               <p className="font-medium text-muted-foreground mb-1">Preview:</p>
               <p>{TEMPLATES.find((t) => t.id === selectedTemplate)?.message}</p>
             </div>
-          )}
-
-          {!selectedTemplate && (
+          ) : (
             <div>
               <Label>Mensagem Personalizada</Label>
-              <textarea
-                className="mt-1 flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              <Textarea
+                className="mt-1 min-h-[100px]"
                 value={customMessage}
                 onChange={(e) => setCustomMessage(e.target.value)}
                 placeholder="Use {nome} para personalizar. Ex: Olá {nome}, temos novidades!"
@@ -155,7 +148,7 @@ export default function CampaignsTab() {
         </CardContent>
       </Card>
 
-      {/* Filters & Recipients */}
+      {/* Segmentação e destinatários */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Segmentação e Destinatários</CardTitle>
@@ -168,9 +161,7 @@ export default function CampaignsTab() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os modelos</SelectItem>
-                  {deviceModels.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
+                  {deviceModels.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -180,21 +171,13 @@ export default function CampaignsTab() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as origens</SelectItem>
-                  {origins.map((o) => (
-                    <SelectItem key={o} value={o}>{o}</SelectItem>
-                  ))}
+                  {origins.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="w-40">
               <Label>Intervalo (ms)</Label>
-              <Input
-                type="number"
-                value={intervalMs}
-                onChange={(e) => setIntervalMs(Number(e.target.value))}
-                min={1000}
-                step={500}
-              />
+              <Input type="number" value={intervalMs} onChange={(e) => setIntervalMs(Number(e.target.value))} min={1000} step={500} />
             </div>
           </div>
 
@@ -203,23 +186,27 @@ export default function CampaignsTab() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Checkbox
-                checked={selectedLeads.size === filteredRecipients.length && filteredRecipients.length > 0}
+                checked={selectedInView.length === filteredRecipients.length && filteredRecipients.length > 0}
                 onCheckedChange={selectAll}
               />
               <span className="text-sm text-muted-foreground">
-                {selectedLeads.size} de {filteredRecipients.length} selecionados
+                {selectedInView.length} de {filteredRecipients.length} selecionados
               </span>
             </div>
-            <Button
-              onClick={handleBulkSend}
-              disabled={sending || selectedLeads.size === 0 || connectionStatus !== "connected"}
-            >
-              {sending ? (
-                <>Enviando...</>
-              ) : (
-                <><Send className="h-4 w-4 mr-1" /> Disparar em Massa</>
+            <div className="flex items-center gap-2">
+              {sending && progress && (
+                <span className="text-sm text-muted-foreground">{progress.done}/{progress.total}</span>
               )}
-            </Button>
+              {sending ? (
+                <Button variant="destructive" onClick={() => { cancelRef.current = true; }}>
+                  <X className="h-4 w-4 mr-1" /> Cancelar
+                </Button>
+              ) : (
+                <Button onClick={handleBulkSend} disabled={selectedInView.length === 0 || connectionStatus !== "connected"}>
+                  <Send className="h-4 w-4 mr-1" /> Disparar em Massa
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="max-h-[300px] overflow-y-auto space-y-1">
@@ -228,10 +215,7 @@ export default function CampaignsTab() {
             ) : (
               filteredRecipients.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 rounded-lg border px-3 py-2 hover:bg-muted/50 transition-colors">
-                  <Checkbox
-                    checked={selectedLeads.has(r.id)}
-                    onCheckedChange={() => toggleSelect(r.id)}
-                  />
+                  <Checkbox checked={selectedIds.has(r.id)} onCheckedChange={() => toggleSelect(r.id)} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{r.name}</p>
                     <p className="text-xs text-muted-foreground">{r.phone}</p>
@@ -242,6 +226,39 @@ export default function CampaignsTab() {
               ))
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Histórico geral de disparos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Últimos Disparos</CardTitle>
+          <CardDescription>Histórico das mensagens enviadas</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {messageLogs.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Nenhuma mensagem enviada ainda</p>
+          ) : (
+            <div className="max-h-[300px] space-y-2 overflow-y-auto">
+              {messageLogs.slice(0, 50).map((log) => (
+                <div key={log.id} className="flex items-center gap-3 rounded-lg border px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{log.recipientName || log.recipientPhone}</p>
+                      <Badge variant="secondary" className="text-xs">{log.templateType}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{log.message}</p>
+                  </div>
+                  <div className="text-right">
+                    <Badge variant={log.status === "sent" ? "default" : "destructive"} className="text-xs">
+                      {log.status === "sent" ? "Enviada" : "Falha"}
+                    </Badge>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{format(log.sentAt, "dd/MM HH:mm")}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
