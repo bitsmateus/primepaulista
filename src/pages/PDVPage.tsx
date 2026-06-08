@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from "react";
-import { Search, ScanLine, ShoppingCart, Plus, Trash2, Repeat, Printer, UserPlus, Package } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Repeat, Printer, UserPlus, Package } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Customer, CartItem, PaymentEntry, TradeIn, PaymentMethod, LeadOrigin, Seller, DeviceCategory, DeviceCondition,
 } from "@/types/inventory";
@@ -9,6 +10,7 @@ import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@
 import { printReceipt } from "@/utils/receiptGenerator";
 import { ApiError } from "@/lib/api";
 import { formatCapacity } from "@/lib/utils";
+import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue } from "@/lib/pdv";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,9 +27,11 @@ const LEAD_ORIGINS: LeadOrigin[] = ["Instagram", "Indicação", "Tráfego Pago"]
 
 export default function PDVPage() {
   const {
-    devices, accessories, customers, findCustomer, addCustomer,
+    devices, accessories, customers, addCustomer,
     findDeviceBySerial, getCompatibleAccessories, finalizeSale,
+    devicesLoading,
   } = useInventoryContext();
+  const { user } = useAuth();
 
   // Customer
   const [customerQuery, setCustomerQuery] = useState("");
@@ -73,11 +77,33 @@ export default function PDVPage() {
     setTradeBattery("100"); setTradeHealth(""); setTradeValue("");
   };
 
-  // Seller
-  const [seller, setSeller] = useState<Seller>("Gabriel");
+  // Seller — opções a partir dos vendedores conhecidos + usuário logado
+  const [seller, setSeller] = useState<string>("");
+  const sellerOptions = useMemo(() => {
+    const set = new Set<string>(SELLERS);
+    if (user?.name) set.add(user.name);
+    return Array.from(set).sort();
+  }, [user]);
+  // Pré-seleciona o vendedor logado
+  useEffect(() => {
+    if (!seller && user?.name) setSeller(user.name);
+  }, [user, seller]);
 
   // Focus IMEI input
   useEffect(() => { imeiRef.current?.focus(); }, []);
+
+  // Fechar os dropdowns de busca ao clicar fora
+  const customerBoxRef = useRef<HTMLDivElement>(null);
+  const deviceBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (customerBoxRef.current && !customerBoxRef.current.contains(t)) setShowCustomerResults(false);
+      if (deviceBoxRef.current && !deviceBoxRef.current.contains(t)) setShowDeviceResults(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
 
   // ---------- Customer ----------
   const [showCustomerResults, setShowCustomerResults] = useState(false);
@@ -156,7 +182,7 @@ export default function PDVPage() {
       deviceId: device.id,
       name: `${device.model} ${formatCapacity(device.capacity)} ${device.color}`.trim(),
       serial: device.serialImei || device.internalSerial,
-      price: device.cost,
+      price: deviceSellPrice(device),
       quantity: 1,
     };
     setCart((prev) => [...prev, item]);
@@ -188,9 +214,16 @@ export default function PDVPage() {
 
   const addAccessoryToCart = (accId: string) => {
     const acc = accessories.find((a) => a.id === accId);
-    if (!acc || acc.quantity <= 0) return;
+    if (!acc || acc.quantity <= 0) {
+      toast.warning("Acessório sem estoque.");
+      return;
+    }
     const existing = cart.find((c) => c.accessoryId === accId);
     if (existing) {
+      if (existing.quantity >= acc.quantity) {
+        toast.warning(`Estoque disponível: ${acc.quantity}.`);
+        return;
+      }
       setCart((prev) =>
         prev.map((c) => (c.accessoryId === accId ? { ...c, quantity: c.quantity + 1 } : c))
       );
@@ -202,7 +235,7 @@ export default function PDVPage() {
           type: "accessory",
           accessoryId: accId,
           name: acc.name,
-          price: acc.price || acc.cost * 2,
+          price: accessorySellPrice(acc),
           quantity: 1,
         },
       ]);
@@ -211,6 +244,25 @@ export default function PDVPage() {
   };
 
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((c) => c.id !== id));
+
+  // Editar preço de um item do carrinho
+  const updateItemPrice = (id: string, price: number) =>
+    setCart((prev) => prev.map((c) => (c.id === id ? { ...c, price: Math.max(0, price) } : c)));
+
+  // Ajustar quantidade de acessório (respeitando o estoque)
+  const updateItemQty = (id: string, delta: number) =>
+    setCart((prev) =>
+      prev.flatMap((c) => {
+        if (c.id !== id) return [c];
+        const acc = accessories.find((a) => a.id === c.accessoryId);
+        const max = acc?.quantity ?? 99;
+        const qty = Math.min(max, Math.max(1, c.quantity + delta));
+        if (delta > 0 && c.quantity >= max) {
+          toast.warning(`Estoque disponível: ${max}.`);
+        }
+        return [{ ...c, quantity: qty }];
+      })
+    );
 
   // ---------- Payments ----------
   const addPayment = () => {
@@ -254,11 +306,12 @@ export default function PDVPage() {
   };
 
   // ---------- Totals ----------
-  const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const subtotal = cartSubtotal(cart);
   const tradeInDiscount = tradeIn?.value || 0;
-  const total = subtotal - tradeInDiscount;
+  const total = saleTotal(subtotal, tradeInDiscount);
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-  const remaining = total - totalPaid;
+  const remaining = remainingToPay(total, totalPaid);
+  const troco = changeDue(total, totalPaid);
 
   // ---------- Finalize ----------
   const [finalizing, setFinalizing] = useState(false);
@@ -275,7 +328,7 @@ export default function PDVPage() {
         items: cart,
         payments,
         tradeIn: tradeIn || undefined,
-        seller,
+        seller: seller as Seller,
         subtotal,
         tradeInDiscount,
         total,
@@ -326,7 +379,7 @@ export default function PDVPage() {
                     <Button variant="ghost" size="sm" onClick={() => setCustomer(null)}>Trocar</Button>
                   </div>
                 ) : (
-                  <div className="relative">
+                  <div className="relative" ref={customerBoxRef}>
                     <div className="flex gap-2">
                       <Input
                         placeholder="Buscar por nome, CPF ou WhatsApp..."
@@ -374,7 +427,7 @@ export default function PDVPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="relative">
+                <div className="relative" ref={deviceBoxRef}>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <Input
@@ -408,13 +461,18 @@ export default function PDVPage() {
                             </p>
                           </div>
                           <span className="ml-3 whitespace-nowrap text-sm font-semibold">
-                            {d.cost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                            {fmt(deviceSellPrice(d))}
                           </span>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
+                {devicesLoading ? (
+                  <p className="mt-2 text-xs text-muted-foreground">Carregando estoque…</p>
+                ) : availableDevices.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">Nenhum aparelho disponível em estoque.</p>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -508,10 +566,10 @@ export default function PDVPage() {
               <CardContent className="flex items-center gap-4 p-4">
                 <div className="flex items-center gap-2">
                   <Label>Vendedor:</Label>
-                  <Select value={seller} onValueChange={(v) => setSeller(v as Seller)}>
-                    <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                  <Select value={seller} onValueChange={setSeller}>
+                    <SelectTrigger className="w-40"><SelectValue placeholder="Vendedor" /></SelectTrigger>
                     <SelectContent>
-                      {SELLERS.map((s) => (
+                      {sellerOptions.map((s) => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
@@ -550,21 +608,43 @@ export default function PDVPage() {
                 ) : (
                   <>
                     {cart.map((item) => (
-                      <div key={item.id} className="flex items-start justify-between gap-2 rounded-lg border p-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-foreground leading-tight">{item.name}</p>
-                          {item.serial && (
-                            <p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.serial}</p>
-                          )}
-                          {item.type === "accessory" && (
-                            <p className="text-xs text-muted-foreground">Qtd: {item.quantity}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="whitespace-nowrap text-sm font-semibold">{fmt(item.price * item.quantity)}</span>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeFromCart(item.id)}>
+                      <div key={item.id} className="space-y-2 rounded-lg border p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground leading-tight">{item.name}</p>
+                            {item.serial && (
+                              <p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.serial}</p>
+                            )}
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeFromCart(item.id)}>
                             <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                           </Button>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            {item.type === "accessory" && (
+                              <div className="flex items-center gap-1">
+                                <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateItemQty(item.id, -1)}>
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="w-5 text-center text-sm">{item.quantity}</span>
+                                <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateItemQty(item.id, 1)}>
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">R$</span>
+                              <Input
+                                type="number"
+                                value={item.price}
+                                onChange={(e) => updateItemPrice(item.id, Number(e.target.value))}
+                                className="h-7 w-24"
+                                title="Preço unitário (editável)"
+                              />
+                            </div>
+                          </div>
+                          <span className="whitespace-nowrap text-sm font-semibold">{fmt(item.price * item.quantity)}</span>
                         </div>
                       </div>
                     ))}
@@ -599,6 +679,12 @@ export default function PDVPage() {
                         <div className="flex justify-between font-medium text-destructive">
                           <span>Restante</span>
                           <span>{fmt(remaining)}</span>
+                        </div>
+                      )}
+                      {troco > 0.01 && (
+                        <div className="flex justify-between font-medium text-success">
+                          <span>Troco</span>
+                          <span>{fmt(troco)}</span>
                         </div>
                       )}
                     </div>

@@ -7,7 +7,7 @@ export function useInventory() {
   const qc = useQueryClient();
 
   // ----- Dados persistidos no banco (via API) -----
-  const { data: devices = [] } = useQuery({
+  const { data: devices = [], isLoading: devicesLoading } = useQuery({
     queryKey: ["devices"],
     queryFn: api.listDevices,
   });
@@ -199,6 +199,7 @@ export function useInventory() {
 
   return {
     devices,
+    devicesLoading,
     accessories,
     customers,
     sales,
