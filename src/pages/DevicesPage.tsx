@@ -252,16 +252,16 @@ export default function DevicesPage() {
   const exportCSV = () => {
     const headers = [
       "Categoria", "Modelo", "Capacidade", "Cor", "Condição", "Bateria %",
-      "Serial/IMEI", "Fornecedor", "Custo", "Preço de venda", "Margem",
+      "Serial/IMEI", "Fornecedor",
+      ...(isAdmin ? ["Custo", "Margem"] : []), "Preço de venda",
       "Status", "Dias em estoque", "Cadastro",
     ];
     const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = filteredDevices.map((d) => [
       d.category || "iPhone", d.model, d.capacity, d.color, d.condition, d.batteryHealth,
       d.serialImei || d.internalSerial, d.supplier || "",
-      d.cost.toFixed(2),
+      ...(isAdmin ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
       d.salePrice != null ? d.salePrice.toFixed(2) : "",
-      deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : "",
       d.status, daysInStock(d.createdAt),
       new Date(d.createdAt).toLocaleDateString("pt-BR"),
     ].map((c) => esc(String(c))).join(";"));
@@ -305,8 +305,12 @@ export default function DevicesPage() {
             { label: "Em loja", value: report.inStock },
             { label: "Vendidos", value: report.sold },
             { label: "Em manutenção", value: report.maintenance },
-            { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
-            { label: "Margem potencial", value: fmt(report.potentialMargin) },
+            ...(isAdmin
+              ? [
+                  { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
+                  { label: "Margem potencial", value: fmt(report.potentialMargin) },
+                ]
+              : []),
           ].map((c) => (
             <Card key={c.label} className="border shadow-none">
               <CardContent className="p-4">
@@ -381,9 +385,9 @@ export default function DevicesPage() {
                     <TableHead>Condição</TableHead>
                     <TableHead>Bateria</TableHead>
                     <TableHead>Serial/IMEI</TableHead>
-                    <TableHead>Custo</TableHead>
+                    {isAdmin && <TableHead>Custo</TableHead>}
                     <TableHead>Preço</TableHead>
-                    <TableHead>Margem</TableHead>
+                    {isAdmin && <TableHead>Margem</TableHead>}
                     <TableHead>Dias</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-20"></TableHead>
@@ -401,21 +405,23 @@ export default function DevicesPage() {
                       <TableCell className="font-mono text-xs">
                         {d.serialImei || d.internalSerial}
                       </TableCell>
-                      <TableCell>{fmt(d.cost)}</TableCell>
+                      {isAdmin && <TableCell>{fmt(d.cost)}</TableCell>}
                       <TableCell>{d.salePrice != null ? fmt(d.salePrice) : "—"}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const m = deviceMargin(d);
-                          if (m == null) return "—";
-                          const pct = deviceMarginPct(d) ?? 0;
-                          const cls = m < 0 ? "text-destructive" : pct < 15 ? "text-warning" : "text-success";
-                          return (
-                            <span className={cls} title={pct < 15 && m >= 0 ? "Margem baixa" : undefined}>
-                              {fmt(m)} <span className="text-xs">({pct.toFixed(0)}%)</span>
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          {(() => {
+                            const m = deviceMargin(d);
+                            if (m == null) return "—";
+                            const pct = deviceMarginPct(d) ?? 0;
+                            const cls = m < 0 ? "text-destructive" : pct < 15 ? "text-warning" : "text-success";
+                            return (
+                              <span className={cls} title={pct < 15 && m >= 0 ? "Margem baixa" : undefined}>
+                                {fmt(m)} <span className="text-xs">({pct.toFixed(0)}%)</span>
+                              </span>
+                            );
+                          })()}
+                        </TableCell>
+                      )}
                       <TableCell className={daysInStock(d.createdAt) > 30 ? "text-warning font-medium" : ""}>
                         {d.status === "Vendido" ? "—" : `${daysInStock(d.createdAt)}d`}
                       </TableCell>
@@ -451,7 +457,7 @@ export default function DevicesPage() {
                   ))}
                   {filteredDevices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={isAdmin ? 13 : 11} className="py-8 text-center text-muted-foreground">
                         {devicesLoading ? "Carregando aparelhos…" : "Nenhum aparelho encontrado."}
                       </TableCell>
                     </TableRow>
@@ -573,10 +579,12 @@ export default function DevicesPage() {
               <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Nome do fornecedor" />
             </div>
 
-            <div className="space-y-2">
-              <Label>Custo (R$)</Label>
-              <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
-            </div>
+            {isAdmin && (
+              <div className="space-y-2">
+                <Label>Custo (R$)</Label>
+                <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Preço de venda (R$)</Label>

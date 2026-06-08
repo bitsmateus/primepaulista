@@ -189,8 +189,12 @@ export default function AccessoriesPage() {
           {[
             { label: "Itens distintos", value: report.distinct },
             { label: "Unidades em estoque", value: report.totalUnits },
-            { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
-            { label: "Margem potencial", value: fmt(report.potentialMargin) },
+            ...(isAdmin
+              ? [
+                  { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
+                  { label: "Margem potencial", value: fmt(report.potentialMargin) },
+                ]
+              : []),
             { label: "Estoque baixo / zerado", value: `${report.lowStock} / ${report.outOfStock}` },
           ].map((c) => (
             <Card key={c.label} className="border shadow-none">
@@ -245,9 +249,9 @@ export default function AccessoriesPage() {
                     <TableHead>Categoria</TableHead>
                     <TableHead>Modelo</TableHead>
                     <TableHead>Código</TableHead>
-                    <TableHead>Custo</TableHead>
+                    {isAdmin && <TableHead>Custo</TableHead>}
                     <TableHead>Preço</TableHead>
-                    <TableHead>Margem</TableHead>
+                    {isAdmin && <TableHead>Margem</TableHead>}
                     <TableHead>Qtd</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-20"></TableHead>
@@ -260,17 +264,19 @@ export default function AccessoriesPage() {
                       <TableCell className="text-muted-foreground">{a.category} · {a.subcategory}</TableCell>
                       <TableCell>{a.compatibleModel}</TableCell>
                       <TableCell className="font-mono text-xs">{a.barcode}</TableCell>
-                      <TableCell>{fmt(a.cost)}</TableCell>
+                      {isAdmin && <TableCell>{fmt(a.cost)}</TableCell>}
                       <TableCell>{a.price != null ? fmt(a.price) : "—"}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const m = accessoryMargin(a);
-                          if (m == null) return "—";
-                          const pct = accessoryMarginPct(a) ?? 0;
-                          const cls = m < 0 ? "text-destructive" : pct < 15 ? "text-warning" : "text-success";
-                          return <span className={cls}>{fmt(m)} <span className="text-xs">({pct.toFixed(0)}%)</span></span>;
-                        })()}
-                      </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          {(() => {
+                            const m = accessoryMargin(a);
+                            if (m == null) return "—";
+                            const pct = accessoryMarginPct(a) ?? 0;
+                            const cls = m < 0 ? "text-destructive" : pct < 15 ? "text-warning" : "text-success";
+                            return <span className={cls}>{fmt(m)} <span className="text-xs">({pct.toFixed(0)}%)</span></span>;
+                          })()}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex items-center gap-1.5">
                           <Button variant="outline" size="icon" className="h-7 w-7"
@@ -301,7 +307,7 @@ export default function AccessoriesPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={isAdmin ? 10 : 8} className="py-8 text-center text-muted-foreground">
                         {accessoriesLoading ? "Carregando acessórios…" : "Nenhum acessório encontrado."}
                       </TableCell>
                     </TableRow>
@@ -358,10 +364,12 @@ export default function AccessoriesPage() {
               </datalist>
             </div>
 
-            <div className="space-y-2">
-              <Label>Custo Unitário (R$)</Label>
-              <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
-            </div>
+            {isAdmin && (
+              <div className="space-y-2">
+                <Label>Custo Unitário (R$)</Label>
+                <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Preço de venda (R$)</Label>

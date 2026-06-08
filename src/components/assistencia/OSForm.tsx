@@ -3,6 +3,8 @@ import { Search, Plus } from "lucide-react";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useCRMContext } from "@/contexts/CRMContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { canSeeCost } from "@/lib/permissions";
 import { OSPriority } from "@/types/serviceOrder";
 import { ApiError } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +24,8 @@ export default function OSForm({ onCreated }: OSFormProps) {
   const { addOrder } = useServiceOrderContext();
   const { customers, accessories, devices } = useInventoryContext();
   const { leads } = useCRMContext();
+  const { user } = useAuth();
+  const showCost = canSeeCost(user?.role);
 
   // Customer search
   const [custSearch, setCustSearch] = useState("");
@@ -228,7 +232,9 @@ export default function OSForm({ onCreated }: OSFormProps) {
                 <SelectTrigger><SelectValue placeholder="Selecionar peça do estoque" /></SelectTrigger>
                 <SelectContent>
                   {accessories.filter((a) => a.quantity > 0).map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.name} ({a.quantity} un) — {a.cost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</SelectItem>
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({a.quantity} un){showCost ? ` — ${a.cost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : ""}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
