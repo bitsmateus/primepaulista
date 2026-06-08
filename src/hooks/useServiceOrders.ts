@@ -1,11 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ServiceOrder, OSStatus } from "@/types/serviceOrder";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
 export function useServiceOrders() {
   const qc = useQueryClient();
 
-  const { data: orders = [] } = useQuery({
+  const osError = (fallback: string) => (err: unknown) =>
+    toast.error(err instanceof ApiError ? err.message : fallback);
+
+  const { data: orders = [], isLoading: ordersLoading } = useQuery({
     queryKey: ["serviceOrders"],
     queryFn: api.listServiceOrders,
   });
@@ -23,20 +27,22 @@ export function useServiceOrders() {
     mutationFn: ({ id, data }: { id: string; data: Partial<ServiceOrder> }) =>
       api.updateServiceOrder(id, data),
     onSuccess: invalidate,
+    onError: osError("Não foi possível atualizar a OS."),
   });
   const deleteOrderMut = useMutation({
     mutationFn: (id: string) => api.deleteServiceOrder(id),
     onSuccess: invalidate,
+    onError: osError("Não foi possível excluir a OS."),
   });
 
   const addOrder = (order: Omit<ServiceOrder, "id" | "createdAt" | "updatedAt">) =>
     addOrderMut.mutateAsync(order);
 
   const updateOrderStatus = (id: string, status: OSStatus) =>
-    updateOrderMut.mutate({ id, data: { status } });
+    updateOrderMut.mutateAsync({ id, data: { status } });
 
   const updateOrder = (id: string, data: Partial<ServiceOrder>) =>
-    updateOrderMut.mutate({ id, data });
+    updateOrderMut.mutateAsync({ id, data });
 
   const deleteOrder = (id: string) => deleteOrderMut.mutate(id);
 
@@ -70,6 +76,7 @@ export function useServiceOrders() {
 
   return {
     orders,
+    ordersLoading,
     addOrder,
     updateOrderStatus,
     updateOrder,
