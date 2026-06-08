@@ -11,9 +11,9 @@ import { toast } from "sonner";
 
 export default function WhatsAppTab() {
   const {
-    uazapiConfig, saveConfig, loadConfig, fetchQrCode,
+    uazapiConfig, saveConfig, fetchQrCode,
     checkStatus, disconnectInstance, restartInstance,
-    connectionStatus, qrCode, setConnectionStatus,
+    connectionStatus, qrCode,
   } = useCRMContext();
 
   const [apiKey, setApiKey] = useState(uazapiConfig.apiKey);

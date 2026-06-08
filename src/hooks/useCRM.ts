@@ -1,14 +1,21 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Lead, LeadStatus, MessageLog, UazapiConfig, ConnectionStatus, FunnelColumn } from "@/types/crm";
-import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { Lead, MessageLog, UazapiConfig, ConnectionStatus, FunnelColumn } from "@/types/crm";
+import { api, ApiError } from "@/lib/api";
 
 export function useCRM() {
   const qc = useQueryClient();
 
+  const crmError = (fallback: string) => (err: unknown) =>
+    toast.error(err instanceof ApiError ? err.message : fallback);
+
   // ----- Dados persistidos no banco -----
-  const { data: leads = [] } = useQuery({ queryKey: ["leads"], queryFn: api.listLeads });
-  const { data: funnelColumns = [] } = useQuery({
+  const { data: leads = [], isLoading: leadsLoading } = useQuery({
+    queryKey: ["leads"],
+    queryFn: api.listLeads,
+  });
+  const { data: funnelColumns = [], isLoading: columnsLoading } = useQuery({
     queryKey: ["funnelColumns"],
     queryFn: api.listFunnelColumns,
   });
@@ -37,15 +44,18 @@ export function useCRM() {
     mutationFn: ({ name, color }: { name: string; color: string }) =>
       api.createFunnelColumn(name, color),
     onSuccess: invalidateColumns,
+    onError: crmError("Não foi possível adicionar a coluna."),
   });
   const updateColumnMut = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: { name?: string; color?: string; position?: number } }) =>
       api.updateFunnelColumn(id, patch),
     onSuccess: invalidateColumns,
+    onError: crmError("Não foi possível atualizar a coluna."),
   });
   const deleteColumnMut = useMutation({
     mutationFn: (id: string) => api.deleteFunnelColumn(id),
     onSuccess: invalidateColumns,
+    onError: crmError("Não foi possível remover a coluna."),
   });
 
   const addFunnelColumn = useCallback(
@@ -60,35 +70,32 @@ export function useCRM() {
     (id: string, newName: string) => updateColumnMut.mutate({ id, patch: { name: newName } }),
     [updateColumnMut]
   );
-  // Salva a ordem das colunas (atualiza positions)
-  const saveFunnelColumns = useCallback(
-    (columns: FunnelColumn[]) => {
-      columns.forEach((c, i) => updateColumnMut.mutate({ id: c.id, patch: { position: i } }));
-    },
-    [updateColumnMut]
-  );
 
   // ===== Leads =====
   const addLeadMut = useMutation({
     mutationFn: (lead: Omit<Lead, "id" | "createdAt">) => api.createLead(lead),
     onSuccess: invalidateLeads,
+    onError: crmError("Não foi possível salvar o lead."),
   });
   const updateLeadMut = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Omit<Lead, "id" | "createdAt">> }) =>
       api.updateLead(id, patch),
     onSuccess: invalidateLeads,
+    onError: crmError("Não foi possível atualizar o lead."),
   });
   const deleteLeadMut = useMutation({
     mutationFn: (id: string) => api.deleteLead(id),
     onSuccess: invalidateLeads,
+    onError: crmError("Não foi possível remover o lead."),
   });
 
   const addLead = useCallback(
     (lead: Omit<Lead, "id" | "createdAt">) => addLeadMut.mutateAsync(lead),
     [addLeadMut]
   );
-  const updateLeadStatus = useCallback(
-    (id: string, status: LeadStatus) => updateLeadMut.mutate({ id, patch: { status } }),
+  const updateLead = useCallback(
+    (id: string, patch: Partial<Omit<Lead, "id" | "createdAt">>) =>
+      updateLeadMut.mutateAsync({ id, patch }),
     [updateLeadMut]
   );
   const deleteLead = useCallback((id: string) => deleteLeadMut.mutate(id), [deleteLeadMut]);
@@ -117,13 +124,12 @@ export function useCRM() {
   const saveConfigMut = useMutation({
     mutationFn: (config: UazapiConfig) => api.saveWhatsappConfig(config),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["whatsappConfig"] }),
+    onError: crmError("Não foi possível salvar a configuração."),
   });
   const saveConfig = useCallback(
     (config: UazapiConfig) => saveConfigMut.mutate(config),
     [saveConfigMut]
   );
-  // Mantido por compatibilidade; a config agora vem do banco via query
-  const loadConfig = useCallback((): UazapiConfig => uazapiConfig, [uazapiConfig]);
 
   const fetchQrCode = useCallback(async () => {
     setConnectionStatus("connecting");
@@ -155,6 +161,12 @@ export function useCRM() {
     }
   }, []);
 
+  // Autoverifica o status assim que a instância está configurada (corrige envio
+  // bloqueado em Leads/Campanhas sem precisar abrir a aba WhatsApp antes).
+  useEffect(() => {
+    if (uazapiConfig.configured) checkStatus();
+  }, [uazapiConfig.configured, checkStatus]);
+
   const disconnectInstance = useCallback(async () => {
     await api.whatsappDisconnect();
     setConnectionStatus("disconnected");
@@ -171,32 +183,23 @@ export function useCRM() {
     []
   );
 
-  // ===== Estatísticas =====
-  const leadsByStatus = leads.reduce(
-    (acc, l) => {
-      acc[l.status] = (acc[l.status] || 0) + 1;
-      return acc;
-    },
-    {} as Record<LeadStatus, number>
-  );
-
   return {
     leads,
+    leadsLoading,
     messageLogs,
     uazapiConfig,
     connectionStatus,
     qrCode,
     funnelColumns,
+    columnsLoading,
     addLead,
-    updateLeadStatus,
+    updateLead,
     deleteLead,
     moveLeadInColumn,
-    saveFunnelColumns,
     addFunnelColumn,
     removeFunnelColumn,
     renameFunnelColumn,
     saveConfig,
-    loadConfig,
     fetchQrCode,
     checkStatus,
     disconnectInstance,
@@ -204,7 +207,5 @@ export function useCRM() {
     sendMessage,
     addMessageLog,
     getLogsForRecipient,
-    leadsByStatus,
-    setConnectionStatus,
   };
 }
