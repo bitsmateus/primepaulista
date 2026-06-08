@@ -237,6 +237,20 @@ export const api = {
   deleteDevice: (id: string) =>
     request<{ ok: true }>(`/devices/${id}`, { method: "DELETE" }),
 
+  // Fotos do aparelho
+  listDevicePhotos: (deviceId: string) =>
+    request<{ photos: DevicePhoto[] }>(`/devices/${deviceId}/photos`).then((d) => d.photos),
+  uploadDevicePhoto: (deviceId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<{ photo: DevicePhoto }>(`/devices/${deviceId}/photos`, {
+      method: "POST",
+      body: form,
+    }).then((d) => d.photo);
+  },
+  deleteDevicePhoto: (deviceId: string, photoId: string) =>
+    request<{ ok: true }>(`/devices/${deviceId}/photos/${photoId}`, { method: "DELETE" }),
+
   // Accessories
   listAccessories: () =>
     request<{ accessories: AccessoryRow[] }>("/accessories").then((d) =>
@@ -538,6 +552,12 @@ function mapMessageLog(r: MessageLogRow): MessageLog {
 export interface OrderPhoto {
   id: string;
   type: "antes" | "depois";
+  url: string;
+  createdAt: string;
+}
+
+export interface DevicePhoto {
+  id: string;
   url: string;
   createdAt: string;
 }

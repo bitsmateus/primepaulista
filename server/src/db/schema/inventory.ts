@@ -59,8 +59,19 @@ export const stockMovements = pgTable("stock_movements", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Fotos do aparelho (arquivos no MinIO; aqui fica a referência)
+export const devicePhotos = pgTable("device_photos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  deviceId: uuid("device_id")
+    .notNull()
+    .references(() => devices.id, { onDelete: "cascade" }),
+  objectKey: text("object_key").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Device = typeof devices.$inferSelect;
 export type NewDevice = typeof devices.$inferInsert;
+export type DevicePhoto = typeof devicePhotos.$inferSelect;
 export type Accessory = typeof accessories.$inferSelect;
 export type NewAccessory = typeof accessories.$inferInsert;
 export type StockMovement = typeof stockMovements.$inferSelect;

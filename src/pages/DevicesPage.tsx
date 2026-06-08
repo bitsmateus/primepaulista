@@ -9,6 +9,7 @@ import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@
 import { formatCapacity } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
 import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport } from "@/lib/devices";
+import { DevicePhotos } from "@/components/devices/DevicePhotos";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -537,6 +538,12 @@ export default function DevicesPage() {
                 </p>
               )}
             </div>
+
+            {editingId && (
+              <div className="col-span-2 border-t pt-3">
+                <DevicePhotos deviceId={editingId} />
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2">

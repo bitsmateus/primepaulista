@@ -8,6 +8,7 @@ import { env } from "./env";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/users";
 import { deviceRoutes } from "./routes/devices";
+import { devicePhotoRoutes } from "./routes/devicePhotos";
 import { accessoryRoutes } from "./routes/accessories";
 import { customerRoutes } from "./routes/customers";
 import { saleRoutes } from "./routes/sales";
@@ -52,6 +53,7 @@ export function buildApp() {
   app.register(authRoutes);
   app.register(userRoutes);
   app.register(deviceRoutes);
+  app.register(devicePhotoRoutes);
   app.register(accessoryRoutes);
   app.register(customerRoutes);
   app.register(saleRoutes);

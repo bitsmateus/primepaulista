@@ -64,6 +64,13 @@
       "when": 1780878211394,
       "tag": "0008_sale_discount",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780884039808,
+      "tag": "0009_device_photos",
+      "breakpoints": true
     }
   ]
 }
