@@ -11,7 +11,7 @@ export function useInventory() {
     queryKey: ["devices"],
     queryFn: api.listDevices,
   });
-  const { data: accessories = [] } = useQuery({
+  const { data: accessories = [], isLoading: accessoriesLoading } = useQuery({
     queryKey: ["accessories"],
     queryFn: api.listAccessories,
   });
@@ -68,6 +68,9 @@ export function useInventory() {
   const deleteDevice = (id: string) => deleteDeviceMut.mutate(id);
 
   // ----- Mutations: acessórios -----
+  const accessoryError = (err: unknown) =>
+    toast.error(err instanceof ApiError ? err.message : "Falha na operação do acessório.");
+
   const addAccessoryMut = useMutation({
     mutationFn: (accessory: Omit<Accessory, "id" | "createdAt">) =>
       api.createAccessory(accessory),
@@ -77,16 +80,25 @@ export function useInventory() {
     mutationFn: ({ id, quantity }: { id: string; quantity: number }) =>
       api.updateAccessory(id, { quantity }),
     onSuccess: invalidateAccessories,
+    onError: accessoryError,
+  });
+  const updateAccessoryMut = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Omit<Accessory, "id" | "createdAt">> }) =>
+      api.updateAccessory(id, patch),
+    onSuccess: invalidateAccessories,
   });
   const deleteAccessoryMut = useMutation({
     mutationFn: (id: string) => api.deleteAccessory(id),
     onSuccess: invalidateAccessories,
+    onError: accessoryError,
   });
 
   const addAccessory = (accessory: Omit<Accessory, "id" | "createdAt">) =>
-    addAccessoryMut.mutate(accessory);
+    addAccessoryMut.mutateAsync(accessory);
   const updateAccessoryQuantity = (id: string, quantity: number) =>
     updateAccessoryQtyMut.mutate({ id, quantity });
+  const updateAccessory = (id: string, patch: Partial<Omit<Accessory, "id" | "createdAt">>) =>
+    updateAccessoryMut.mutateAsync({ id, patch });
   const deleteAccessory = (id: string) => deleteAccessoryMut.mutate(id);
 
   // ----- Clientes (persistidos no banco) -----
@@ -213,8 +225,10 @@ export function useInventory() {
     updateDeviceStatus,
     updateDevice,
     deleteDevice,
+    accessoriesLoading,
     addAccessory,
     updateAccessoryQuantity,
+    updateAccessory,
     deleteAccessory,
     findCustomer,
     addCustomer,
