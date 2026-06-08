@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Plus, ScanLine, Shuffle, Trash2, Pencil, Search, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
@@ -10,6 +10,8 @@ import { formatCapacity } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
 import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport } from "@/lib/devices";
 import { DevicePhotos } from "@/components/devices/DevicePhotos";
+import { parseDevicesCsv, ParsedDeviceCsv } from "@/lib/deviceCsv";
+import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -76,6 +78,32 @@ export default function DevicesPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [deleteTarget, setDeleteTarget] = useState<Device | null>(null);
+
+  // Importar CSV
+  const [showImport, setShowImport] = useState(false);
+  const [parsed, setParsed] = useState<ParsedDeviceCsv | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile = async (file?: File) => {
+    if (!file) return;
+    const text = await file.text();
+    setParsed(parseDevicesCsv(text));
+  };
+
+  const handleConfirmImport = async () => {
+    if (!parsed || parsed.devices.length === 0) return;
+    setImporting(true);
+    let ok = 0;
+    let fail = 0;
+    for (const d of parsed.devices) {
+      try { await addDevice(d); ok++; } catch { fail++; }
+    }
+    setImporting(false);
+    setShowImport(false);
+    setParsed(null);
+    toast.success(`Importação concluída: ${ok} cadastrados${fail ? `, ${fail} falhas` : ""}.`);
+  };
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -230,10 +258,17 @@ export default function DevicesPage() {
               Estoque de iPhone, iPad, Apple Watch, Mac, AirPods e outros
             </p>
           </div>
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Aparelho
-          </Button>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Button variant="outline" onClick={() => { setParsed(null); setShowImport(true); }} className="gap-2">
+                <Upload className="h-4 w-4" /> Importar CSV
+              </Button>
+            )}
+            <Button onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Aparelho
+            </Button>
+          </div>
         </div>
 
         {/* Resumo / relatório */}
@@ -552,6 +587,46 @@ export default function DevicesPage() {
             </Button>
             <Button onClick={handleSubmit} disabled={saving}>
               {saving ? "Salvando..." : editingId ? "Salvar" : "Cadastrar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Importar CSV */}
+      <Dialog open={showImport} onOpenChange={(o) => { setShowImport(o); if (!o) setParsed(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Importar aparelhos (CSV)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Envie um arquivo CSV com cabeçalho. Colunas reconhecidas:
+              <span className="font-medium text-foreground"> Categoria, Modelo, Capacidade, Cor, Condição, Bateria, Serial/IMEI, Fornecedor, Custo, Preço de venda</span>.
+              Apenas <strong>Modelo</strong> é obrigatório. Dica: exporte um CSV primeiro para usar de modelo.
+            </p>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => handleImportFile(e.target.files?.[0])}
+              className="block w-full text-sm file:mr-3 file:rounded-md file:border file:bg-muted file:px-3 file:py-1.5 file:text-sm"
+            />
+
+            {parsed && (
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="font-medium text-success">{parsed.devices.length} aparelho(s) prontos para importar.</p>
+                {parsed.errors.length > 0 && (
+                  <div className="mt-2 max-h-32 overflow-y-auto text-xs text-destructive">
+                    {parsed.errors.map((e, i) => <p key={i}>{e}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setShowImport(false); setParsed(null); }}>Cancelar</Button>
+            <Button onClick={handleConfirmImport} disabled={importing || !parsed || parsed.devices.length === 0}>
+              {importing ? "Importando..." : `Importar ${parsed?.devices.length ?? 0}`}
             </Button>
           </div>
         </DialogContent>
