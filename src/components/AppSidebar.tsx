@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Smartphone, Package, ShoppingCart, Users, MessageSquare, Wrench, BarChart3, LogOut, ShieldCheck } from "lucide-react";
 import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
+import { canAccessRoute } from "@/lib/permissions";
 
 const roleLabels: Record<string, string> = {
   admin: "Administrador",
@@ -17,8 +18,8 @@ const navItems = [
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/crm", label: "CRM", icon: MessageSquare },
   { to: "/assistencia", label: "Assistência", icon: Wrench },
-  { to: "/bi", label: "BI Financeiro", icon: BarChart3, adminOnly: true },
-  { to: "/usuarios", label: "Usuários", icon: ShieldCheck, adminOnly: true },
+  { to: "/bi", label: "BI Financeiro", icon: BarChart3 },
+  { to: "/usuarios", label: "Usuários", icon: ShieldCheck },
 ];
 
 export function AppSidebar() {
@@ -40,7 +41,7 @@ export function AppSidebar() {
 
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navItems
-          .filter((item) => !item.adminOnly || user?.role === "admin")
+          .filter((item) => canAccessRoute(user?.role, item.to))
           .map(({ to, label, icon: Icon }) => {
           const isActive = location.pathname === to;
           return (

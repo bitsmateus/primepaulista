@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { canAccessRoute } from "@/lib/permissions";
 
 export function ProtectedRoute({
   children,
@@ -27,6 +28,11 @@ export function ProtectedRoute({
 
   // Área restrita a administradores
   if (requireAdmin && user.role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+
+  // Gating por cargo conforme o mapa de permissões da rota atual
+  if (!canAccessRoute(user.role, location.pathname)) {
     return <Navigate to="/" replace />;
   }
 
