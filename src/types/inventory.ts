@@ -99,4 +99,5 @@ export interface Sale {
   discount: number;
   total: number;
   createdAt: Date;
+  returnedAt?: Date; // preenchido se a venda foi devolvida/estornada
 }

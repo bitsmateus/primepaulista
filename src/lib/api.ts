@@ -295,6 +295,11 @@ export const api = {
     }).then((d) => d.saleId),
   listSalesFull: () =>
     request<{ sales: SaleFullRow[] }>("/sales/full").then((d) => d.sales.map(mapSaleFull)),
+  returnSale: (id: string, reason: string) =>
+    request<{ ok: true }>(`/sales/${id}/return`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 
   // Service Orders
   listServiceOrders: () =>
@@ -609,6 +614,7 @@ interface SaleFullRow {
   discount: string;
   total: string;
   createdAt: string;
+  returnedAt: string | null;
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
   items: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number; warrantyDays?: number }[];
   payments: { id: string; method: string; amount: string; installments: number | null }[];
@@ -658,5 +664,6 @@ function mapSaleFull(r: SaleFullRow): Sale {
     discount: Number(r.discount),
     total: Number(r.total),
     createdAt: new Date(r.createdAt),
+    returnedAt: r.returnedAt ? new Date(r.returnedAt) : undefined,
   };
 }

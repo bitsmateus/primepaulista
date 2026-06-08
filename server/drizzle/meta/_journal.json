@@ -78,6 +78,13 @@
       "when": 1780932336271,
       "tag": "0010_sale_item_warranty",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780932569433,
+      "tag": "0011_sale_returns",
+      "breakpoints": true
     }
   ]
 }

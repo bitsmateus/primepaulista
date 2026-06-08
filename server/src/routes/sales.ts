@@ -7,12 +7,13 @@ import {
   saleItems,
   payments,
   tradeIns,
+  saleReturns,
   devices,
   accessories,
   stockMovements,
   customers,
 } from "../db/schema/index";
-import { authenticate, type JwtUser } from "../plugins/auth";
+import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
 const saleInput = z.object({
   customerId: z.string().uuid(),
@@ -261,9 +262,69 @@ export async function saleRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: "Falha ao registrar a venda" });
     }
   });
+
+  // POST /sales/:id/return — devolução/estorno total (somente admin)
+  app.post("/sales/:id/return", { preHandler: requireRole("admin") }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ reason: z.string().max(500).optional().default("") }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const userId = (req.user as JwtUser).sub;
+
+    try {
+      await db.transaction(async (tx) => {
+        const [sale] = await tx.select().from(sales).where(eq(sales.id, id)).for("update").limit(1);
+        if (!sale) throw saleError("Venda não encontrada.", 404);
+        if (sale.returnedAt) throw saleError("Esta venda já foi devolvida.");
+
+        const items = await tx.select().from(saleItems).where(eq(saleItems.saleId, id));
+        // Restitui o estoque de cada item
+        for (const it of items) {
+          if (!it.productId) continue;
+          if (it.productType === "device") {
+            await tx.update(devices).set({ status: "Disponível" }).where(eq(devices.id, it.productId));
+          } else {
+            const [acc] = await tx
+              .select({ quantity: accessories.quantity })
+              .from(accessories)
+              .where(eq(accessories.id, it.productId))
+              .limit(1);
+            if (acc) {
+              await tx
+                .update(accessories)
+                .set({ quantity: acc.quantity + it.quantity })
+                .where(eq(accessories.id, it.productId));
+            }
+          }
+          await tx.insert(stockMovements).values({
+            productType: it.productType,
+            productId: it.productId,
+            movementType: "entrada",
+            quantity: it.quantity,
+            reason: "Devolução",
+            userId,
+          });
+        }
+
+        await tx.insert(saleReturns).values({
+          saleId: id,
+          reason: p.data.reason,
+          refundAmount: sale.total,
+          userId,
+        });
+        await tx.update(sales).set({ returnedAt: new Date() }).where(eq(sales.id, id));
+      });
+      return { ok: true };
+    } catch (err) {
+      const code = (err as { statusCode?: number }).statusCode;
+      if (code === 404) return reply.code(404).send({ error: (err as Error).message });
+      if (code === 409) return reply.code(409).send({ error: (err as Error).message });
+      app.log.error(err);
+      return reply.code(500).send({ error: "Falha ao processar a devolução" });
+    }
+  });
 }
 
-// Erro de validação de venda (estoque/disponibilidade) → 409
-function saleError(message: string) {
-  return Object.assign(new Error(message), { statusCode: 409 });
+// Erro de validação de venda (estoque/disponibilidade) → 409 por padrão
+function saleError(message: string, statusCode = 409) {
+  return Object.assign(new Error(message), { statusCode });
 }

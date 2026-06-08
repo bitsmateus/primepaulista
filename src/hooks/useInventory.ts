@@ -196,6 +196,19 @@ export function useInventory() {
     return newSale;
   };
 
+  // Devolução/estorno de uma venda: restitui estoque no backend e recarrega listas
+  const returnSaleMut = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => api.returnSale(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      invalidateDevices();
+      invalidateAccessories();
+    },
+    onError: (err) =>
+      toast.error(err instanceof ApiError ? err.message : "Não foi possível processar a devolução."),
+  });
+  const returnSale = (id: string, reason: string) => returnSaleMut.mutateAsync({ id, reason });
+
   const generateInternalSerial = () => {
     const year = new Date().getFullYear();
     const seq = String(Math.floor(Math.random() * 9999)).padStart(4, "0");
@@ -243,6 +256,7 @@ export function useInventory() {
     findCustomer,
     addCustomer,
     deleteCustomer,
+    returnSale,
     findDeviceBySerial,
     getCompatibleAccessories,
     finalizeSale,

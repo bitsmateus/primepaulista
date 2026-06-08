@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { Customer, LeadOrigin } from "@/types/inventory";
+import { Customer, LeadOrigin, Sale } from "@/types/inventory";
+import { isReturned, canReturn } from "@/lib/returns";
 import { ApiError } from "@/lib/api";
 import {
   isValidCpf, formatCpf, formatPhone, customerMatchesSearch,
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,10 +29,14 @@ const LEAD_ORIGINS: LeadOrigin[] = ["Instagram", "Indicação", "Tráfego Pago"]
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function CustomersPage() {
-  const { customers, customersLoading, sales, addCustomer, updateCustomer, deleteCustomer } =
+  const { customers, customersLoading, sales, addCustomer, updateCustomer, deleteCustomer, returnSale } =
     useInventoryContext();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+
+  const [returnTarget, setReturnTarget] = useState<Sale | null>(null);
+  const [returnReason, setReturnReason] = useState("");
+  const [returning, setReturning] = useState(false);
 
   const [search, setSearch] = useState("");
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
@@ -318,8 +324,64 @@ export default function CustomersPage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     {s.items.map((i) => `${i.quantity}× ${i.name}`).join(", ")}
                   </p>
+                  <div className="mt-2 flex items-center justify-between">
+                    {isReturned(s) ? (
+                      <Badge variant="secondary">Devolvida</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Venda ativa</span>
+                    )}
+                    {canReturn(s, isAdmin) && (
+                      <Button variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive"
+                        onClick={() => { setReturnTarget(s); setReturnReason(""); }}>
+                        Devolver / Estornar
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Devolução / estorno */}
+      <Dialog open={!!returnTarget} onOpenChange={(o) => !o && setReturnTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Devolver / Estornar venda</DialogTitle>
+          </DialogHeader>
+          {returnTarget && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                A venda de <strong>{fmt(returnTarget.total)}</strong> será estornada e os itens
+                voltam ao estoque. Esta ação não pode ser desfeita.
+              </p>
+              <div className="space-y-1">
+                <Label>Motivo (opcional)</Label>
+                <Textarea value={returnReason} onChange={(e) => setReturnReason(e.target.value)} rows={2}
+                  placeholder="Ex.: arrependimento, defeito, troca" />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" onClick={() => setReturnTarget(null)}>Cancelar</Button>
+                <Button
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={returning}
+                  onClick={async () => {
+                    setReturning(true);
+                    try {
+                      await returnSale(returnTarget.id, returnReason);
+                      toast.success("Venda devolvida e estoque restituído.");
+                      setReturnTarget(null);
+                    } catch {
+                      // onError do hook já avisa
+                    } finally {
+                      setReturning(false);
+                    }
+                  }}
+                >
+                  {returning ? "Processando..." : "Confirmar devolução"}
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>

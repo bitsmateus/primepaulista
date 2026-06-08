@@ -22,6 +22,7 @@ export const sales = pgTable("sales", {
   discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"), // desconto geral
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  returnedAt: timestamp("returned_at", { withTimezone: true }), // data da devolução/estorno (se houver)
 });
 
 export const saleItems = pgTable("sale_items", {
@@ -57,6 +58,18 @@ export const tradeIns = pgTable("trade_ins", {
   model: text("model"),
   healthDescription: text("health_description"),
   value: numeric("value", { precision: 12, scale: 2 }).notNull().default("0"),
+});
+
+// Devolução/estorno de uma venda (estorno total, restitui o estoque)
+export const saleReturns = pgTable("sale_returns", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  saleId: uuid("sale_id")
+    .notNull()
+    .references(() => sales.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull().default(""),
+  refundAmount: numeric("refund_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  userId: uuid("user_id").references(() => profiles.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type Sale = typeof sales.$inferSelect;
