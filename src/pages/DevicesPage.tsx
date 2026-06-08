@@ -3,9 +3,11 @@ import { Plus, ScanLine, Shuffle, Trash2, Pencil, Search, Download, ChevronLeft,
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { DeviceStatus, DeviceCategory, DeviceCondition, Device } from "@/types/inventory";
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { formatCapacity } from "@/lib/utils";
+import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +40,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const statusVariantMap: Record<DeviceStatus, "available" | "sold" | "maintenance" | "reserved"> = {
   "Disponível": "available",
@@ -54,12 +66,16 @@ const PAGE_SIZE = 20;
 export default function DevicesPage() {
   const {
     devices,
+    devicesLoading,
     addDevice,
     updateDevice,
     updateDeviceStatus,
     deleteDevice,
     generateInternalSerial,
   } = useInventoryContext();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [deleteTarget, setDeleteTarget] = useState<Device | null>(null);
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -110,9 +126,15 @@ export default function DevicesPage() {
     setOpen(true);
   };
 
-  const handleSubmit = () => {
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
     if (!model.trim() || (!serialImei && !internalSerial)) {
       toast.error("Informe o modelo e o serial/IMEI (ou gere um serial interno).");
+      return;
+    }
+    if (Number(cost) < 0 || (salePrice && Number(salePrice) < 0)) {
+      toast.error("Custo e preço não podem ser negativos.");
       return;
     }
     const payload = {
@@ -123,21 +145,28 @@ export default function DevicesPage() {
       condition,
       batteryHealth: Number(batteryHealth),
       supplier,
-      cost: Number(cost),
+      cost: Number(cost) || 0,
       salePrice: salePrice ? Number(salePrice) : undefined,
       serialImei,
       internalSerial,
     };
-    if (editingId) {
-      updateDevice(editingId, payload);
-      toast.success("Aparelho atualizado!");
-    } else {
-      addDevice({ ...payload, status: "Disponível" });
-      toast.success("Aparelho cadastrado!");
+    setSaving(true);
+    try {
+      if (editingId) {
+        await updateDevice(editingId, payload);
+        toast.success("Aparelho atualizado!");
+      } else {
+        await addDevice({ ...payload, status: "Disponível" });
+        toast.success("Aparelho cadastrado!");
+      }
+      resetForm();
+      setEditingId(null);
+      setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Não foi possível salvar o aparelho.");
+    } finally {
+      setSaving(false);
     }
-    resetForm();
-    setEditingId(null);
-    setOpen(false);
   };
 
   // ----- Filtros + busca -----
@@ -337,8 +366,21 @@ export default function DevicesPage() {
                       </TableCell>
                       <TableCell>{fmt(d.cost)}</TableCell>
                       <TableCell>{d.salePrice != null ? fmt(d.salePrice) : "—"}</TableCell>
-                      <TableCell className={d.salePrice != null && d.salePrice - d.cost < 0 ? "text-destructive" : "text-success"}>
-                        {d.salePrice != null ? fmt(d.salePrice - d.cost) : "—"}
+                      <TableCell>
+                        {d.salePrice == null ? (
+                          "—"
+                        ) : (
+                          (() => {
+                            const m = d.salePrice - d.cost;
+                            const pct = d.cost > 0 ? (m / d.cost) * 100 : 0;
+                            const cls = m < 0 ? "text-destructive" : pct < 15 ? "text-warning" : "text-success";
+                            return (
+                              <span className={cls} title={pct < 15 && m >= 0 ? "Margem baixa" : undefined}>
+                                {fmt(m)} <span className="text-xs">({pct.toFixed(0)}%)</span>
+                              </span>
+                            );
+                          })()
+                        )}
                       </TableCell>
                       <TableCell className={daysInStock(d.createdAt) > 30 ? "text-warning font-medium" : ""}>
                         {d.status === "Vendido" ? "—" : `${daysInStock(d.createdAt)}d`}
@@ -364,9 +406,11 @@ export default function DevicesPage() {
                           <Button variant="ghost" size="icon" onClick={() => openEdit(d)} title="Editar">
                             <Pencil className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => deleteDevice(d.id)} title="Excluir">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          {isAdmin && (
+                            <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(d)} title="Excluir">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -374,7 +418,7 @@ export default function DevicesPage() {
                   {filteredDevices.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
-                        Nenhum aparelho encontrado.
+                        {devicesLoading ? "Carregando aparelhos…" : "Nenhum aparelho encontrado."}
                       </TableCell>
                     </TableRow>
                   )}
@@ -488,12 +532,12 @@ export default function DevicesPage() {
 
             <div className="space-y-2">
               <Label>Custo (R$)</Label>
-              <Input type="number" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
+              <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
             </div>
 
             <div className="space-y-2">
               <Label>Preço de venda (R$)</Label>
-              <Input type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="0,00 (opcional)" />
+              <Input type="number" min={0} value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="0,00 (opcional)" />
             </div>
 
             <div className="col-span-2 space-y-2">
@@ -525,10 +569,39 @@ export default function DevicesPage() {
             <Button variant="outline" onClick={() => { resetForm(); setEditingId(null); setOpen(false); }}>
               Cancelar
             </Button>
-            <Button onClick={handleSubmit}>{editingId ? "Salvar" : "Cadastrar"}</Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving ? "Salvando..." : editingId ? "Salvar" : "Cadastrar"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmação de exclusão */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir aparelho?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && (
+                <>
+                  Tem certeza que deseja excluir <strong>{deleteTarget.model} {formatCapacity(deleteTarget.capacity)} {deleteTarget.color}</strong>?
+                  {deleteTarget.status === "Vendido" && " Este aparelho já foi vendido — excluir remove o registro do histórico."}
+                  {" "}Esta ação não pode ser desfeita.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteTarget) deleteDevice(deleteTarget.id); setDeleteTarget(null); }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

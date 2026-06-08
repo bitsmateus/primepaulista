@@ -39,10 +39,14 @@ export function useInventory() {
     mutationFn: (device: Omit<Device, "id" | "createdAt">) => api.createDevice(device),
     onSuccess: invalidateDevices,
   });
+  const deviceError = (err: unknown) =>
+    toast.error(err instanceof ApiError ? err.message : "Falha na operação do aparelho.");
+
   const updateDeviceStatusMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: Device["status"] }) =>
       api.updateDevice(id, { status }),
     onSuccess: invalidateDevices,
+    onError: deviceError,
   });
   const updateDeviceMut = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Omit<Device, "id" | "createdAt">> }) =>
@@ -52,10 +56,11 @@ export function useInventory() {
   const deleteDeviceMut = useMutation({
     mutationFn: (id: string) => api.deleteDevice(id),
     onSuccess: invalidateDevices,
+    onError: deviceError,
   });
 
   const addDevice = (device: Omit<Device, "id" | "createdAt">) =>
-    addDeviceMut.mutate(device);
+    addDeviceMut.mutateAsync(device);
   const updateDeviceStatus = (id: string, status: Device["status"]) =>
     updateDeviceStatusMut.mutate({ id, status });
   const updateDevice = (id: string, patch: Partial<Omit<Device, "id" | "createdAt">>) =>
