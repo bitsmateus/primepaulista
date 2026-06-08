@@ -20,12 +20,14 @@ interface OSFormProps {
 
 export default function OSForm({ onCreated }: OSFormProps) {
   const { addOrder } = useServiceOrderContext();
-  const { customers, accessories } = useInventoryContext();
+  const { customers, accessories, devices } = useInventoryContext();
   const { leads } = useCRMContext();
 
   // Customer search
   const [custSearch, setCustSearch] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState<{ name: string; phone: string; cpf: string } | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id?: string; name: string; phone: string; cpf: string } | null>(null);
+
+  const deviceModels = [...new Set(devices.map((d) => d.model))];
 
   // Device info
   const [model, setModel] = useState("");
@@ -56,11 +58,11 @@ export default function OSForm({ onCreated }: OSFormProps) {
         ...customers.filter((c) => {
           const q = custSearch.toLowerCase();
           return c.name.toLowerCase().includes(q) || c.cpf.includes(q) || c.whatsapp.includes(q);
-        }).map((c) => ({ name: c.name, phone: c.whatsapp, cpf: c.cpf })),
+        }).map((c) => ({ id: c.id, name: c.name, phone: c.whatsapp, cpf: c.cpf })),
         ...leads.filter((l) => {
           const q = custSearch.toLowerCase();
           return l.name.toLowerCase().includes(q) || l.phone.includes(q);
-        }).map((l) => ({ name: l.name, phone: l.phone, cpf: "" })),
+        }).map((l) => ({ id: undefined, name: l.name, phone: l.phone, cpf: "" })),
       ].filter((v, i, a) => a.findIndex((x) => x.phone === v.phone) === i).slice(0, 5)
     : [];
 
@@ -77,6 +79,7 @@ export default function OSForm({ onCreated }: OSFormProps) {
     // A baixa da peça do estoque é feita pelo backend, de forma transacional
     try {
       await addOrder({
+        customerId: selectedCustomer.id,
         customerName: selectedCustomer.name,
         customerPhone: selectedCustomer.phone,
         customerCpf: selectedCustomer.cpf,
@@ -166,7 +169,11 @@ export default function OSForm({ onCreated }: OSFormProps) {
           <CardHeader><CardTitle className="text-lg">Aparelho</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Modelo *</Label><Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="iPhone 14 Pro" /></div>
+              <div>
+                <Label>Modelo *</Label>
+                <Input list="os-models" value={model} onChange={(e) => setModel(e.target.value)} placeholder="iPhone 14 Pro" />
+                <datalist id="os-models">{deviceModels.map((m) => <option key={m} value={m} />)}</datalist>
+              </div>
               <div><Label>Cor</Label><Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="Space Black" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
