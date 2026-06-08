@@ -1,0 +1,1 @@
+ALTER TABLE "sale_items" ADD COLUMN "warranty_days" integer DEFAULT 0 NOT NULL;

@@ -35,6 +35,7 @@ export const saleItems = pgTable("sale_items", {
   serial: text("serial"),
   price: numeric("price", { precision: 12, scale: 2 }).notNull().default("0"),
   quantity: integer("quantity").notNull().default(1),
+  warrantyDays: integer("warranty_days").notNull().default(0), // garantia do aparelho em dias
 });
 
 export const payments = pgTable("payments", {

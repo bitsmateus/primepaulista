@@ -64,6 +64,7 @@ export interface CartItem {
   serial?: string;
   price: number;
   quantity: number;
+  warrantyDays?: number; // garantia do aparelho (Lacrado 365 / Seminovo 90)
 }
 
 export interface PaymentEntry {

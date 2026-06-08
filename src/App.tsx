@@ -17,6 +17,7 @@ import PDVPage from "./pages/PDVPage";
 import CustomersPage from "./pages/CustomersPage";
 import CRMPage from "./pages/CRMPage";
 import AssistenciaPage from "./pages/AssistenciaPage";
+import GarantiasPage from "./pages/GarantiasPage";
 import BIDashboardPage from "./pages/BIDashboardPage";
 import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
             <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />
             <Route path="/assistencia" element={<ProtectedApp><AssistenciaPage /></ProtectedApp>} />
+            <Route path="/garantias" element={<ProtectedApp><GarantiasPage /></ProtectedApp>} />
             <Route path="/bi" element={<ProtectedApp adminOnly><BIDashboardPage /></ProtectedApp>} />
             <Route path="/usuarios" element={<ProtectedApp adminOnly><UsersPage /></ProtectedApp>} />
             <Route path="*" element={<NotFound />} />

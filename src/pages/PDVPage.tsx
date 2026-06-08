@@ -11,6 +11,7 @@ import { printReceipt } from "@/utils/receiptGenerator";
 import { ApiError } from "@/lib/api";
 import { formatCapacity } from "@/lib/utils";
 import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue, resolveDiscount } from "@/lib/pdv";
+import { warrantyDaysForCondition } from "@/lib/warranty";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -195,6 +196,7 @@ export default function PDVPage() {
       serial: device.serialImei || device.internalSerial,
       price: deviceSellPrice(device),
       quantity: 1,
+      warrantyDays: warrantyDaysForCondition(device.condition),
     };
     setCart((prev) => [...prev, item]);
     setImeiQuery("");

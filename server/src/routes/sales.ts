@@ -30,6 +30,7 @@ const saleInput = z.object({
         serial: z.string().optional(),
         price: z.coerce.number().min(0),
         quantity: z.coerce.number().int().min(1),
+        warrantyDays: z.coerce.number().int().min(0).optional().default(0),
       })
     )
     .min(1),
@@ -168,6 +169,7 @@ export async function saleRoutes(app: FastifyInstance) {
             serial: it.serial ?? null,
             price: String(it.price),
             quantity: it.quantity,
+            warrantyDays: it.warrantyDays ?? 0,
           }))
         );
 

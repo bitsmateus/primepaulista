@@ -71,6 +71,13 @@
       "when": 1780884039808,
       "tag": "0009_device_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780932336271,
+      "tag": "0010_sale_item_warranty",
+      "breakpoints": true
     }
   ]
 }

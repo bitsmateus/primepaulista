@@ -582,6 +582,7 @@ export interface SalePayload {
     serial?: string;
     price: number;
     quantity: number;
+    warrantyDays?: number;
   }[];
   payments: { method: string; amount: number; installments?: number }[];
   tradeIn?: {
@@ -609,7 +610,7 @@ interface SaleFullRow {
   total: string;
   createdAt: string;
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
-  items: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number }[];
+  items: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number; warrantyDays?: number }[];
   payments: { id: string; method: string; amount: string; installments: number | null }[];
   tradeIn: { imei: string | null; model: string | null; healthDescription: string | null; value: string } | null;
 }
@@ -628,6 +629,7 @@ function mapSaleFull(r: SaleFullRow): Sale {
     serial: it.serial ?? undefined,
     price: Number(it.price),
     quantity: it.quantity,
+    warrantyDays: it.warrantyDays ?? 0,
   }));
 
   const payments: PaymentEntry[] = r.payments.map((p) => ({

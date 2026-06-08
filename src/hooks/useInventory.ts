@@ -177,6 +177,7 @@ export function useInventory() {
         serial: item.serial,
         price: item.price,
         quantity: item.quantity,
+        warrantyDays: item.warrantyDays ?? 0,
       })),
       payments: sale.payments.map((p) => ({
         method: p.method,

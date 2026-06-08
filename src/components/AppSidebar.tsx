@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Smartphone, Package, ShoppingCart, Users, MessageSquare, Wrench, BarChart3, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Smartphone, Package, ShoppingCart, Users, MessageSquare, Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck } from "lucide-react";
 import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRoute } from "@/lib/permissions";
@@ -18,6 +18,7 @@ const navItems = [
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/crm", label: "CRM", icon: MessageSquare },
   { to: "/assistencia", label: "Assistência", icon: Wrench },
+  { to: "/garantias", label: "Garantias", icon: BadgeCheck },
   { to: "/bi", label: "BI Financeiro", icon: BarChart3 },
   { to: "/usuarios", label: "Usuários", icon: ShieldCheck },
 ];
