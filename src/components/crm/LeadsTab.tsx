@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertical } from "lucide-react";
+import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertical, Pencil, ShoppingBag } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
+import { ApiError } from "@/lib/api";
+import { formatPhoneInput, leadMatchesSearch, buildFunnelSummary, leadHasPurchased } from "@/lib/crm";
+import { Lead } from "@/types/crm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,81 +13,93 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
 const ORIGINS = ["Instagram", "Indicação", "Tráfego Pago", "WhatsApp", "Site", "Outro"];
 
 const COLUMN_COLORS = [
-  "211 100% 45%",
-  "38 92% 50%",
-  "25 95% 53%",
-  "160 84% 39%",
-  "0 84% 60%",
-  "270 70% 55%",
-  "190 80% 42%",
-  "330 80% 55%",
+  "211 100% 45%", "38 92% 50%", "25 95% 53%", "160 84% 39%",
+  "0 84% 60%", "270 70% 55%", "190 80% 42%", "330 80% 55%",
 ];
 
 export default function LeadsTab() {
   const {
-    leads, addLead, deleteLead, moveLeadInColumn,
+    leads, leadsLoading, addLead, updateLead, deleteLead, moveLeadInColumn,
     sendMessage, addMessageLog, getLogsForRecipient, connectionStatus,
-    funnelColumns, addFunnelColumn, removeFunnelColumn, renameFunnelColumn,
+    funnelColumns, columnsLoading, addFunnelColumn, removeFunnelColumn, renameFunnelColumn,
   } = useCRMContext();
-  const { devices } = useInventoryContext();
+  const { devices, sales } = useInventoryContext();
 
   const [search, setSearch] = useState("");
-  const [showAddLead, setShowAddLead] = useState(false);
+  const [showLeadDialog, setShowLeadDialog] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null);
   const [showHistory, setShowHistory] = useState<string | null>(null);
   const [showSendMsg, setShowSendMsg] = useState<string | null>(null);
   const [showFunnelSettings, setShowFunnelSettings] = useState(false);
   const [msgText, setMsgText] = useState("");
 
-  // New lead form
+  // Form do lead
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [modelInterest, setModelInterest] = useState("");
   const [origin, setOrigin] = useState("Instagram");
   const [leadColumn, setLeadColumn] = useState("");
+  const [notes, setNotes] = useState("");
 
-  // Funnel settings
+  // Configuração do funil
   const [newColName, setNewColName] = useState("");
   const [newColColor, setNewColColor] = useState(COLUMN_COLORS[0]);
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [editColName, setEditColName] = useState("");
 
-  const filteredLeads = leads.filter((l) => {
-    const q = search.toLowerCase();
-    return l.name.toLowerCase().includes(q) || l.phone.includes(q) || l.modelInterest.toLowerCase().includes(q);
-  });
+  const filteredLeads = leads.filter((l) => leadMatchesSearch(l, search));
+  const summary = buildFunnelSummary(leads, funnelColumns);
+  const deviceModels = [...new Set(devices.map((d) => d.model))];
 
-  const handleAddLead = () => {
-    if (!name.trim() || !phone.trim()) {
-      toast.error("Preencha nome e telefone");
-      return;
-    }
-    const status = leadColumn || (funnelColumns.length > 0 ? funnelColumns[0].name : "Novo");
-    addLead({ name, phone, modelInterest, origin, status, notes: "" });
-    toast.success("Lead cadastrado!");
-    setName(""); setPhone(""); setModelInterest(""); setOrigin("Instagram"); setLeadColumn("");
-    setShowAddLead(false);
+  const resetForm = () => {
+    setName(""); setPhone(""); setModelInterest(""); setOrigin("Instagram");
+    setLeadColumn(""); setNotes(""); setEditingId(null);
+  };
+  const openCreate = () => { resetForm(); setShowLeadDialog(true); };
+  const openEdit = (l: Lead) => {
+    setEditingId(l.id);
+    setName(l.name); setPhone(l.phone); setModelInterest(l.modelInterest);
+    setOrigin(l.origin || "Instagram"); setLeadColumn(l.status); setNotes(l.notes || "");
+    setShowLeadDialog(true);
   };
 
-  const formatPhone = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 11);
-    if (digits.length <= 2) return `(${digits}`;
-    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  const handleSubmit = async () => {
+    if (!name.trim() || !phone.trim()) { toast.error("Preencha nome e telefone"); return; }
+    const status = leadColumn || (funnelColumns.length > 0 ? funnelColumns[0].name : "Novo");
+    setSaving(true);
+    try {
+      if (editingId) {
+        await updateLead(editingId, { name, phone, modelInterest, origin, notes, status });
+        toast.success("Lead atualizado!");
+      } else {
+        await addLead({ name, phone, modelInterest, origin, status, notes });
+        toast.success("Lead cadastrado!");
+      }
+      resetForm(); setShowLeadDialog(false);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Não foi possível salvar o lead.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSendMessage = async (leadId: string) => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || !msgText.trim()) return;
-    if (connectionStatus !== "connected") {
-      toast.error("WhatsApp não conectado.");
-      return;
-    }
+    if (connectionStatus !== "connected") { toast.error("WhatsApp não conectado."); return; }
     const success = await sendMessage(lead.phone, msgText);
     addMessageLog({
       recipientId: lead.id, recipientName: lead.name, recipientPhone: lead.phone,
@@ -93,8 +108,6 @@ export default function LeadsTab() {
     toast[success ? "success" : "error"](success ? "Mensagem enviada!" : "Falha ao enviar");
     setMsgText(""); setShowSendMsg(null);
   };
-
-  const deviceModels = [...new Set(devices.map((d) => d.model))];
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -123,7 +136,29 @@ export default function LeadsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Actions bar */}
+      {/* Resumo do funil */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="border shadow-none">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Total de leads</p>
+            <p className="mt-1 text-xl font-semibold">{summary.total}</p>
+          </CardContent>
+        </Card>
+        <Card className="border shadow-none">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Convertidos</p>
+            <p className="mt-1 text-xl font-semibold text-success">{summary.converted}</p>
+          </CardContent>
+        </Card>
+        <Card className="border shadow-none">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Taxa de conversão</p>
+            <p className="mt-1 text-xl font-semibold">{(summary.conversionRate * 100).toFixed(0)}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Barra de ações */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -132,10 +167,14 @@ export default function LeadsTab() {
         <Button variant="outline" onClick={() => setShowFunnelSettings(true)}>
           <Settings2 className="h-4 w-4 mr-1" /> Funil
         </Button>
-        <Button onClick={() => setShowAddLead(true)}>
+        <Button onClick={openCreate}>
           <Plus className="h-4 w-4 mr-1" /> Novo Lead
         </Button>
       </div>
+
+      {(leadsLoading || columnsLoading) && (
+        <p className="text-sm text-muted-foreground">Carregando funil…</p>
+      )}
 
       {/* Kanban */}
       <DragDropContext onDragEnd={handleDragEnd}>
@@ -145,10 +184,7 @@ export default function LeadsTab() {
             return (
               <div key={col.id} className="flex-shrink-0 w-[280px]">
                 <div className="flex items-center gap-2 mb-3 px-1">
-                  <span
-                    className="h-3 w-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: `hsl(${col.color})` }}
-                  />
+                  <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: `hsl(${col.color})` }} />
                   <h3 className="text-sm font-semibold text-foreground truncate">{col.name}</h3>
                   <Badge variant="secondary" className="ml-auto text-xs">{columnLeads.length}</Badge>
                 </div>
@@ -161,47 +197,61 @@ export default function LeadsTab() {
                         snapshot.isDraggingOver ? "border-primary/50 bg-primary/5" : "border-border bg-muted/30"
                       }`}
                     >
-                      {columnLeads.map((lead, index) => (
-                        <Draggable key={lead.id} draggableId={lead.id} index={index}>
-                          {(provided, snapshot) => (
-                            <Card
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              className={`border shadow-sm transition-shadow ${
-                                snapshot.isDragging ? "shadow-lg ring-2 ring-primary/30" : ""
-                              }`}
-                            >
-                              <CardContent className="p-3">
-                                <div className="flex items-start gap-2">
-                                  <div {...provided.dragHandleProps} className="mt-0.5 cursor-grab text-muted-foreground">
-                                    <GripVertical className="h-4 w-4" />
+                      {columnLeads.map((lead, index) => {
+                        const bought = leadHasPurchased(lead, sales);
+                        return (
+                          <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                            {(provided, snapshot) => (
+                              <Card
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                className={`border shadow-sm transition-shadow ${snapshot.isDragging ? "shadow-lg ring-2 ring-primary/30" : ""}`}
+                              >
+                                <CardContent className="p-3">
+                                  <div className="flex items-start gap-2">
+                                    <div {...provided.dragHandleProps} className="mt-0.5 cursor-grab text-muted-foreground">
+                                      <GripVertical className="h-4 w-4" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-medium text-foreground truncate">{lead.name}</p>
+                                        {bought && (
+                                          <Badge variant="default" className="h-4 gap-0.5 px-1 text-[10px]">
+                                            <ShoppingBag className="h-2.5 w-2.5" /> Comprou
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">{lead.phone}</p>
+                                      {lead.modelInterest && (
+                                        <Badge variant="outline" className="mt-1 text-xs">{lead.modelInterest}</Badge>
+                                      )}
+                                      <p className="text-xs text-muted-foreground mt-1">{lead.origin} · {format(lead.createdAt, "dd/MM")}</p>
+                                    </div>
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-foreground truncate">{lead.name}</p>
-                                    <p className="text-xs text-muted-foreground">{lead.phone}</p>
-                                    {lead.modelInterest && (
-                                      <Badge variant="outline" className="mt-1 text-xs">{lead.modelInterest}</Badge>
-                                    )}
-                                    <p className="text-xs text-muted-foreground mt-1">{lead.origin} · {format(lead.createdAt, "dd/MM")}</p>
+                                  <div className="flex justify-end gap-1 mt-2 border-t pt-2">
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Enviar mensagem" onClick={() => setShowSendMsg(lead.id)}>
+                                      <MessageCircle className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Histórico" onClick={() => setShowHistory(lead.id)}>
+                                      <History className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Editar" onClick={() => openEdit(lead)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Excluir" onClick={() => setDeleteTarget(lead)}>
+                                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                    </Button>
                                   </div>
-                                </div>
-                                <div className="flex justify-end gap-1 mt-2 border-t pt-2">
-                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowSendMsg(lead.id)}>
-                                    <MessageCircle className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowHistory(lead.id)}>
-                                    <History className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { deleteLead(lead.id); toast.success("Lead removido"); }}>
-                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                  </Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </Draggable>
-                      ))}
+                                </CardContent>
+                              </Card>
+                            )}
+                          </Draggable>
+                        );
+                      })}
                       {provided.placeholder}
+                      {!leadsLoading && columnLeads.length === 0 && (
+                        <p className="px-1 py-6 text-center text-xs text-muted-foreground">Sem leads</p>
+                      )}
                     </div>
                   )}
                 </Droppable>
@@ -211,12 +261,10 @@ export default function LeadsTab() {
         </div>
       </DragDropContext>
 
-      {/* Funnel Settings Dialog */}
+      {/* Configurar Funil */}
       <Dialog open={showFunnelSettings} onOpenChange={setShowFunnelSettings}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Configurar Funil</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Configurar Funil</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Colunas do Funil</Label>
@@ -225,12 +273,8 @@ export default function LeadsTab() {
                   <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: `hsl(${col.color})` }} />
                   {editingCol === col.id ? (
                     <>
-                      <Input
-                        value={editColName}
-                        onChange={(e) => setEditColName(e.target.value)}
-                        className="h-8 flex-1"
-                        onKeyDown={(e) => e.key === "Enter" && handleRenameColumn(col.id)}
-                      />
+                      <Input value={editColName} onChange={(e) => setEditColName(e.target.value)} className="h-8 flex-1"
+                        onKeyDown={(e) => e.key === "Enter" && handleRenameColumn(col.id)} />
                       <Button size="sm" variant="ghost" onClick={() => handleRenameColumn(col.id)}>✓</Button>
                       <Button size="sm" variant="ghost" onClick={() => setEditingCol(null)}>✕</Button>
                     </>
@@ -252,20 +296,13 @@ export default function LeadsTab() {
             </div>
             <div className="border-t pt-4 space-y-3">
               <Label>Adicionar Coluna</Label>
-              <Input
-                value={newColName}
-                onChange={(e) => setNewColName(e.target.value)}
-                placeholder="Nome da coluna"
-                onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
-              />
+              <Input value={newColName} onChange={(e) => setNewColName(e.target.value)} placeholder="Nome da coluna"
+                onKeyDown={(e) => e.key === "Enter" && handleAddColumn()} />
               <div className="flex gap-2 flex-wrap">
                 {COLUMN_COLORS.map((c) => (
-                  <button
-                    key={c}
+                  <button key={c}
                     className={`h-6 w-6 rounded-full border-2 transition-all ${newColColor === c ? "border-foreground scale-110" : "border-transparent"}`}
-                    style={{ backgroundColor: `hsl(${c})` }}
-                    onClick={() => setNewColColor(c)}
-                  />
+                    style={{ backgroundColor: `hsl(${c})` }} onClick={() => setNewColColor(c)} />
                 ))}
               </div>
               <Button className="w-full" onClick={handleAddColumn} disabled={!newColName.trim()}>
@@ -276,19 +313,17 @@ export default function LeadsTab() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Lead Dialog */}
-      <Dialog open={showAddLead} onOpenChange={setShowAddLead}>
+      {/* Criar / Editar Lead */}
+      <Dialog open={showLeadDialog} onOpenChange={(o) => { setShowLeadDialog(o); if (!o) resetForm(); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Novo Lead</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingId ? "Editar Lead" : "Novo Lead"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
-            <div><Label>WhatsApp *</Label><Input value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(11) 99999-9999" /></div>
+            <div><Label>WhatsApp *</Label><Input value={phone} onChange={(e) => setPhone(formatPhoneInput(e.target.value))} placeholder="(11) 99999-9999" /></div>
             <div>
               <Label>Modelo de Interesse</Label>
-              <Select value={modelInterest} onValueChange={setModelInterest}>
-                <SelectTrigger><SelectValue placeholder="Selecione o modelo" /></SelectTrigger>
-                <SelectContent>{deviceModels.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-              </Select>
+              <Input list="lead-models" value={modelInterest} onChange={(e) => setModelInterest(e.target.value)} placeholder="Digite ou escolha um modelo" />
+              <datalist id="lead-models">{deviceModels.map((m) => <option key={m} value={m} />)}</datalist>
             </div>
             <div>
               <Label>Origem</Label>
@@ -304,12 +339,18 @@ export default function LeadsTab() {
                 <SelectContent>{funnelColumns.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <Button className="w-full" onClick={handleAddLead}>Cadastrar Lead</Button>
+            <div>
+              <Label>Observações</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anotações sobre o lead (opcional)" />
+            </div>
+            <Button className="w-full" onClick={handleSubmit} disabled={saving}>
+              {saving ? "Salvando..." : editingId ? "Salvar" : "Cadastrar Lead"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Send Message Dialog */}
+      {/* Enviar Mensagem */}
       <Dialog open={!!showSendMsg} onOpenChange={() => setShowSendMsg(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Enviar Mensagem WhatsApp</DialogTitle></DialogHeader>
@@ -321,10 +362,7 @@ export default function LeadsTab() {
             )}
             <div>
               <Label>Mensagem</Label>
-              <textarea
-                className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={msgText} onChange={(e) => setMsgText(e.target.value)} placeholder="Digite sua mensagem..."
-              />
+              <Textarea className="min-h-[120px]" value={msgText} onChange={(e) => setMsgText(e.target.value)} placeholder="Digite sua mensagem..." />
             </div>
             <div className="flex gap-2 flex-wrap">
               <Button variant="outline" size="sm" onClick={() => setMsgText("Olá! Tudo bem? Aqui é da Prime Paulista 🍎. Seu aparelho está pronto para retirada!")}>Pós-venda</Button>
@@ -338,7 +376,7 @@ export default function LeadsTab() {
         </DialogContent>
       </Dialog>
 
-      {/* History Dialog */}
+      {/* Histórico */}
       <Dialog open={!!showHistory} onOpenChange={() => setShowHistory(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Histórico de Mensagens</DialogTitle></DialogHeader>
@@ -360,6 +398,27 @@ export default function LeadsTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmação de exclusão */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir lead?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && <>Tem certeza que deseja excluir <strong>{deleteTarget.name}</strong>? Esta ação não pode ser desfeita.</>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteTarget) { deleteLead(deleteTarget.id); toast.success("Lead removido"); } setDeleteTarget(null); }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
