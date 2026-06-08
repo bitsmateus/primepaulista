@@ -19,6 +19,7 @@ const saleInput = z.object({
   sellerName: z.string().optional().default(""),
   subtotal: z.coerce.number().min(0),
   tradeInDiscount: z.coerce.number().min(0).default(0),
+  discount: z.coerce.number().min(0).default(0),
   total: z.coerce.number().min(0),
   items: z
     .array(
@@ -152,6 +153,7 @@ export async function saleRoutes(app: FastifyInstance) {
             sellerName: s.sellerName,
             subtotal: String(s.subtotal),
             tradeInDiscount: String(s.tradeInDiscount),
+            discount: String(s.discount),
             total: String(s.total),
           })
           .returning({ id: sales.id });

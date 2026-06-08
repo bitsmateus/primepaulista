@@ -95,6 +95,7 @@ export interface Sale {
   seller: Seller;
   subtotal: number;
   tradeInDiscount: number;
+  discount: number;
   total: number;
   createdAt: Date;
 }

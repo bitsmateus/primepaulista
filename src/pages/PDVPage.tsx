@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Repeat, Printer, UserPlus, Package } from "lucide-react";
+import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Repeat, Printer, UserPlus, Package, RotateCcw, Tag } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Customer, CartItem, PaymentEntry, TradeIn, PaymentMethod, LeadOrigin, Seller, DeviceCategory, DeviceCondition,
+  Customer, CartItem, PaymentEntry, TradeIn, PaymentMethod, LeadOrigin, Seller, DeviceCategory, DeviceCondition, Sale,
 } from "@/types/inventory";
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { printReceipt } from "@/utils/receiptGenerator";
 import { ApiError } from "@/lib/api";
 import { formatCapacity } from "@/lib/utils";
-import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue } from "@/lib/pdv";
+import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue, resolveDiscount } from "@/lib/pdv";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +58,16 @@ export default function PDVPage() {
   const [payAmount, setPayAmount] = useState("");
   const [payInstallments, setPayInstallments] = useState("1");
 
+  // Desconto geral
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountMode, setDiscountMode] = useState<"R$" | "%">("R$");
+
+  // Última venda (2ª via) + busca avulsa de acessório
+  const [lastSale, setLastSale] = useState<Sale | null>(null);
+  const [accQuery, setAccQuery] = useState("");
+  const [showAccResults, setShowAccResults] = useState(false);
+  const accBoxRef = useRef<HTMLDivElement>(null);
+
   // Trade-in
   const [showTradeIn, setShowTradeIn] = useState(false);
   const [tradeIn, setTradeIn] = useState<TradeIn | null>(null);
@@ -100,6 +110,7 @@ export default function PDVPage() {
       const t = e.target as Node;
       if (customerBoxRef.current && !customerBoxRef.current.contains(t)) setShowCustomerResults(false);
       if (deviceBoxRef.current && !deviceBoxRef.current.contains(t)) setShowDeviceResults(false);
+      if (accBoxRef.current && !accBoxRef.current.contains(t)) setShowAccResults(false);
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -245,6 +256,19 @@ export default function PDVPage() {
 
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((c) => c.id !== id));
 
+  // ---------- Busca avulsa de acessório ----------
+  const filteredAccessories = accQuery.trim().length >= 1
+    ? accessories
+        .filter((a) => a.quantity > 0 && a.name.toLowerCase().includes(accQuery.trim().toLowerCase()))
+        .slice(0, 8)
+    : [];
+
+  const handlePickAccessory = (id: string) => {
+    addAccessoryToCart(id);
+    setAccQuery("");
+    setShowAccResults(false);
+  };
+
   // Editar preço de um item do carrinho
   const updateItemPrice = (id: string, price: number) =>
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, price: Math.max(0, price) } : c)));
@@ -308,7 +332,9 @@ export default function PDVPage() {
   // ---------- Totals ----------
   const subtotal = cartSubtotal(cart);
   const tradeInDiscount = tradeIn?.value || 0;
-  const total = saleTotal(subtotal, tradeInDiscount);
+  const baseAfterTrade = Math.max(0, subtotal - tradeInDiscount);
+  const discount = resolveDiscount(baseAfterTrade, Number(discountValue) || 0, discountMode);
+  const total = saleTotal(subtotal, tradeInDiscount, discount);
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const remaining = remainingToPay(total, totalPaid);
   const troco = changeDue(total, totalPaid);
@@ -331,14 +357,16 @@ export default function PDVPage() {
         seller: seller as Seller,
         subtotal,
         tradeInDiscount,
+        discount,
         total,
       });
 
       printReceipt(sale, devices);
+      setLastSale(sale);
       toast.success("Venda finalizada com sucesso!");
       // Reset
       setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
-      setCustomerQuery(""); setImeiQuery("");
+      setCustomerQuery(""); setImeiQuery(""); setDiscountValue("");
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : "Falha ao registrar a venda. Tente novamente."
@@ -349,6 +377,17 @@ export default function PDVPage() {
   };
 
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  // Atalho: F2 finaliza a venda
+  const finalizeRef = useRef(handleFinalize);
+  finalizeRef.current = handleFinalize;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F2") { e.preventDefault(); finalizeRef.current(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <AppLayout>
@@ -473,6 +512,38 @@ export default function PDVPage() {
                 ) : availableDevices.length === 0 ? (
                   <p className="mt-2 text-xs text-muted-foreground">Nenhum aparelho disponível em estoque.</p>
                 ) : null}
+
+                {/* Acessório avulso (busca direta) */}
+                <div className="relative mt-3" ref={accBoxRef}>
+                  <div className="relative">
+                    <Input
+                      placeholder="Acessório avulso (capa, película, cabo...)"
+                      value={accQuery}
+                      onChange={(e) => { setAccQuery(e.target.value); setShowAccResults(true); }}
+                      onFocus={() => setShowAccResults(true)}
+                      className="pr-10"
+                    />
+                    <Package className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                  </div>
+                  {showAccResults && filteredAccessories.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border bg-popover shadow-lg">
+                      {filteredAccessories.map((a) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => handlePickAccessory(a.id)}
+                          className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-foreground">{a.name}</p>
+                            <p className="text-xs text-muted-foreground">{a.category} · {a.quantity} em estoque</p>
+                          </div>
+                          <span className="ml-3 whitespace-nowrap text-sm font-semibold">{fmt(accessorySellPrice(a))}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -536,7 +607,7 @@ export default function PDVPage() {
                   </div>
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-3">
                   <Button
                     variant="outline"
                     onClick={() => setShowTradeIn(true)}
@@ -545,6 +616,25 @@ export default function PDVPage() {
                     <Repeat className="h-4 w-4" />
                     Aparelho de Troca
                   </Button>
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-sm">Desconto</Label>
+                    <Input
+                      type="number"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      placeholder="0"
+                      className="h-9 w-24"
+                    />
+                    <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as "R$" | "%")}>
+                      <SelectTrigger className="h-9 w-20"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="R$">R$</SelectItem>
+                        <SelectItem value="%">%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {discount > 0 && <span className="text-sm font-medium text-success">-{fmt(discount)}</span>}
+                  </div>
                 </div>
 
                 {tradeIn && (
@@ -575,14 +665,20 @@ export default function PDVPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                {lastSale && (
+                  <Button variant="outline" className="ml-auto gap-2" onClick={() => printReceipt(lastSale, devices)}>
+                    <RotateCcw className="h-4 w-4" /> 2ª via
+                  </Button>
+                )}
                 <Button
-                  className="ml-auto gap-2"
+                  className={lastSale ? "gap-2" : "ml-auto gap-2"}
                   size="lg"
                   onClick={handleFinalize}
                   disabled={finalizing || cart.length === 0 || !customer || remaining > 0.01}
+                  title="Atalho: F2"
                 >
                   <Printer className="h-4 w-4" />
-                  {finalizing ? "Registrando..." : "Finalizar Venda"}
+                  {finalizing ? "Registrando..." : "Finalizar Venda (F2)"}
                 </Button>
               </CardContent>
             </Card>
@@ -663,6 +759,12 @@ export default function PDVPage() {
                         <div className="flex justify-between text-success">
                           <span>Trade-in</span>
                           <span>-{fmt(tradeInDiscount)}</span>
+                        </div>
+                      )}
+                      {discount > 0 && (
+                        <div className="flex justify-between text-success">
+                          <span>Desconto</span>
+                          <span>-{fmt(discount)}</span>
                         </div>
                       )}
                       <div className="flex justify-between text-base font-bold">

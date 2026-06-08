@@ -14,9 +14,16 @@ export function cartSubtotal(items: CartItem[]): number {
   return items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 }
 
-// Total da venda = subtotal - desconto da troca (nunca negativo)
-export function saleTotal(subtotal: number, tradeInDiscount: number): number {
-  return Math.max(0, subtotal - tradeInDiscount);
+// Total da venda = subtotal - troca - desconto geral (nunca negativo)
+export function saleTotal(subtotal: number, tradeInDiscount: number, discount = 0): number {
+  return Math.max(0, subtotal - tradeInDiscount - discount);
+}
+
+// Converte um desconto informado em R$ ou % para valor em R$ (limitado à base)
+export function resolveDiscount(base: number, value: number, mode: "R$" | "%"): number {
+  if (!value || value <= 0) return 0;
+  const v = mode === "%" ? (base * value) / 100 : value;
+  return Math.min(Math.max(0, v), base);
 }
 
 // Quanto ainda falta pagar (positivo) — negativo/zero significa quitado

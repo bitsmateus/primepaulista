@@ -57,6 +57,13 @@
       "when": 1780616232240,
       "tag": "0007_device_sale_price",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780878211394,
+      "tag": "0008_sale_discount",
+      "breakpoints": true
     }
   ]
 }

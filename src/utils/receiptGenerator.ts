@@ -100,6 +100,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
       )
       .join("")}
     ${sale.tradeIn ? `<div class="row"><span>Aparelho de Troca</span><span>-${formatCurrency(sale.tradeInDiscount)}</span></div>` : ""}
+    ${sale.discount > 0 ? `<div class="row"><span>Desconto</span><span>-${formatCurrency(sale.discount)}</span></div>` : ""}
     <div class="row total"><span>Total</span><span>${formatCurrency(sale.total)}</span></div>
   </div>
 

@@ -548,6 +548,7 @@ export interface SalePayload {
   sellerName: string;
   subtotal: number;
   tradeInDiscount: number;
+  discount: number;
   total: number;
   items: {
     productType: "device" | "accessory";
@@ -579,6 +580,7 @@ interface SaleFullRow {
   sellerName: string | null;
   subtotal: string;
   tradeInDiscount: string;
+  discount: string;
   total: string;
   createdAt: string;
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
@@ -626,6 +628,7 @@ function mapSaleFull(r: SaleFullRow): Sale {
     seller: (r.sellerName ?? "") as Seller,
     subtotal: Number(r.subtotal),
     tradeInDiscount: Number(r.tradeInDiscount),
+    discount: Number(r.discount),
     total: Number(r.total),
     createdAt: new Date(r.createdAt),
   };

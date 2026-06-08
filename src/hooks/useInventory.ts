@@ -144,6 +144,7 @@ export function useInventory() {
       sellerName: sale.seller,
       subtotal: sale.subtotal,
       tradeInDiscount: sale.tradeInDiscount,
+      discount: sale.discount,
       total: sale.total,
       items: sale.items.map((item) => ({
         productType: item.type,
