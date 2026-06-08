@@ -263,6 +263,63 @@ export async function saleRoutes(app: FastifyInstance) {
     }
   });
 
+  // PATCH /sales/:id — edita dados da venda (sem mexer no estoque). Somente admin.
+  app.patch("/sales/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z
+      .object({
+        customerId: z.string().uuid().optional(),
+        sellerName: z.string().max(120).optional(),
+        discount: z.coerce.number().min(0).optional(),
+        paymentMethod: z
+          .enum(["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"])
+          .optional(),
+        installments: z.coerce.number().int().min(1).optional(),
+      })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+
+    try {
+      await db.transaction(async (tx) => {
+        const [sale] = await tx.select().from(sales).where(eq(sales.id, id)).for("update").limit(1);
+        if (!sale) throw saleError("Venda não encontrada.", 404);
+        if (sale.returnedAt) throw saleError("Venda devolvida não pode ser editada.");
+
+        const update: Record<string, unknown> = {};
+        if (p.data.customerId !== undefined) update.customerId = p.data.customerId;
+        if (p.data.sellerName !== undefined) update.sellerName = p.data.sellerName;
+
+        let total = Number(sale.total);
+        if (p.data.discount !== undefined) {
+          total = Math.max(0, Number(sale.subtotal) - Number(sale.tradeInDiscount) - p.data.discount);
+          update.discount = String(p.data.discount);
+          update.total = String(total);
+        }
+        if (Object.keys(update).length) {
+          await tx.update(sales).set(update).where(eq(sales.id, id));
+        }
+
+        // Forma de pagamento: substitui os pagamentos por um único do total
+        if (p.data.paymentMethod) {
+          await tx.delete(payments).where(eq(payments.saleId, id));
+          await tx.insert(payments).values({
+            saleId: id,
+            method: p.data.paymentMethod,
+            amount: String(total),
+            installments: p.data.installments ?? 1,
+          });
+        }
+      });
+      return { ok: true };
+    } catch (err) {
+      const code = (err as { statusCode?: number }).statusCode;
+      if (code === 404) return reply.code(404).send({ error: (err as Error).message });
+      if (code === 409) return reply.code(409).send({ error: (err as Error).message });
+      app.log.error(err);
+      return reply.code(500).send({ error: "Falha ao editar a venda" });
+    }
+  });
+
   // POST /sales/:id/return — devolução/estorno total (somente admin)
   app.post("/sales/:id/return", { preHandler: requireRole("admin") }, async (req, reply) => {
     const { id } = req.params as { id: string };

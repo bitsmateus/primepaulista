@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Device, Accessory, Customer, Sale } from "@/types/inventory";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, SaleUpdate } from "@/lib/api";
 
 export function useInventory() {
   const qc = useQueryClient();
@@ -209,6 +209,15 @@ export function useInventory() {
   });
   const returnSale = (id: string, reason: string) => returnSaleMut.mutateAsync({ id, reason });
 
+  // Edição de dados da venda (cliente/vendedor/desconto/pagamento), sem mexer no estoque
+  const updateSaleMut = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: SaleUpdate }) => api.updateSale(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
+    onError: (err) =>
+      toast.error(err instanceof ApiError ? err.message : "Não foi possível editar a venda."),
+  });
+  const updateSale = (id: string, patch: SaleUpdate) => updateSaleMut.mutateAsync({ id, patch });
+
   const generateInternalSerial = () => {
     const year = new Date().getFullYear();
     const seq = String(Math.floor(Math.random() * 9999)).padStart(4, "0");
@@ -257,6 +266,7 @@ export function useInventory() {
     addCustomer,
     deleteCustomer,
     returnSale,
+    updateSale,
     findDeviceBySerial,
     getCompatibleAccessories,
     finalizeSale,

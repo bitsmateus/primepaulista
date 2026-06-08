@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Smartphone, Package, ShoppingCart, Users, MessageSquare, Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck } from "lucide-react";
+import { LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare, Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck } from "lucide-react";
 import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRoute } from "@/lib/permissions";
@@ -13,6 +13,7 @@ const roleLabels: Record<string, string> = {
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/pdv", label: "Frente de Caixa", icon: ShoppingCart },
+  { to: "/vendas", label: "Vendas", icon: Receipt },
   { to: "/devices", label: "Aparelhos", icon: Smartphone },
   { to: "/accessories", label: "Acessórios", icon: Package },
   { to: "/customers", label: "Clientes", icon: Users },

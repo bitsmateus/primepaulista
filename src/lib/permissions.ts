@@ -6,6 +6,7 @@ export type Role = UserRole;
 export const NAV_PERMISSIONS: Record<string, Role[]> = {
   "/": ["admin", "vendedor", "tecnico"],
   "/pdv": ["admin", "vendedor"],
+  "/vendas": ["admin", "vendedor"],
   "/devices": ["admin", "vendedor", "tecnico"],
   "/accessories": ["admin", "vendedor", "tecnico"],
   "/customers": ["admin", "vendedor", "tecnico"],

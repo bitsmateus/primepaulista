@@ -300,6 +300,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),
+  updateSale: (id: string, patch: SaleUpdate) =>
+    request<{ ok: true }>(`/sales/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
 
   // Service Orders
   listServiceOrders: () =>
@@ -601,6 +606,14 @@ export interface SalePayload {
     condition?: "Lacrado" | "Seminovo";
     batteryHealth?: number;
   };
+}
+
+export interface SaleUpdate {
+  customerId?: string;
+  sellerName?: string;
+  discount?: number;
+  paymentMethod?: "PIX" | "Dinheiro" | "Cartão de Crédito" | "Cartão de Débito";
+  installments?: number;
 }
 
 export type { Sale };

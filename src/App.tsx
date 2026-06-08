@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import DevicesPage from "./pages/DevicesPage";
 import AccessoriesPage from "./pages/AccessoriesPage";
 import PDVPage from "./pages/PDVPage";
+import VendasPage from "./pages/VendasPage";
 import CustomersPage from "./pages/CustomersPage";
 import CRMPage from "./pages/CRMPage";
 import AssistenciaPage from "./pages/AssistenciaPage";
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<ProtectedApp><Dashboard /></ProtectedApp>} />
             <Route path="/pdv" element={<ProtectedApp><PDVPage /></ProtectedApp>} />
+            <Route path="/vendas" element={<ProtectedApp><VendasPage /></ProtectedApp>} />
             <Route path="/devices" element={<ProtectedApp><DevicesPage /></ProtectedApp>} />
             <Route path="/accessories" element={<ProtectedApp><AccessoriesPage /></ProtectedApp>} />
             <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
