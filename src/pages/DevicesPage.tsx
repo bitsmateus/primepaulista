@@ -8,6 +8,7 @@ import { DeviceStatus, DeviceCategory, DeviceCondition, Device } from "@/types/i
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { formatCapacity } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
+import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport } from "@/lib/devices";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,8 +60,6 @@ const statusVariantMap: Record<DeviceStatus, "available" | "sold" | "maintenance
 };
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const daysInStock = (createdAt: Date) =>
-  Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
 const PAGE_SIZE = 20;
 
 export default function DevicesPage() {
@@ -184,29 +183,7 @@ export default function DevicesPage() {
   }, [devices, filterStatus, filterCategory, search]);
 
   // ----- Relatório / resumo -----
-  const report = useMemo(() => {
-    const inStock = devices.filter((d) => d.status === "Disponível" || d.status === "Reservado");
-    const stockValue = inStock.reduce((s, d) => s + (d.cost || 0), 0);
-    // Margem potencial: (preço de venda - custo) dos aparelhos em loja que têm preço definido
-    const potentialMargin = inStock.reduce(
-      (s, d) => s + (d.salePrice != null ? d.salePrice - d.cost : 0),
-      0
-    );
-    const byCategory: Record<string, number> = {};
-    for (const d of devices) {
-      const c = d.category || "iPhone";
-      byCategory[c] = (byCategory[c] || 0) + 1;
-    }
-    return {
-      total: devices.length,
-      inStock: inStock.length,
-      sold: devices.filter((d) => d.status === "Vendido").length,
-      maintenance: devices.filter((d) => d.status === "Em Manutenção").length,
-      stockValue,
-      potentialMargin,
-      byCategory,
-    };
-  }, [devices]);
+  const report = useMemo(() => buildStockReport(devices), [devices]);
 
   // ----- Paginação -----
   useEffect(() => {
@@ -228,7 +205,7 @@ export default function DevicesPage() {
       d.serialImei || d.internalSerial, d.supplier || "",
       d.cost.toFixed(2),
       d.salePrice != null ? d.salePrice.toFixed(2) : "",
-      d.salePrice != null ? (d.salePrice - d.cost).toFixed(2) : "",
+      deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : "",
       d.status, daysInStock(d.createdAt),
       new Date(d.createdAt).toLocaleDateString("pt-BR"),
     ].map((c) => esc(String(c))).join(";"));
@@ -367,20 +344,17 @@ export default function DevicesPage() {
                       <TableCell>{fmt(d.cost)}</TableCell>
                       <TableCell>{d.salePrice != null ? fmt(d.salePrice) : "—"}</TableCell>
                       <TableCell>
-                        {d.salePrice == null ? (
-                          "—"
-                        ) : (
-                          (() => {
-                            const m = d.salePrice - d.cost;
-                            const pct = d.cost > 0 ? (m / d.cost) * 100 : 0;
-                            const cls = m < 0 ? "text-destructive" : pct < 15 ? "text-warning" : "text-success";
-                            return (
-                              <span className={cls} title={pct < 15 && m >= 0 ? "Margem baixa" : undefined}>
-                                {fmt(m)} <span className="text-xs">({pct.toFixed(0)}%)</span>
-                              </span>
-                            );
-                          })()
-                        )}
+                        {(() => {
+                          const m = deviceMargin(d);
+                          if (m == null) return "—";
+                          const pct = deviceMarginPct(d) ?? 0;
+                          const cls = m < 0 ? "text-destructive" : pct < 15 ? "text-warning" : "text-success";
+                          return (
+                            <span className={cls} title={pct < 15 && m >= 0 ? "Margem baixa" : undefined}>
+                              {fmt(m)} <span className="text-xs">({pct.toFixed(0)}%)</span>
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className={daysInStock(d.createdAt) > 30 ? "text-warning font-medium" : ""}>
                         {d.status === "Vendido" ? "—" : `${daysInStock(d.createdAt)}d`}
