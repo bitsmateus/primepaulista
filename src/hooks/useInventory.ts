@@ -21,7 +21,7 @@ export function useInventory() {
     qc.invalidateQueries({ queryKey: ["accessories"] });
 
   // ----- Clientes: persistidos no banco (via API) -----
-  const { data: customers = [] } = useQuery({
+  const { data: customers = [], isLoading: customersLoading } = useQuery({
     queryKey: ["customers"],
     queryFn: api.listCustomers,
   });
@@ -118,6 +118,11 @@ export function useInventory() {
       api.createCustomer(customer),
     onSuccess: invalidateCustomers,
   });
+  const updateCustomerMut = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Omit<Customer, "id" | "createdAt">> }) =>
+      api.updateCustomer(id, patch),
+    onSuccess: invalidateCustomers,
+  });
   const deleteCustomerMut = useMutation({
     mutationFn: (id: string) => api.deleteCustomer(id),
     onSuccess: invalidateCustomers,
@@ -130,6 +135,8 @@ export function useInventory() {
   // Retorna o cliente persistido (com id real do banco)
   const addCustomer = (customer: Omit<Customer, "id" | "createdAt">): Promise<Customer> =>
     addCustomerMut.mutateAsync(customer);
+  const updateCustomer = (id: string, patch: Partial<Omit<Customer, "id" | "createdAt">>): Promise<Customer> =>
+    updateCustomerMut.mutateAsync({ id, patch });
   const deleteCustomer = (id: string) => deleteCustomerMut.mutate(id);
 
   // ----- Buscas / utilidades -----
@@ -220,6 +227,8 @@ export function useInventory() {
     devicesLoading,
     accessories,
     customers,
+    customersLoading,
+    updateCustomer,
     sales,
     addDevice,
     updateDeviceStatus,

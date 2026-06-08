@@ -34,6 +34,22 @@ export async function customerRoutes(app: FastifyInstance) {
     return reply.code(201).send({ customer: row });
   });
 
+  // PATCH /customers/:id — editar cliente
+  app.patch("/customers/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = customerInput.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Dados inválidos" });
+    }
+    const [row] = await db
+      .update(customers)
+      .set(parsed.data)
+      .where(eq(customers.id, id))
+      .returning();
+    if (!row) return reply.code(404).send({ error: "Cliente não encontrado" });
+    return { customer: row };
+  });
+
   // DELETE /customers/:id (somente admin)
   app.delete("/customers/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
     const { id } = req.params as { id: string };

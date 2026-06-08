@@ -279,6 +279,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }).then((d) => mapCustomer(d.customer)),
+  updateCustomer: (id: string, patch: Partial<Omit<Customer, "id" | "createdAt">>) =>
+    request<{ customer: CustomerRow }>(`/customers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }).then((d) => mapCustomer(d.customer)),
   deleteCustomer: (id: string) =>
     request<{ ok: true }>(`/customers/${id}`, { method: "DELETE" }),
 
