@@ -6,17 +6,23 @@ import { whatsappConfig, whatsappInstances } from "../db/schema/index";
 
 // Retorna todas as instâncias. Na primeira vez, migra a config singleton (legado).
 export async function getInstances() {
-  let rows = await db.select().from(whatsappInstances);
+  let rows = await db.select().from(whatsappInstances).orderBy(whatsappInstances.createdAt);
   if (rows.length === 0) {
     const [legacy] = await db.select().from(whatsappConfig).limit(1);
     if (legacy && legacy.instanceUrl && legacy.apiKey) {
-      await db.insert(whatsappInstances).values({
-        name: legacy.instanceName || "Principal",
-        apiKey: legacy.apiKey,
-        instanceUrl: legacy.instanceUrl,
-        instanceName: legacy.instanceName,
+      // Semeia em transação re-checando para evitar duplicar no 1º acesso concorrente
+      await db.transaction(async (tx) => {
+        const existing = await tx.select({ id: whatsappInstances.id }).from(whatsappInstances).limit(1);
+        if (existing.length === 0) {
+          await tx.insert(whatsappInstances).values({
+            name: legacy.instanceName || "Principal",
+            apiKey: legacy.apiKey,
+            instanceUrl: legacy.instanceUrl,
+            instanceName: legacy.instanceName,
+          });
+        }
       });
-      rows = await db.select().from(whatsappInstances);
+      rows = await db.select().from(whatsappInstances).orderBy(whatsappInstances.createdAt);
     }
   }
   return rows;

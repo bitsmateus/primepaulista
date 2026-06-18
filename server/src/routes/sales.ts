@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import {
@@ -117,6 +117,10 @@ export async function saleRoutes(app: FastifyInstance) {
     const s = parsed.data;
     const sellerId = (req.user as JwtUser).sub;
 
+    // Recalcula os totais no servidor (não confia nos valores do cliente)
+    const subtotal = s.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+    const total = Math.max(0, subtotal - s.tradeInDiscount - s.discount);
+
     try {
       const saleId = await db.transaction(async (tx) => {
         // 0) Trava e valida disponibilidade/estoque (evita venda dupla / estoque negativo)
@@ -153,10 +157,10 @@ export async function saleRoutes(app: FastifyInstance) {
             customerId: s.customerId,
             sellerId,
             sellerName: s.sellerName,
-            subtotal: String(s.subtotal),
+            subtotal: String(subtotal),
             tradeInDiscount: String(s.tradeInDiscount),
             discount: String(s.discount),
-            total: String(s.total),
+            total: String(total),
           })
           .returning({ id: sales.id });
 
@@ -338,7 +342,12 @@ export async function saleRoutes(app: FastifyInstance) {
         for (const it of items) {
           if (!it.productId) continue;
           if (it.productType === "device") {
-            await tx.update(devices).set({ status: "Disponível" }).where(eq(devices.id, it.productId));
+            // Só reabilita se ainda estiver "Vendido" (evita reabrir aparelho já
+            // revendido/em manutenção e causar venda dupla do mesmo IMEI)
+            await tx
+              .update(devices)
+              .set({ status: "Disponível" })
+              .where(and(eq(devices.id, it.productId), eq(devices.status, "Vendido")));
           } else {
             const [acc] = await tx
               .select({ quantity: accessories.quantity })

@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index";
 import { saleAttachments, sales } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireRole } from "../plugins/auth";
 import { storageEnabled, uploadObject, removeObject, presignedUrl } from "../storage/minio";
 
 // Detecta o tipo real pelo magic bytes (NF costuma ser PDF; também aceita imagem)
@@ -32,8 +32,8 @@ export async function saleAttachmentRoutes(app: FastifyInstance) {
     return { attachments };
   });
 
-  // POST /sales/:id/attachments  (multipart, campo "file")
-  app.post("/sales/:id/attachments", async (req, reply) => {
+  // POST /sales/:id/attachments  (multipart, campo "file") — somente admin
+  app.post("/sales/:id/attachments", { preHandler: requireRole("admin") }, async (req, reply) => {
     if (!storageEnabled) {
       return reply.code(503).send({ error: "Armazenamento (MinIO) não configurado." });
     }
@@ -62,8 +62,8 @@ export async function saleAttachmentRoutes(app: FastifyInstance) {
     });
   });
 
-  // DELETE /sales/:id/attachments/:attId
-  app.delete("/sales/:id/attachments/:attId", async (req, reply) => {
+  // DELETE /sales/:id/attachments/:attId — somente admin
+  app.delete("/sales/:id/attachments/:attId", { preHandler: requireRole("admin") }, async (req, reply) => {
     const { id, attId } = req.params as { id: string; attId: string };
     const [row] = await db
       .select()

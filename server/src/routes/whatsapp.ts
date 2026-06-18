@@ -16,6 +16,9 @@ function detectImageExt(buf: Buffer): string | null {
 
 type JwtUser = { sub: string; name: string; role: string };
 
+// Aceita apenas http(s) para evitar SSRF a esquemas internos
+const urlSchema = z.string().max(500).url().refine((u) => /^https?:\/\//i.test(u), "URL deve ser http(s)");
+
 // Formato público da instância (NUNCA devolve a apiKey)
 function publicInstance(i: typeof whatsappInstances.$inferSelect, userId: string) {
   return {
@@ -41,17 +44,29 @@ export async function whatsappRoutes(app: FastifyInstance) {
     return { instances: rows.map((i) => publicInstance(i, user.sub)) };
   });
 
+  // Carrega a instância e exige que o usuário seja o dono ou admin
+  async function requireOwnerOrAdmin(id: string, req: { user?: unknown }, reply: FastifyReply) {
+    const inst = await getInstance(id);
+    if (!inst) { reply.code(404).send({ error: "Instância não encontrada" }); return null; }
+    const user = req.user as JwtUser;
+    if (inst.ownerId && inst.ownerId !== user.sub && user.role !== "admin") {
+      reply.code(403).send({ error: "Sem permissão para esta instância." });
+      return null;
+    }
+    return inst;
+  }
+
   // POST /whatsapp/instances — cria uma instância (dono = usuário logado)
   app.post("/whatsapp/instances", async (req, reply) => {
     const p = z
       .object({
         name: z.string().min(1).max(120),
         apiKey: z.string().max(500),
-        instanceUrl: z.string().max(500),
+        instanceUrl: urlSchema,
         instanceName: z.string().max(200).optional().default(""),
       })
       .safeParse(req.body);
-    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos (verifique a URL)" });
     const user = req.user as JwtUser;
     const [row] = await db
       .insert(whatsappInstances)
@@ -67,14 +82,14 @@ export async function whatsappRoutes(app: FastifyInstance) {
       .object({
         name: z.string().min(1).max(120).optional(),
         apiKey: z.string().max(500).optional().default(""),
-        instanceUrl: z.string().max(500).optional(),
+        instanceUrl: urlSchema.optional(),
         instanceName: z.string().max(200).optional(),
         active: z.boolean().optional(),
       })
       .safeParse(req.body);
-    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
-    const cur = await getInstance(id);
-    if (!cur) return reply.code(404).send({ error: "Instância não encontrada" });
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos (verifique a URL)" });
+    const cur = await requireOwnerOrAdmin(id, req, reply);
+    if (!cur) return;
     const user = req.user as JwtUser;
     const [row] = await db
       .update(whatsappInstances)
@@ -90,9 +105,11 @@ export async function whatsappRoutes(app: FastifyInstance) {
     return { instance: publicInstance(row, user.sub) };
   });
 
-  // DELETE /whatsapp/instances/:id
+  // DELETE /whatsapp/instances/:id (dono ou admin)
   app.delete("/whatsapp/instances/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
+    const inst = await requireOwnerOrAdmin(id, req, reply);
+    if (!inst) return;
     await db.delete(whatsappInstances).where(eq(whatsappInstances.id, id));
     return reply.send({ ok: true });
   });
@@ -121,6 +138,8 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   app.get("/whatsapp/instances/:id/qrcode", async (req, reply) => {
     const { id } = req.params as { id: string };
+    const owned = await requireOwnerOrAdmin(id, req, reply);
+    if (!owned) return;
     const inst = await requireInstance(id, reply);
     if (!inst) return;
     const r = await callUazapi(inst, "/instance/qrcode", "GET");
@@ -130,6 +149,8 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   app.post("/whatsapp/instances/:id/disconnect", async (req, reply) => {
     const { id } = req.params as { id: string };
+    const owned = await requireOwnerOrAdmin(id, req, reply);
+    if (!owned) return;
     const inst = await requireInstance(id, reply);
     if (!inst) return;
     await callUazapi(inst, "/instance/logout", "POST");
@@ -138,6 +159,8 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   app.post("/whatsapp/instances/:id/restart", async (req, reply) => {
     const { id } = req.params as { id: string };
+    const owned = await requireOwnerOrAdmin(id, req, reply);
+    if (!owned) return;
     const inst = await requireInstance(id, reply);
     if (!inst) return;
     await callUazapi(inst, "/instance/restart", "POST");
