@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Lead, MessageLog, UazapiConfig, ConnectionStatus, FunnelColumn } from "@/types/crm";
+import { Lead, MessageLog, ConnectionStatus, FunnelColumn } from "@/types/crm";
 import { api, ApiError } from "@/lib/api";
 
 export function useCRM() {
@@ -31,13 +31,22 @@ export function useCRM() {
   };
   const invalidateLogs = () => qc.invalidateQueries({ queryKey: ["messageLogs"] });
 
-  // ----- WhatsApp/Uazapi: config no banco; envio via backend -----
-  const { data: uazapiConfig = { apiKey: "", instanceUrl: "", instanceName: "" } } = useQuery({
-    queryKey: ["whatsappConfig"],
-    queryFn: api.getWhatsappConfig,
+  // ----- WhatsApp/Uazapi: múltiplas instâncias; envio via backend -----
+  const { data: instances = [] } = useQuery({
+    queryKey: ["whatsappInstances"],
+    queryFn: api.listWhatsappInstances,
   });
+  const invalidateInstances = () => qc.invalidateQueries({ queryKey: ["whatsappInstances"] });
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>("");
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [qrCode, setQrCode] = useState<string | null>(null);
+
+  // Seleciona a 1ª instância configurada por padrão
+  useEffect(() => {
+    if (!selectedInstanceId && instances.length) {
+      setSelectedInstanceId((instances.find((i) => i.configured) ?? instances[0]).id);
+    }
+  }, [instances, selectedInstanceId]);
 
   // ===== Colunas do funil =====
   const addColumnMut = useMutation({
@@ -120,21 +129,40 @@ export function useCRM() {
     [messageLogs]
   );
 
-  // ===== WhatsApp/Uazapi (config no banco; envio via backend) =====
-  const saveConfigMut = useMutation({
-    mutationFn: (config: UazapiConfig) => api.saveWhatsappConfig(config),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["whatsappConfig"] }),
-    onError: crmError("Não foi possível salvar a configuração."),
+  // ===== WhatsApp/Uazapi (instâncias; envio via backend) =====
+  const createInstanceMut = useMutation({
+    mutationFn: (input: { name: string; apiKey: string; instanceUrl: string; instanceName?: string }) =>
+      api.createWhatsappInstance(input),
+    onSuccess: invalidateInstances,
+    onError: crmError("Não foi possível criar a instância."),
   });
-  const saveConfig = useCallback(
-    (config: UazapiConfig) => saveConfigMut.mutate(config),
-    [saveConfigMut]
+  const updateInstanceMut = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Parameters<typeof api.updateWhatsappInstance>[1] }) =>
+      api.updateWhatsappInstance(id, input),
+    onSuccess: invalidateInstances,
+    onError: crmError("Não foi possível atualizar a instância."),
+  });
+  const deleteInstanceMut = useMutation({
+    mutationFn: (id: string) => api.deleteWhatsappInstance(id),
+    onSuccess: invalidateInstances,
+    onError: crmError("Não foi possível remover a instância."),
+  });
+  const createInstance = useCallback(
+    (input: { name: string; apiKey: string; instanceUrl: string; instanceName?: string }) =>
+      createInstanceMut.mutateAsync(input),
+    [createInstanceMut]
   );
+  const updateInstance = useCallback(
+    (id: string, input: Parameters<typeof api.updateWhatsappInstance>[1]) =>
+      updateInstanceMut.mutateAsync({ id, input }),
+    [updateInstanceMut]
+  );
+  const deleteInstance = useCallback((id: string) => deleteInstanceMut.mutate(id), [deleteInstanceMut]);
 
-  const fetchQrCode = useCallback(async () => {
+  const fetchQrCode = useCallback(async (id: string) => {
     setConnectionStatus("connecting");
     try {
-      const qrcode = await api.whatsappQrCode();
+      const qrcode = await api.whatsappQrCode(id);
       setQrCode(qrcode);
       return { qrcode };
     } catch (error) {
@@ -143,9 +171,9 @@ export function useCRM() {
     }
   }, []);
 
-  const checkStatus = useCallback(async () => {
+  const checkStatus = useCallback(async (id: string) => {
     try {
-      const status = await api.whatsappStatus();
+      const status = await api.whatsappStatus(id);
       if (status === "open" || status === "connected") {
         setConnectionStatus("connected");
         setQrCode(null);
@@ -161,33 +189,41 @@ export function useCRM() {
     }
   }, []);
 
-  // Autoverifica o status assim que a instância está configurada (corrige envio
-  // bloqueado em Leads/Campanhas sem precisar abrir a aba WhatsApp antes).
+  // Autoverifica o status da instância selecionada (corrige envio bloqueado em
+  // Leads/Campanhas sem precisar abrir a aba WhatsApp antes).
   useEffect(() => {
-    if (uazapiConfig.configured) checkStatus();
-  }, [uazapiConfig.configured, checkStatus]);
+    const inst = instances.find((i) => i.id === selectedInstanceId);
+    if (inst?.configured) checkStatus(inst.id);
+  }, [selectedInstanceId, instances, checkStatus]);
 
-  const disconnectInstance = useCallback(async () => {
-    await api.whatsappDisconnect();
+  const disconnectInstance = useCallback(async (id: string) => {
+    await api.whatsappDisconnect(id);
     setConnectionStatus("disconnected");
     setQrCode(null);
   }, []);
 
-  const restartInstance = useCallback(async () => {
-    await api.whatsappRestart();
+  const restartInstance = useCallback(async (id: string) => {
+    await api.whatsappRestart(id);
     setConnectionStatus("connecting");
   }, []);
 
+  // Envia pela instância informada ou pela selecionada
   const sendMessage = useCallback(
-    (phone: string, message: string): Promise<boolean> => api.whatsappSend(phone, message),
-    []
+    (phone: string, message: string, instanceId?: string): Promise<boolean> => {
+      const id = instanceId || selectedInstanceId;
+      if (!id) return Promise.resolve(false);
+      return api.whatsappSend(id, phone, message);
+    },
+    [selectedInstanceId]
   );
 
   return {
     leads,
     leadsLoading,
     messageLogs,
-    uazapiConfig,
+    instances,
+    selectedInstanceId,
+    setSelectedInstanceId,
     connectionStatus,
     qrCode,
     funnelColumns,
@@ -199,7 +235,9 @@ export function useCRM() {
     addFunnelColumn,
     removeFunnelColumn,
     renameFunnelColumn,
-    saveConfig,
+    createInstance,
+    updateInstance,
+    deleteInstance,
     fetchQrCode,
     checkStatus,
     disconnectInstance,

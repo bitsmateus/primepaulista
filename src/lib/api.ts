@@ -402,24 +402,31 @@ export const api = {
       body: JSON.stringify(input),
     }).then((d) => mapMessageLog(d.messageLog)),
 
-  // ===== WhatsApp (proxy seguro pelo backend) =====
-  getWhatsappConfig: () =>
-    request<{ config: WhatsappConfig }>("/whatsapp/config").then((d) => d.config),
-  saveWhatsappConfig: (config: WhatsappConfig) =>
-    request<{ config: WhatsappConfig }>("/whatsapp/config", {
+  // ===== WhatsApp multinúmero (proxy seguro pelo backend) =====
+  listWhatsappInstances: () =>
+    request<{ instances: WhatsappInstance[] }>("/whatsapp/instances").then((d) => d.instances),
+  createWhatsappInstance: (input: { name: string; apiKey: string; instanceUrl: string; instanceName?: string }) =>
+    request<{ instance: WhatsappInstance }>("/whatsapp/instances", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((d) => d.instance),
+  updateWhatsappInstance: (id: string, input: Partial<{ name: string; apiKey: string; instanceUrl: string; instanceName: string; active: boolean }>) =>
+    request<{ instance: WhatsappInstance }>(`/whatsapp/instances/${id}`, {
       method: "PUT",
-      body: JSON.stringify(config),
-    }).then((d) => d.config),
-  whatsappStatus: () =>
-    request<{ status: string }>("/whatsapp/status").then((d) => d.status),
-  whatsappQrCode: () =>
-    request<{ qrcode: string | null }>("/whatsapp/qrcode").then((d) => d.qrcode),
-  whatsappDisconnect: () =>
-    request<{ ok: true }>("/whatsapp/disconnect", { method: "POST" }),
-  whatsappRestart: () =>
-    request<{ ok: true }>("/whatsapp/restart", { method: "POST" }),
-  whatsappSend: (phone: string, message: string) =>
-    request<{ success: boolean }>("/whatsapp/send", {
+      body: JSON.stringify(input),
+    }).then((d) => d.instance),
+  deleteWhatsappInstance: (id: string) =>
+    request<{ ok: true }>(`/whatsapp/instances/${id}`, { method: "DELETE" }),
+  whatsappStatus: (id: string) =>
+    request<{ status: string }>(`/whatsapp/instances/${id}/status`).then((d) => d.status),
+  whatsappQrCode: (id: string) =>
+    request<{ qrcode: string | null }>(`/whatsapp/instances/${id}/qrcode`).then((d) => d.qrcode),
+  whatsappDisconnect: (id: string) =>
+    request<{ ok: true }>(`/whatsapp/instances/${id}/disconnect`, { method: "POST" }),
+  whatsappRestart: (id: string) =>
+    request<{ ok: true }>(`/whatsapp/instances/${id}/restart`, { method: "POST" }),
+  whatsappSend: (id: string, phone: string, message: string) =>
+    request<{ success: boolean }>(`/whatsapp/instances/${id}/send`, {
       method: "POST",
       body: JSON.stringify({ phone, message }),
     }).then((d) => d.success),
@@ -586,11 +593,16 @@ function mapReceivable(r: ReceivableRow): Receivable {
   };
 }
 
-export interface WhatsappConfig {
-  apiKey: string;
+export interface WhatsappInstance {
+  id: string;
+  name: string;
   instanceUrl: string;
   instanceName: string;
-  configured?: boolean;
+  ownerId: string | null;
+  ownerName: string;
+  active: boolean;
+  configured: boolean;
+  mine: boolean;
 }
 
 export interface Automation {
