@@ -16,6 +16,7 @@ import {
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
+import { salesGrossProfit } from "@/lib/profit";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtShort = (v: number) =>
@@ -91,7 +92,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 }
 
 export default function Dashboard() {
-  const { sales, devices, lowStockAccessories } = useInventoryContext();
+  const { sales, devices, accessories, lowStockAccessories } = useInventoryContext();
   const { orders } = useServiceOrderContext();
 
   const [view, setView] = useState<View>("vendas");
@@ -108,6 +109,10 @@ export default function Dashboard() {
     () => Object.fromEntries(devices.map((d) => [d.id, d])),
     [devices]
   );
+  const accessoryById = useMemo(
+    () => Object.fromEntries(accessories.map((a) => [a.id, a])),
+    [accessories]
+  );
 
   const inSeller = (s: { seller: string }) => seller === "all" || s.seller === seller;
   const periodSales = useMemo(
@@ -121,17 +126,9 @@ export default function Dashboard() {
     const count = periodSales.length;
     const avg = count ? revenue / count : 0;
 
-    // lucro estimado (preço de venda do item - custo do aparelho)
-    let profit = 0;
-    for (const s of periodSales)
-      for (const it of s.items) {
-        if (it.type === "device") {
-          const dev = it.deviceId ? deviceById[it.deviceId] : undefined;
-          profit += it.price * it.quantity - (dev?.cost ?? 0) * it.quantity;
-        } else {
-          profit += it.price * it.quantity * 0.5; // margem estimada acessório
-        }
-      }
+    // margem bruta das vendas: receita líquida − custo real (device + acessório),
+    // ignorando vendas devolvidas (helper compartilhado com o BI)
+    const profit = salesGrossProfit(periodSales, deviceById, accessoryById);
 
     // comparação período anterior
     let delta: number | null = null;
@@ -185,7 +182,7 @@ export default function Dashboard() {
     const attachRate = count ? (withAccessory / count) * 100 : 0;
 
     return { revenue, count, avg, profit, delta, days, byPayment, bySeller, byCategory, topModels, attachRate };
-  }, [periodSales, sales, deviceById, prevStart, prevEnd, seller]);
+  }, [periodSales, sales, deviceById, accessoryById, prevStart, prevEnd, seller]);
 
   // ===================== OS =====================
   const os = useMemo(() => {
@@ -292,7 +289,7 @@ export default function Dashboard() {
               <Kpi label="Faturamento" value={fmt(vendas.revenue)} icon={TrendingUp} tint="bg-success/10 text-success" delta={vendas.delta} />
               <Kpi label="Vendas" value={`${vendas.count}`} icon={ShoppingBag} tint="bg-primary/10 text-primary" />
               <Kpi label="Ticket médio" value={fmt(vendas.avg)} icon={DollarSign} tint="bg-blue-500/10 text-blue-600" />
-              <Kpi label="Lucro estimado" value={fmt(vendas.profit)} hint={`Attach ${vendas.attachRate.toFixed(0)}%`} icon={Percent} tint="bg-emerald-500/10 text-emerald-600" />
+              <Kpi label="Margem de vendas" value={fmt(vendas.profit)} hint={`Attach ${vendas.attachRate.toFixed(0)}%`} icon={Percent} tint="bg-emerald-500/10 text-emerald-600" />
             </div>
 
             <ChartCard title="Faturamento por dia (últimos 30 dias)">

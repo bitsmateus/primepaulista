@@ -5,6 +5,7 @@ import { Sale, Seller } from "@/types/inventory";
 import { ServiceOrder } from "@/types/serviceOrder";
 import { Device, Accessory } from "@/types/inventory";
 import { api } from "@/lib/api";
+import { salesGrossProfit, buildDeviceMap, buildAccessoryMap } from "@/lib/profit";
 import { format, subDays, differenceInDays, isWithinInterval, startOfDay, endOfDay, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devices: Device[], accessories: Accessory[]) {
@@ -100,7 +101,15 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
 
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
 
-  const netProfit = grossRevenue - deviceCosts - partCosts - cardTaxes - totalCommissions - totalExpenses;
+  // Margem bruta das vendas (custo real device + acessório, exclui devolvidas) — mesma
+  // função usada no Dashboard, para os números baterem entre as telas.
+  const devicesById = buildDeviceMap(devices);
+  const accessoriesById = buildAccessoryMap(accessories);
+  const salesProfit = salesGrossProfit(currentMonthSales, devicesById, accessoriesById);
+  // Lucro dos serviços (mão de obra é receita, não custo): cobrado − peça − taxas.
+  const servicesProfit = completedOS.reduce((s, o) => s + (o.chargedAmount - o.partCost - o.taxes), 0);
+
+  const netProfit = salesProfit + servicesProfit - cardTaxes - totalCommissions - totalExpenses;
   const prevNetProfit = prevGrossRevenue - totalExpenses * 0.95; // approximate prev month
 
   // Daily cash
@@ -190,7 +199,7 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
 
   // Open OS count
   const openOSCount = serviceOrders.filter(o => o.status !== "Entregue / Finalizado").length;
-  const osServiceProfit = completedOS.reduce((s, o) => s + (o.chargedAmount - o.partCost - o.taxes), 0);
+  const osServiceProfit = servicesProfit;
   const pendingOver3Days = serviceOrders.filter(o => o.status !== "Entregue / Finalizado" && differenceInDays(now, o.createdAt) > 3).length;
 
   return {
