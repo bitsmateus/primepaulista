@@ -71,22 +71,44 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
   const grossRevenue = grossRevenueSales + grossRevenueServices;
   const prevGrossRevenue = prevGrossRevenueSales + prevGrossRevenueServices;
 
-  // Costs
-  const deviceCosts = currentMonthSales.reduce((s, sale) => {
-    return s + sale.items.filter(i => i.type === "device").reduce((sum, item) => {
-      const dev = devices.find(d => d.id === item.deviceId);
-      return sum + (dev?.cost || 0);
+  const devicesById = buildDeviceMap(devices);
+  const accessoriesById = buildAccessoryMap(accessories);
+
+  // ----- Custos (helpers reaproveitados para mês atual e anterior) -----
+  const sumCost = (list: Sale[], type: "device" | "accessory") =>
+    list.reduce((s, sale) => s + sale.items.filter(i => i.type === type).reduce((sum, item) => {
+      const cost = type === "device"
+        ? (item.deviceId ? devicesById[item.deviceId]?.cost ?? 0 : 0)
+        : (item.accessoryId ? accessoriesById[item.accessoryId]?.cost ?? 0 : 0);
+      return sum + cost * item.quantity;
+    }, 0), 0);
+
+  const cardTaxesOf = (list: Sale[]) => {
+    const cardPayments = list.reduce((s, sale) =>
+      s + sale.payments.filter(p => p.method === "Cartão de Crédito" || p.method === "Cartão de Débito")
+        .reduce((sum, p) => sum + p.amount, 0), 0);
+    return cardPayments * (cardTaxRate / 100);
+  };
+
+  const commissionsOf = (list: Sale[]) =>
+    list.reduce((total, sale) => {
+      const cfg = commissionConfigs.find(c => c.seller === sale.seller);
+      if (!cfg) return total;
+      return total + sale.items.reduce((s, item) => {
+        const pct = item.type === "device" ? cfg.devicePercent : cfg.accessoryPercent;
+        return s + (item.price * item.quantity * pct / 100);
+      }, 0);
     }, 0);
-  }, 0);
 
+  const expensesIn = (start: Date, end: Date) =>
+    expenses.filter(e => inRange(e.date, start, end)).reduce((s, e) => s + e.amount, 0);
+
+  const deviceCosts = sumCost(currentMonthSales, "device");
+  const accessoryCosts = sumCost(currentMonthSales, "accessory");
   const partCosts = completedOS.reduce((s, o) => s + o.partCost, 0);
+  const cardTaxes = cardTaxesOf(currentMonthSales);
 
-  const cardPayments = currentMonthSales.reduce((s, sale) => {
-    return s + sale.payments.filter(p => p.method === "Cartão de Crédito" || p.method === "Cartão de Débito").reduce((sum, p) => sum + p.amount, 0);
-  }, 0);
-  const cardTaxes = cardPayments * (cardTaxRate / 100);
-
-  // Commissions
+  // Comissões por vendedor (mês atual) para a aba Equipe
   const sellerCommissions = useMemo(() => {
     const result: Record<string, number> = {};
     currentMonthSales.forEach(sale => {
@@ -99,21 +121,24 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
     });
     return result;
   }, [currentMonthSales, commissionConfigs]);
-
   const totalCommissions = Object.values(sellerCommissions).reduce((s, v) => s + v, 0);
 
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  // Despesas do MÊS (não o histórico inteiro) para o lucro mensal
+  const totalExpenses = expensesIn(monthStart, monthEnd);
 
   // Margem bruta das vendas (custo real device + acessório, exclui devolvidas) — mesma
   // função usada no Dashboard, para os números baterem entre as telas.
-  const devicesById = buildDeviceMap(devices);
-  const accessoriesById = buildAccessoryMap(accessories);
   const salesProfit = salesGrossProfit(currentMonthSales, devicesById, accessoriesById);
   // Lucro dos serviços (mão de obra é receita, não custo): cobrado − peça − taxas.
   const servicesProfit = completedOS.reduce((s, o) => s + (o.chargedAmount - o.partCost - o.taxes), 0);
 
   const netProfit = salesProfit + servicesProfit - cardTaxes - totalCommissions - totalExpenses;
-  const prevNetProfit = prevGrossRevenue - totalExpenses * 0.95; // approximate prev month
+
+  // Lucro do mês anterior pela MESMA fórmula (antes era um placeholder inventado)
+  const prevSalesProfit = salesGrossProfit(prevMonthSales, devicesById, accessoriesById);
+  const prevServicesProfit = prevCompletedOS.reduce((s, o) => s + (o.chargedAmount - o.partCost - o.taxes), 0);
+  const prevNetProfit =
+    prevSalesProfit + prevServicesProfit - cardTaxesOf(prevMonthSales) - commissionsOf(prevMonthSales) - expensesIn(prevMonthStart, prevMonthEnd);
 
   // Daily cash
   const getDailyCash = (dateStr: string): DailyCashEntry => {
@@ -211,7 +236,7 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
     commissionConfigs, updateCommission,
     grossRevenue, prevGrossRevenue,
     netProfit, prevNetProfit,
-    deviceCosts, partCosts, cardTaxes, totalCommissions, totalExpenses,
+    deviceCosts, accessoryCosts, partCosts, cardTaxes, totalCommissions, totalExpenses,
     getDailyCash,
     sellerPerformance,
     staleDevices, staleAccessories, totalStaleValue,

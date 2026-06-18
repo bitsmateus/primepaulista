@@ -10,14 +10,13 @@ interface Props {
 export function OverviewTab({ financial }: Props) {
   const {
     grossRevenue, netProfit, prevNetProfit,
-    deviceCosts, partCosts, cardTaxes, totalCommissions, totalExpenses,
+    deviceCosts, accessoryCosts, partCosts, cardTaxes, totalCommissions, totalExpenses,
     revenueTrend, monthlyComparison,
     openOSCount, osServiceProfit, pendingOver3Days,
   } = financial;
 
-  const profitChange = prevNetProfit !== 0
-    ? ((netProfit - prevNetProfit) / Math.abs(prevNetProfit)) * 100
-    : 0;
+  const hasPrev = prevNetProfit !== 0;
+  const profitChange = hasPrev ? ((netProfit - prevNetProfit) / Math.abs(prevNetProfit)) * 100 : 0;
   const isUp = profitChange >= 0;
 
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -43,8 +42,8 @@ export function OverviewTab({ financial }: Props) {
               {isUp ? <TrendingUp className="h-4 w-4 text-success" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
             </div>
             <p className="mt-2 text-2xl font-semibold text-foreground">{fmt(netProfit)}</p>
-            <p className={`mt-1 text-xs font-medium ${isUp ? "text-success" : "text-destructive"}`}>
-              {isUp ? "+" : ""}{profitChange.toFixed(1)}% vs mês anterior
+            <p className={`mt-1 text-xs font-medium ${hasPrev ? (isUp ? "text-success" : "text-destructive") : "text-muted-foreground"}`}>
+              {hasPrev ? `${isUp ? "+" : ""}${profitChange.toFixed(1)}% vs mês anterior` : "sem mês anterior p/ comparar"}
             </p>
           </CardContent>
         </Card>
@@ -77,13 +76,14 @@ export function OverviewTab({ financial }: Props) {
           <CardTitle className="text-base">Composição de Custos</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             {[
               { label: "Custo Aparelhos", value: deviceCosts },
+              { label: "Custo Acessórios", value: accessoryCosts },
               { label: "Custo Peças", value: partCosts },
               { label: "Taxa Cartão", value: cardTaxes },
               { label: "Comissões", value: totalCommissions },
-              { label: "Despesas Fixas", value: totalExpenses },
+              { label: "Despesas (mês)", value: totalExpenses },
             ].map(item => (
               <div key={item.label} className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">{item.label}</p>
