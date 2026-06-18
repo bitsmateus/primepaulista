@@ -3,9 +3,29 @@ import { onlyDigits } from "@/lib/customers";
 
 const DAY = 1000 * 60 * 60 * 24;
 
+// === Política de garantia (centralizada — AJUSTE AQUI se mudar) ===
+export const WARRANTY_DAYS = {
+  lacrado: 365, // aparelho lacrado (garantia Apple)
+  seminovo: 90, // aparelho seminovo
+  servico: 90, // serviço de assistência (OS)
+};
+
+export const WARRANTY_TEXT = {
+  lacrado: "Garantia oficial Apple de 1 ano",
+  seminovo: "Garantia NX Apple de 90 dias contra defeitos de fabricação",
+  servicoTitulo: "Garantia de 90 dias para o serviço realizado",
+  servicoDescricao:
+    "Cobre exclusivamente defeitos relacionados ao reparo/peça executados nesta OS. Não cobre danos por mau uso, quedas, contato com líquidos ou violação do lacre técnico.",
+};
+
+// Texto de garantia do aparelho vendido conforme a condição.
+export function saleWarrantyText(condition: string): string {
+  return condition === "Lacrado" ? WARRANTY_TEXT.lacrado : WARRANTY_TEXT.seminovo;
+}
+
 // Regra da loja: Lacrado = 1 ano (garantia Apple); Seminovo/demais = 90 dias.
 export function warrantyDaysForCondition(condition: string): number {
-  return condition === "Lacrado" ? 365 : 90;
+  return condition === "Lacrado" ? WARRANTY_DAYS.lacrado : WARRANTY_DAYS.seminovo;
 }
 
 export function warrantyUntil(saleDate: Date, days: number): Date {

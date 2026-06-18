@@ -1,5 +1,6 @@
 import { Sale, Device } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
+import { saleWarrantyText } from "@/lib/warranty";
 
 export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   const formatCurrency = (v: number) =>
@@ -26,7 +27,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
           <p style="font-weight:600;margin:0 0 4px;">${device.model} – ${formatCapacity(device.capacity)} ${device.color}</p>
           <p style="margin:0;font-size:12px;">Serial/IMEI: ${device.serialImei || device.internalSerial}</p>
           <p style="margin:8px 0 0;font-size:13px;font-weight:600;color:${isNew ? "#0a84ff" : "#30d158"};">
-            ${isNew ? "Garantia oficial Apple de 1 ano" : "Garantia NX Apple de 90 dias contra defeitos de fabricação"}
+            ${saleWarrantyText(device.condition)}
           </p>
         </div>`;
     })

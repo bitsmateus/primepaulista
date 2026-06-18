@@ -1,7 +1,8 @@
 import { ServiceOrder } from "@/types/serviceOrder";
+import { WARRANTY_DAYS, WARRANTY_TEXT } from "@/lib/warranty";
 
-// Garantia padrão do reparo (dias). Ajuste aqui se a política mudar.
-export const OS_WARRANTY_DAYS = 90;
+// Garantia padrão do reparo (dias). Política centralizada em src/lib/warranty.ts.
+export const OS_WARRANTY_DAYS = WARRANTY_DAYS.servico;
 
 export function generateOSReceiptHTML(order: ServiceOrder): string {
   const formatCurrency = (v: number) =>
@@ -97,11 +98,10 @@ export function generateOSReceiptHTML(order: ServiceOrder): string {
     <div class="section-title">Certificado de Garantia</div>
     <div class="box">
       <p style="font-weight:600;color:#30d158;margin-bottom:6px;">
-        Garantia de ${OS_WARRANTY_DAYS} dias para o serviço realizado
+        ${WARRANTY_TEXT.servicoTitulo}
       </p>
       <p class="text">
-        Cobre exclusivamente defeitos relacionados ao reparo/peça executados nesta OS.
-        Não cobre danos por mau uso, quedas, contato com líquidos ou violação do lacre técnico.
+        ${WARRANTY_TEXT.servicoDescricao}
       </p>
       <p class="text" style="margin-top:6px;"><strong>Válida até:</strong> ${formatDay(warrantyEnd)}</p>
     </div>
