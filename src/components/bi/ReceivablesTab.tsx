@@ -72,6 +72,10 @@ export function ReceivablesTab() {
   const customerName = (id: string | null) =>
     customers.find((c) => c.id === id)?.name ?? "—";
 
+  const now = new Date();
+  const effectiveStatus = (r: { status: string; dueDate: Date | null }) =>
+    r.status !== "pago" && r.dueDate && new Date(r.dueDate).getTime() < now.getTime() ? "atrasado" : r.status;
+
   const totalPending = receivables
     .filter((r) => r.status !== "pago")
     .reduce((s, r) => s + r.amount, 0);
@@ -145,7 +149,7 @@ export function ReceivablesTab() {
                     <TableCell>{fmt(r.amount)}</TableCell>
                     <TableCell>{r.dueDate ? r.dueDate.toLocaleDateString("pt-BR") : "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant[r.status]}>{r.status}</Badge>
+                      <Badge variant={statusVariant[effectiveStatus(r)]}>{effectiveStatus(r)}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       {r.status !== "pago" && (

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function GarantiasPage() {
-  const { sales } = useInventoryContext();
+  const { sales, salesLoading } = useInventoryContext();
   const [search, setSearch] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
 
@@ -100,7 +100,7 @@ export default function GarantiasPage() {
                   {filtered.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                        Nenhum aparelho encontrado.
+                        {salesLoading ? "Carregando…" : "Nenhum aparelho encontrado."}
                       </TableCell>
                     </TableRow>
                   )}

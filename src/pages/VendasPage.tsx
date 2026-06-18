@@ -40,7 +40,7 @@ function inPeriod(date: Date, period: string, now: Date): boolean {
 }
 
 export default function VendasPage() {
-  const { sales, devices, customers, returnSale, updateSale } = useInventoryContext();
+  const { sales, salesLoading, devices, customers, returnSale, updateSale } = useInventoryContext();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
@@ -224,7 +224,7 @@ export default function VendasPage() {
                   {filtered.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                        Nenhuma venda encontrada.
+                        {salesLoading ? "Carregando vendas…" : "Nenhuma venda encontrada."}
                       </TableCell>
                     </TableRow>
                   )}

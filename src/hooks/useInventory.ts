@@ -29,7 +29,7 @@ export function useInventory() {
     qc.invalidateQueries({ queryKey: ["customers"] });
 
   // ----- Vendas: lidas do banco (com itens/pagamentos) para o BI/financeiro -----
-  const { data: sales = [] } = useQuery({
+  const { data: sales = [], isLoading: salesLoading } = useQuery({
     queryKey: ["sales"],
     queryFn: api.listSalesFull,
   });
@@ -261,6 +261,7 @@ export function useInventory() {
     customersLoading,
     updateCustomer,
     sales,
+    salesLoading,
     addDevice,
     updateDeviceStatus,
     updateDevice,

@@ -19,6 +19,7 @@ export function SaleAttachments({ saleId }: { saleId: string }) {
   const delMut = useMutation({
     mutationFn: (attId: string) => api.deleteSaleAttachment(saleId, attId),
     onSuccess: invalidate,
+    onError: () => toast.error("Falha ao remover anexo."),
   });
 
   const handleFile = async (file: File) => {
@@ -54,10 +55,10 @@ export function SaleAttachments({ saleId }: { saleId: string }) {
             <div key={a.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="flex-1 truncate">{a.filename}</span>
-              <a href={a.url} target="_blank" rel="noopener noreferrer" title="Abrir/baixar">
+              <a href={a.url} target="_blank" rel="noopener noreferrer" title="Abrir/baixar" aria-label="Abrir ou baixar anexo">
                 <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-foreground" />
               </a>
-              <button onClick={() => delMut.mutate(a.id)} title="Remover">
+              <button onClick={() => delMut.mutate(a.id)} title="Remover" aria-label="Remover anexo">
                 <Trash2 className="h-4 w-4 text-destructive" />
               </button>
             </div>

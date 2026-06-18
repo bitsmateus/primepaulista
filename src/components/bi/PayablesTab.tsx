@@ -47,8 +47,13 @@ export function PayablesTab() {
   const statusMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: "pendente" | "pago" }) => api.updatePayableStatus(id, status),
     onSuccess: invalidate,
+    onError: () => toast.error("Falha ao atualizar a conta."),
   });
-  const delMut = useMutation({ mutationFn: (id: string) => api.deletePayable(id), onSuccess: invalidate });
+  const delMut = useMutation({
+    mutationFn: (id: string) => api.deletePayable(id),
+    onSuccess: invalidate,
+    onError: () => toast.error("Falha ao excluir a conta."),
+  });
 
   const now = new Date();
   const isOverdue = (d: Date | null, status: string) => !!d && status !== "pago" && d.getTime() < now.getTime();
@@ -113,6 +118,7 @@ export function PayablesTab() {
           {payables.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma conta a pagar registrada.</p>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -153,6 +159,7 @@ export function PayablesTab() {
                 })}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

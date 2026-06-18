@@ -666,7 +666,15 @@ function mapLead(r: LeadRow): Lead {
   };
 }
 function mapMessageLog(r: MessageLogRow): MessageLog {
-  return { ...r, sentAt: new Date(r.sentAt) };
+  return {
+    ...r,
+    recipientId: r.recipientId ?? "",
+    recipientName: r.recipientName ?? "",
+    recipientPhone: r.recipientPhone ?? "",
+    templateType: r.templateType ?? "",
+    message: r.message ?? "",
+    sentAt: new Date(r.sentAt),
+  };
 }
 
 export interface OrderPhoto {

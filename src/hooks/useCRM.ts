@@ -46,9 +46,10 @@ export function useCRM() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [qrCode, setQrCode] = useState<string | null>(null);
 
-  // Seleciona a 1ª instância configurada por padrão
+  // Seleciona a 1ª instância configurada; re-seleciona se a atual sumiu (excluída)
   useEffect(() => {
-    if (!selectedInstanceId && instances.length) {
+    if (instances.length === 0) return;
+    if (!instances.find((i) => i.id === selectedInstanceId)) {
       setSelectedInstanceId((instances.find((i) => i.configured) ?? instances[0]).id);
     }
   }, [instances, selectedInstanceId]);
@@ -174,7 +175,7 @@ export function useCRM() {
   });
   const deleteInstanceMut = useMutation({
     mutationFn: (id: string) => api.deleteWhatsappInstance(id),
-    onSuccess: invalidateInstances,
+    onSuccess: () => { invalidateInstances(); toast.success("Número removido."); },
     onError: crmError("Não foi possível remover a instância."),
   });
   const createInstance = useCallback(
@@ -222,6 +223,9 @@ export function useCRM() {
   // Autoverifica o status da instância selecionada (corrige envio bloqueado em
   // Leads/Campanhas sem precisar abrir a aba WhatsApp antes).
   useEffect(() => {
+    // Ao trocar de número, zera status/QR do anterior antes de reverificar
+    setQrCode(null);
+    setConnectionStatus("disconnected");
     const inst = instances.find((i) => i.id === selectedInstanceId);
     if (inst?.configured) checkStatus(inst.id);
   }, [selectedInstanceId, instances, checkStatus]);

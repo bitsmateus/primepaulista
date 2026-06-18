@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 export default function WhatsAppTab() {
@@ -24,6 +28,7 @@ export default function WhatsAppTab() {
   const [instanceUrl, setInstanceUrl] = useState("");
   const [instanceName, setInstanceName] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const selected = instances.find((i) => i.id === selectedInstanceId) ?? null;
 
@@ -101,7 +106,7 @@ export default function WhatsAppTab() {
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(i.id); }}>
                 <RefreshCw className="h-4 w-4 text-muted-foreground" />
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); deleteInstance(i.id); }}>
+              <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Remover número" onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: i.id, name: i.name }); }}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </div>
@@ -190,6 +195,26 @@ export default function WhatsAppTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover número?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && <>Remover o número <strong>{deleteTarget.name}</strong>? Esta ação não pode ser desfeita.</>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteTarget) deleteInstance(deleteTarget.id); setDeleteTarget(null); }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

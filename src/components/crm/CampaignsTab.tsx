@@ -11,6 +11,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { buildRecipients, filterRecipients, personalizeMessage } from "@/lib/crm";
@@ -226,7 +230,7 @@ export default function CampaignsTab() {
             </div>
             <div className="w-40">
               <Label>Intervalo (ms)</Label>
-              <Input type="number" value={intervalMs} onChange={(e) => setIntervalMs(Number(e.target.value))} min={1000} step={500} />
+              <Input type="number" value={intervalMs} onChange={(e) => setIntervalMs(Math.max(1000, Number(e.target.value) || 3000))} min={1000} step={500} />
             </div>
           </div>
 
@@ -251,9 +255,25 @@ export default function CampaignsTab() {
                   <X className="h-4 w-4 mr-1" /> Cancelar
                 </Button>
               ) : (
-                <Button onClick={handleBulkSend} disabled={selectedInView.length === 0 || connectionStatus !== "connected"}>
-                  <Send className="h-4 w-4 mr-1" /> Disparar em Massa
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button disabled={selectedInView.length === 0 || connectionStatus !== "connected"}>
+                      <Send className="h-4 w-4 mr-1" /> Disparar em Massa
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Confirmar disparo</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Enviar a mensagem para <strong>{selectedInView.length}</strong> destinatário(s){imageUrl ? " com imagem" : ""}?
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleBulkSend}>Disparar</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
           </div>

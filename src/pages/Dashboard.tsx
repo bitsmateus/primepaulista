@@ -16,6 +16,8 @@ import {
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { canSeeCost } from "@/lib/permissions";
 import { salesGrossProfit } from "@/lib/profit";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -94,6 +96,8 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 export default function Dashboard() {
   const { sales, devices, accessories, lowStockAccessories } = useInventoryContext();
   const { orders } = useServiceOrderContext();
+  const { user } = useAuth();
+  const showCost = canSeeCost(user?.role);
 
   const [view, setView] = useState<View>("vendas");
   const [period, setPeriod] = useState<Period>("30d");
@@ -292,7 +296,9 @@ export default function Dashboard() {
               <Kpi label="Faturamento" value={fmt(vendas.revenue)} icon={TrendingUp} tint="bg-success/10 text-success" delta={vendas.delta} />
               <Kpi label="Vendas" value={`${vendas.count}`} icon={ShoppingBag} tint="bg-primary/10 text-primary" />
               <Kpi label="Ticket médio" value={fmt(vendas.avg)} icon={DollarSign} tint="bg-blue-500/10 text-blue-600" />
-              <Kpi label="Margem de vendas" value={fmt(vendas.profit)} hint={`Attach ${vendas.attachRate.toFixed(0)}%`} icon={Percent} tint="bg-emerald-500/10 text-emerald-600" />
+              {showCost
+                ? <Kpi label="Margem de vendas" value={fmt(vendas.profit)} hint={`Attach ${vendas.attachRate.toFixed(0)}%`} icon={Percent} tint="bg-emerald-500/10 text-emerald-600" />
+                : <Kpi label="Taxa de attach" value={`${vendas.attachRate.toFixed(0)}%`} icon={Percent} tint="bg-emerald-500/10 text-emerald-600" />}
             </div>
 
             <ChartCard title="Faturamento por dia (últimos 30 dias)">
@@ -371,7 +377,7 @@ export default function Dashboard() {
               <Kpi label="OS abertas" value={`${os.openCount}`} icon={Wrench} tint="bg-primary/10 text-primary" />
               <Kpi label="Atrasadas (>3 dias)" value={`${os.overdue}`} icon={AlertTriangle} tint="bg-destructive/10 text-destructive" />
               <Kpi label="Faturamento serviços" value={fmt(os.servRevenue)} hint={`${os.completedCount} concluídas`} icon={DollarSign} tint="bg-success/10 text-success" />
-              <Kpi label="Lucro serviços" value={fmt(os.servProfit)} icon={Percent} tint="bg-emerald-500/10 text-emerald-600" />
+              {showCost && <Kpi label="Lucro serviços" value={fmt(os.servProfit)} icon={Percent} tint="bg-emerald-500/10 text-emerald-600" />}
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
@@ -423,8 +429,8 @@ export default function Dashboard() {
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Kpi label="Aparelhos em loja" value={`${estoque.inStockCount}`} icon={Package} tint="bg-primary/10 text-primary" />
-              <Kpi label="Capital investido" value={fmt(estoque.stockValue)} icon={DollarSign} tint="bg-emerald-500/10 text-emerald-600" />
-              <Kpi label="Margem potencial" value={fmt(estoque.potentialMargin)} icon={TrendingUp} tint="bg-success/10 text-success" />
+              {showCost && <Kpi label="Capital investido" value={fmt(estoque.stockValue)} icon={DollarSign} tint="bg-emerald-500/10 text-emerald-600" />}
+              {showCost && <Kpi label="Margem potencial" value={fmt(estoque.potentialMargin)} icon={TrendingUp} tint="bg-success/10 text-success" />}
               <Kpi label="Parados >30 dias" value={`${estoque.staleCount}`} icon={Clock} tint="bg-warning/10 text-warning" />
             </div>
 

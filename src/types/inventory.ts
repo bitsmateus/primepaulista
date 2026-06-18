@@ -43,7 +43,7 @@ export interface Accessory {
 // PDV Types
 export type LeadOrigin = "Instagram" | "Indicação" | "Tráfego Pago";
 export type PaymentMethod = "PIX" | "Dinheiro" | "Cartão de Crédito" | "Cartão de Débito";
-export type Seller = "Gabriel" | "Matheus" | "Tassio";
+export type Seller = string; // back armazena seller_name livre; vendedores reais: Gabriel/Matheus/Tassio
 
 export interface Customer {
   id: string;
