@@ -13,6 +13,7 @@ import { accessoryRoutes } from "./routes/accessories";
 import { customerRoutes } from "./routes/customers";
 import { saleRoutes } from "./routes/sales";
 import { serviceOrderRoutes } from "./routes/serviceOrders";
+import { saleAttachmentRoutes } from "./routes/saleAttachments";
 import { serviceOrderPhotoRoutes } from "./routes/serviceOrderPhotos";
 import { crmRoutes } from "./routes/crm";
 import { whatsappRoutes } from "./routes/whatsapp";
@@ -57,6 +58,7 @@ export function buildApp() {
   app.register(accessoryRoutes);
   app.register(customerRoutes);
   app.register(saleRoutes);
+  app.register(saleAttachmentRoutes);
   app.register(serviceOrderRoutes);
   app.register(serviceOrderPhotoRoutes);
   app.register(crmRoutes);

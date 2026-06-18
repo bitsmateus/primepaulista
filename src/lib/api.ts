@@ -311,6 +311,15 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  listSaleAttachments: (id: string) =>
+    request<{ attachments: SaleAttachment[] }>(`/sales/${id}/attachments`).then((d) => d.attachments),
+  uploadSaleAttachment: (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ attachment: SaleAttachment }>(`/sales/${id}/attachments`, { method: "POST", body: fd }).then((d) => d.attachment);
+  },
+  deleteSaleAttachment: (id: string, attId: string) =>
+    request<{ ok: true }>(`/sales/${id}/attachments/${attId}`, { method: "DELETE" }),
 
   // Service Orders
   listServiceOrders: () =>
@@ -661,6 +670,13 @@ export interface SalePayload {
     condition?: "Lacrado" | "Seminovo";
     batteryHealth?: number;
   };
+}
+
+export interface SaleAttachment {
+  id: string;
+  filename: string;
+  url: string;
+  createdAt: string;
 }
 
 export interface SaleUpdate {

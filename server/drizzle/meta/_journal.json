@@ -99,6 +99,13 @@
       "when": 1781790942915,
       "tag": "0013_accounts_payable",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1781791317271,
+      "tag": "0014_sale_attachments",
+      "breakpoints": true
     }
   ]
 }

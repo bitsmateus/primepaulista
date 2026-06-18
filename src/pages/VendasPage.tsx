@@ -10,6 +10,7 @@ import {
   saleMatchesSearch, saleItemsSummary, salePaymentLabel, buildSalesSummary, computeSaleTotal,
 } from "@/lib/sales";
 import { isReturned, canReturn } from "@/lib/returns";
+import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -268,6 +269,10 @@ export default function VendasPage() {
                     <div key={p.id} className="flex justify-between"><span>{p.method}{p.installments && p.installments > 1 ? ` (${p.installments}x)` : ""}</span><span>{fmt(p.amount)}</span></div>
                   ))}
                 </div>
+              </div>
+              <div className="border-t pt-3">
+                <Label className="text-xs text-muted-foreground">Nota fiscal / anexos</Label>
+                <div className="mt-2"><SaleAttachments saleId={viewSale.id} /></div>
               </div>
               <Button variant="outline" className="w-full" onClick={() => printReceipt(viewSale, devices)}>
                 <Printer className="h-4 w-4 mr-1" /> Imprimir 2ª via

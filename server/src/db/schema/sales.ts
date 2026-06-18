@@ -72,7 +72,19 @@ export const saleReturns = pgTable("sale_returns", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Anexos da venda (nota fiscal, comprovantes) — arquivo no MinIO
+export const saleAttachments = pgTable("sale_attachments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  saleId: uuid("sale_id")
+    .notNull()
+    .references(() => sales.id, { onDelete: "cascade" }),
+  objectKey: text("object_key").notNull(),
+  filename: text("filename").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Sale = typeof sales.$inferSelect;
 export type SaleItem = typeof saleItems.$inferSelect;
+export type SaleAttachment = typeof saleAttachments.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type TradeIn = typeof tradeIns.$inferSelect;
