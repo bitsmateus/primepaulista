@@ -476,6 +476,21 @@ export const api = {
     }).then((d) => mapReceivable(d.receivable)),
   deleteReceivable: (id: string) =>
     request<{ ok: true }>(`/receivables/${id}`, { method: "DELETE" }),
+
+  listPayables: () =>
+    request<{ payables: PayableRow[] }>("/payables").then((d) => d.payables.map(mapPayable)),
+  createPayable: (input: { description: string; category?: string; amount: number; dueDate?: string; recurring?: boolean }) =>
+    request<{ payable: PayableRow }>("/payables", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((d) => mapPayable(d.payable)),
+  updatePayableStatus: (id: string, status: Payable["status"]) =>
+    request<{ payable: PayableRow }>(`/payables/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }).then((d) => mapPayable(d.payable)),
+  deletePayable: (id: string) =>
+    request<{ ok: true }>(`/payables/${id}`, { method: "DELETE" }),
 };
 
 // ----- Mapeamento financeiro -----
@@ -520,6 +535,38 @@ function mapCommission(r: CommissionRow): SellerCommissionConfig {
     accessoryPercent: Number(r.accessoryPercent),
   };
 }
+export interface Payable {
+  id: string;
+  description: string;
+  category: string;
+  amount: number;
+  dueDate: Date | null;
+  status: "pendente" | "pago" | "atrasado";
+  paidAt: Date | null;
+  recurring: boolean;
+  createdAt: Date;
+}
+interface PayableRow {
+  id: string;
+  description: string;
+  category: string;
+  amount: string;
+  dueDate: string | null;
+  status: "pendente" | "pago" | "atrasado";
+  paidAt: string | null;
+  recurring: boolean;
+  createdAt: string;
+}
+function mapPayable(r: PayableRow): Payable {
+  return {
+    ...r,
+    amount: Number(r.amount),
+    dueDate: r.dueDate ? new Date(r.dueDate) : null,
+    paidAt: r.paidAt ? new Date(r.paidAt) : null,
+    createdAt: new Date(r.createdAt),
+  };
+}
+
 function mapReceivable(r: ReceivableRow): Receivable {
   return {
     ...r,

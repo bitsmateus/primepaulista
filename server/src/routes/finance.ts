@@ -7,6 +7,7 @@ import {
   sangrias,
   sellerCommissions,
   accountsReceivable,
+  accountsPayable,
 } from "../db/schema/index";
 import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
@@ -191,6 +192,57 @@ export async function financeRoutes(app: FastifyInstance) {
   app.delete("/receivables/:id", async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(accountsReceivable).where(eq(accountsReceivable.id, id));
+    return { ok: true };
+  });
+
+  // ===== Contas a pagar =====
+  app.get("/payables", async () => {
+    const rows = await db.select().from(accountsPayable).orderBy(desc(accountsPayable.createdAt));
+    return { payables: rows };
+  });
+
+  app.post("/payables", async (req, reply) => {
+    const p = z
+      .object({
+        description: z.string().min(1).max(300),
+        category: z.string().max(100).optional().default(""),
+        amount: z.coerce.number().min(0),
+        dueDate: z.string().optional(),
+        recurring: z.boolean().optional().default(false),
+      })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const [row] = await db
+      .insert(accountsPayable)
+      .values({
+        description: p.data.description,
+        category: p.data.category,
+        amount: String(p.data.amount),
+        recurring: p.data.recurring,
+        ...(p.data.dueDate ? { dueDate: new Date(p.data.dueDate) } : {}),
+      })
+      .returning();
+    return reply.code(201).send({ payable: row });
+  });
+
+  app.patch("/payables/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z
+      .object({ status: z.enum(["pendente", "pago", "atrasado"]) })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const [row] = await db
+      .update(accountsPayable)
+      .set({ status: p.data.status, paidAt: p.data.status === "pago" ? new Date() : null })
+      .where(eq(accountsPayable.id, id))
+      .returning();
+    if (!row) return reply.code(404).send({ error: "Conta não encontrada" });
+    return { payable: row };
+  });
+
+  app.delete("/payables/:id", async (req) => {
+    const { id } = req.params as { id: string };
+    await db.delete(accountsPayable).where(eq(accountsPayable.id, id));
     return { ok: true };
   });
 }

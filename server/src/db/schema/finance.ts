@@ -39,6 +39,18 @@ export const accountsReceivable = pgTable("accounts_receivable", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const accountsPayable = pgTable("accounts_payable", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  description: text("description").notNull().default(""),
+  category: text("category").notNull().default(""),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  dueDate: timestamp("due_date", { withTimezone: true }),
+  status: receivableStatusEnum("status").notNull().default("pendente"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  recurring: boolean("recurring").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const sellerCommissions = pgTable("seller_commissions", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Configuração por nome do vendedor (mesmo modelo do PDV/relatórios)
@@ -54,4 +66,5 @@ export const sellerCommissions = pgTable("seller_commissions", {
 export type Expense = typeof expenses.$inferSelect;
 export type Sangria = typeof sangrias.$inferSelect;
 export type AccountReceivable = typeof accountsReceivable.$inferSelect;
+export type AccountPayable = typeof accountsPayable.$inferSelect;
 export type SellerCommission = typeof sellerCommissions.$inferSelect;
