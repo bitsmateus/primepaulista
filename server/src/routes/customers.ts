@@ -34,6 +34,39 @@ export async function customerRoutes(app: FastifyInstance) {
     return reply.code(201).send({ customer: row });
   });
 
+  // POST /customers/import — importação em lote com deduplicação por CPF/WhatsApp
+  app.post("/customers/import", async (req, reply) => {
+    const parsed = z.object({ customers: z.array(customerInput).max(5000) }).safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "Dados inválidos" });
+    }
+    const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
+
+    const result = await db.transaction(async (tx) => {
+      const existing = await tx.select({ cpf: customers.cpf, whatsapp: customers.whatsapp }).from(customers);
+      const cpfs = new Set(existing.map((c) => onlyDigits(c.cpf ?? "")).filter(Boolean));
+      const phones = new Set(existing.map((c) => onlyDigits(c.whatsapp ?? "")).filter(Boolean));
+
+      const toCreate: typeof parsed.data.customers = [];
+      let ignored = 0;
+      for (const c of parsed.data.customers) {
+        const cpf = onlyDigits(c.cpf);
+        const phone = onlyDigits(c.whatsapp);
+        if ((cpf && cpfs.has(cpf)) || (phone && phones.has(phone))) {
+          ignored++;
+          continue;
+        }
+        if (cpf) cpfs.add(cpf);
+        if (phone) phones.add(phone);
+        toCreate.push(c);
+      }
+      if (toCreate.length) await tx.insert(customers).values(toCreate);
+      return { created: toCreate.length, ignored };
+    });
+
+    return reply.code(201).send(result);
+  });
+
   // PATCH /customers/:id — editar cliente
   app.patch("/customers/:id", async (req, reply) => {
     const { id } = req.params as { id: string };

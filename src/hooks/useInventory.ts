@@ -133,6 +133,14 @@ export function useInventory() {
   });
 
   // Retorna o cliente persistido (com id real do banco)
+  const importCustomersMut = useMutation({
+    mutationFn: (rows: Array<{ name: string; cpf: string; whatsapp: string; birthday: string; leadOrigin?: string }>) =>
+      api.importCustomers(rows),
+    onSuccess: invalidateCustomers,
+  });
+  const importCustomers = (rows: Array<{ name: string; cpf: string; whatsapp: string; birthday: string; leadOrigin?: string }>) =>
+    importCustomersMut.mutateAsync(rows);
+
   const addCustomer = (customer: Omit<Customer, "id" | "createdAt">): Promise<Customer> =>
     addCustomerMut.mutateAsync(customer);
   const updateCustomer = (id: string, patch: Partial<Omit<Customer, "id" | "createdAt">>): Promise<Customer> =>
@@ -264,6 +272,7 @@ export function useInventory() {
     deleteAccessory,
     findCustomer,
     addCustomer,
+    importCustomers,
     deleteCustomer,
     returnSale,
     updateSale,

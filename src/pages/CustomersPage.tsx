@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
-import { Search, UserPlus, Trash2, Pencil, Download, ShoppingBag, Cake } from "lucide-react";
+import { Search, UserPlus, Trash2, Pencil, Download, Upload, ShoppingBag, Cake } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Customer, LeadOrigin, Sale } from "@/types/inventory";
 import { isReturned, canReturn } from "@/lib/returns";
+import { parseCustomersCsv, dedupeCustomers, ParsedCustomersCsv } from "@/lib/customerCsv";
 import { ApiError } from "@/lib/api";
 import {
   isValidCpf, formatCpf, formatPhone, customerMatchesSearch,
@@ -29,7 +30,7 @@ const LEAD_ORIGINS: LeadOrigin[] = ["Instagram", "Indicação", "Tráfego Pago"]
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function CustomersPage() {
-  const { customers, customersLoading, sales, addCustomer, updateCustomer, deleteCustomer, returnSale } =
+  const { customers, customersLoading, sales, addCustomer, updateCustomer, deleteCustomer, returnSale, importCustomers } =
     useInventoryContext();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -37,6 +38,37 @@ export default function CustomersPage() {
   const [returnTarget, setReturnTarget] = useState<Sale | null>(null);
   const [returnReason, setReturnReason] = useState("");
   const [returning, setReturning] = useState(false);
+
+  // Importação de clientes
+  const [showImport, setShowImport] = useState(false);
+  const [parsed, setParsed] = useState<ParsedCustomersCsv | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ created: number; ignored: number } | null>(null);
+
+  const dedup = parsed ? dedupeCustomers(parsed.customers, customers) : null;
+
+  const handleFile = async (file: File) => {
+    const text = await file.text();
+    setParsed(parseCustomersCsv(text));
+    setImportSummary(null);
+  };
+
+  const handleImport = async () => {
+    if (!dedup || dedup.toCreate.length === 0) return;
+    setImporting(true);
+    try {
+      const res = await importCustomers(
+        dedup.toCreate.map((c) => ({ ...c, leadOrigin: c.leadOrigin }))
+      );
+      setImportSummary(res);
+      setParsed(null);
+      toast.success(`${res.created} clientes importados (${res.ignored} ignorados).`);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Falha ao importar clientes.");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const [search, setSearch] = useState("");
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
@@ -127,6 +159,9 @@ export default function CustomersPage() {
             <p className="mt-1 text-sm text-muted-foreground">Base de clientes cadastrados</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => { setParsed(null); setImportSummary(null); setShowImport(true); }} className="gap-2">
+              <Upload className="h-4 w-4" /> Importar
+            </Button>
             <Button variant="outline" onClick={exportCSV} className="gap-2">
               <Download className="h-4 w-4" /> Exportar CSV
             </Button>
@@ -384,6 +419,47 @@ export default function CustomersPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Importar clientes */}
+      <Dialog open={showImport} onOpenChange={(o) => { setShowImport(o); if (!o) { setParsed(null); setImportSummary(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Importar clientes (CSV)</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              O arquivo deve ter cabeçalho com as colunas <strong>Nome</strong>, e opcionalmente CPF, WhatsApp,
+              Aniversário e Origem. Clientes com CPF ou WhatsApp já cadastrados são ignorados.
+            </p>
+            <Input type="file" accept=".csv,text/csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+
+            {parsed && parsed.errors.length > 0 && (
+              <div className="rounded-lg border border-warning/40 bg-warning/10 p-2 text-xs text-foreground max-h-24 overflow-y-auto">
+                {parsed.errors.slice(0, 8).map((er, i) => <p key={i}>{er}</p>)}
+              </div>
+            )}
+
+            {dedup && (
+              <div className="rounded-lg border p-3 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Lidos no arquivo</span><span>{parsed?.customers.length}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Novos a importar</span><span className="font-medium text-success">{dedup.toCreate.length}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Duplicados (ignorados)</span><span>{dedup.ignored.length}</span></div>
+              </div>
+            )}
+
+            {importSummary && (
+              <div className="rounded-lg border border-success/40 bg-success/10 p-3 text-sm">
+                {importSummary.created} criados · {importSummary.ignored} ignorados.
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setShowImport(false)}>Fechar</Button>
+              <Button onClick={handleImport} disabled={importing || !dedup || dedup.toCreate.length === 0}>
+                {importing ? "Importando..." : `Importar ${dedup?.toCreate.length ?? 0}`}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

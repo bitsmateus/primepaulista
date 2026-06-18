@@ -287,6 +287,12 @@ export const api = {
   deleteCustomer: (id: string) =>
     request<{ ok: true }>(`/customers/${id}`, { method: "DELETE" }),
 
+  importCustomers: (rows: Array<{ name: string; cpf: string; whatsapp: string; birthday: string; leadOrigin?: string }>) =>
+    request<{ created: number; ignored: number }>("/customers/import", {
+      method: "POST",
+      body: JSON.stringify({ customers: rows }),
+    }),
+
   // Sales
   createSale: (input: SalePayload) =>
     request<{ saleId: string }>("/sales", {
