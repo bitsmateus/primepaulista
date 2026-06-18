@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, Barcode, Pencil, Search, Minus } from "lucide-react";
+import { Plus, Trash2, Barcode, Pencil, Search, Minus, Tag } from "lucide-react";
+import { printAccessoryLabel } from "@/utils/labelGenerator";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
@@ -293,6 +294,10 @@ export default function AccessoriesPage() {
                       <TableCell>{statusBadge(accessoryStockStatus(a))}</TableCell>
                       <TableCell>
                         <div className="flex">
+                          <Button variant="ghost" size="icon" title="Imprimir etiqueta"
+                            onClick={() => printAccessoryLabel({ name: a.name, price: a.price ?? 0, barcode: a.barcode })}>
+                            <Tag className="h-4 w-4 text-muted-foreground" />
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => openEdit(a)} title="Editar">
                             <Pencil className="h-4 w-4 text-muted-foreground" />
                           </Button>

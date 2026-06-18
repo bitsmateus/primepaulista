@@ -11,7 +11,8 @@ import { ApiError } from "@/lib/api";
 import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport } from "@/lib/devices";
 import { DevicePhotos } from "@/components/devices/DevicePhotos";
 import { parseDevicesCsv, ParsedDeviceCsv } from "@/lib/deviceCsv";
-import { Upload } from "lucide-react";
+import { Upload, Tag } from "lucide-react";
+import { printDeviceLabel } from "@/utils/labelGenerator";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -443,6 +444,13 @@ export default function DevicesPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex">
+                          <Button variant="ghost" size="icon" title="Imprimir etiqueta"
+                            onClick={() => printDeviceLabel({
+                              model: d.model, capacity: d.capacity, batteryHealth: d.batteryHealth,
+                              color: d.color, serial: d.serialImei || d.internalSerial,
+                            })}>
+                            <Tag className="h-4 w-4 text-muted-foreground" />
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => openEdit(d)} title="Editar">
                             <Pencil className="h-4 w-4 text-muted-foreground" />
                           </Button>
