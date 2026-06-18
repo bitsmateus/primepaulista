@@ -3,6 +3,7 @@ import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertica
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { formatPhoneInput, leadMatchesSearch, buildFunnelSummary, leadHasPurchased } from "@/lib/crm";
 import { Lead } from "@/types/crm";
@@ -35,8 +36,11 @@ export default function LeadsTab() {
     funnelColumns, columnsLoading, addFunnelColumn, removeFunnelColumn, renameFunnelColumn,
   } = useCRMContext();
   const { devices, sales } = useInventoryContext();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const [search, setSearch] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("all"); // "all" | "mine" | nome do vendedor
   const [showLeadDialog, setShowLeadDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -60,8 +64,14 @@ export default function LeadsTab() {
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [editColName, setEditColName] = useState("");
 
-  const filteredLeads = leads.filter((l) => leadMatchesSearch(l, search));
-  const summary = buildFunnelSummary(leads, funnelColumns);
+  const owners = [...new Set(leads.map((l) => l.ownerName).filter(Boolean))] as string[];
+  const matchesOwner = (l: Lead) => {
+    if (ownerFilter === "all") return true;
+    if (ownerFilter === "mine") return l.ownerId === user?.id;
+    return l.ownerName === ownerFilter;
+  };
+  const filteredLeads = leads.filter((l) => leadMatchesSearch(l, search) && matchesOwner(l));
+  const summary = buildFunnelSummary(filteredLeads, funnelColumns);
   const deviceModels = [...new Set(devices.map((d) => d.model))];
 
   const resetForm = () => {
@@ -164,6 +174,14 @@ export default function LeadsTab() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Buscar lead..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
+        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os leads</SelectItem>
+            <SelectItem value="mine">Meus leads</SelectItem>
+            {isAdmin && owners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Button variant="outline" onClick={() => setShowFunnelSettings(true)}>
           <Settings2 className="h-4 w-4 mr-1" /> Funil
         </Button>

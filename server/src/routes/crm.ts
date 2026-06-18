@@ -127,7 +127,11 @@ export async function crmRoutes(app: FastifyInstance) {
   app.post("/leads", async (req, reply) => {
     const p = leadInput.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
-    const [row] = await db.insert(leads).values(p.data).returning();
+    const user = req.user as { sub: string; name: string };
+    const [row] = await db
+      .insert(leads)
+      .values({ ...p.data, ownerId: user.sub, ownerName: user.name })
+      .returning();
     return reply.code(201).send({ lead: row });
   });
 

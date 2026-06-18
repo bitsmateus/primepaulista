@@ -14,6 +14,8 @@ export interface Lead {
   origin: string;
   status: LeadStatus;
   notes: string;
+  ownerId?: string;
+  ownerName?: string;
   createdAt: Date;
 }
 

@@ -16,6 +16,8 @@ export const leads = pgTable("leads", {
   origin: text("origin"),
   status: text("status").notNull().default("Novo"), // nome da coluna do funil
   notes: text("notes"),
+  ownerId: uuid("owner_id"), // vendedor dono do lead (profiles.id)
+  ownerName: text("owner_name"), // nome do dono (denormalizado p/ exibição)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

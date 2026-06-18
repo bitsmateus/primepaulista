@@ -563,6 +563,8 @@ function mapLead(r: LeadRow): Lead {
     modelInterest: r.modelInterest ?? "",
     origin: r.origin ?? "",
     notes: r.notes ?? "",
+    ownerId: r.ownerId ?? undefined,
+    ownerName: r.ownerName ?? "",
     createdAt: new Date(r.createdAt),
   };
 }
