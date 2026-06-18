@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   numeric,
   pgTable,
   text,
@@ -37,7 +38,10 @@ export const accountsReceivable = pgTable("accounts_receivable", {
   status: receivableStatusEnum("status").notNull().default("pendente"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  saleIdx: index("accounts_receivable_sale_id_idx").on(t.saleId),
+  customerIdx: index("accounts_receivable_customer_id_idx").on(t.customerId),
+}));
 
 export const accountsPayable = pgTable("accounts_payable", {
   id: uuid("id").primaryKey().defaultRandom(),

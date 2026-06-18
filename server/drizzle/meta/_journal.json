@@ -120,6 +120,13 @@
       "when": 1781792594829,
       "tag": "0016_lead_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781800600521,
+      "tag": "0017_add_indexes",
+      "breakpoints": true
     }
   ]
 }

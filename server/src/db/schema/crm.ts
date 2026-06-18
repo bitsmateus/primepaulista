@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { messageStatusEnum } from "./enums";
 
 export const funnelColumns = pgTable("funnel_columns", {
@@ -19,7 +19,10 @@ export const leads = pgTable("leads", {
   ownerId: uuid("owner_id"), // vendedor dono do lead (profiles.id)
   ownerName: text("owner_name"), // nome do dono (denormalizado p/ exibição)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  ownerIdx: index("leads_owner_id_idx").on(t.ownerId),
+  statusIdx: index("leads_status_idx").on(t.status),
+}));
 
 export const messageLogs = pgTable("message_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -40,7 +43,9 @@ export const leadTasks = pgTable("lead_tasks", {
   dueDate: timestamp("due_date", { withTimezone: true }),
   done: boolean("done").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  leadIdx: index("lead_tasks_lead_id_idx").on(t.leadId),
+}));
 
 // Campanhas de disparo em massa
 export const campaigns = pgTable("campaigns", {

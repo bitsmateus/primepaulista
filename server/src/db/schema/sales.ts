@@ -1,4 +1,5 @@
 import {
+  index,
   integer,
   numeric,
   pgTable,
@@ -23,7 +24,10 @@ export const sales = pgTable("sales", {
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   returnedAt: timestamp("returned_at", { withTimezone: true }), // data da devolução/estorno (se houver)
-});
+}, (t) => ({
+  customerIdx: index("sales_customer_id_idx").on(t.customerId),
+  createdIdx: index("sales_created_at_idx").on(t.createdAt),
+}));
 
 export const saleItems = pgTable("sale_items", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -37,7 +41,9 @@ export const saleItems = pgTable("sale_items", {
   price: numeric("price", { precision: 12, scale: 2 }).notNull().default("0"),
   quantity: integer("quantity").notNull().default(1),
   warrantyDays: integer("warranty_days").notNull().default(0), // garantia do aparelho em dias
-});
+}, (t) => ({
+  saleIdx: index("sale_items_sale_id_idx").on(t.saleId),
+}));
 
 export const payments = pgTable("payments", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -47,7 +53,9 @@ export const payments = pgTable("payments", {
   method: paymentMethodEnum("method").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
   installments: integer("installments").default(1),
-});
+}, (t) => ({
+  saleIdx: index("payments_sale_id_idx").on(t.saleId),
+}));
 
 export const tradeIns = pgTable("trade_ins", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -58,7 +66,9 @@ export const tradeIns = pgTable("trade_ins", {
   model: text("model"),
   healthDescription: text("health_description"),
   value: numeric("value", { precision: 12, scale: 2 }).notNull().default("0"),
-});
+}, (t) => ({
+  saleIdx: index("trade_ins_sale_id_idx").on(t.saleId),
+}));
 
 // Devolução/estorno de uma venda (estorno total, restitui o estoque)
 export const saleReturns = pgTable("sale_returns", {
@@ -81,7 +91,9 @@ export const saleAttachments = pgTable("sale_attachments", {
   objectKey: text("object_key").notNull(),
   filename: text("filename").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  saleIdx: index("sale_attachments_sale_id_idx").on(t.saleId),
+}));
 
 export type Sale = typeof sales.$inferSelect;
 export type SaleItem = typeof saleItems.$inferSelect;

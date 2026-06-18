@@ -1,4 +1,5 @@
 import {
+  index,
   integer,
   numeric,
   pgTable,
@@ -57,7 +58,9 @@ export const stockMovements = pgTable("stock_movements", {
   reason: text("reason"),
   userId: uuid("user_id").references(() => profiles.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  productIdx: index("stock_movements_product_idx").on(t.productType, t.productId),
+}));
 
 // Fotos do aparelho (arquivos no MinIO; aqui fica a referência)
 export const devicePhotos = pgTable("device_photos", {
@@ -67,7 +70,9 @@ export const devicePhotos = pgTable("device_photos", {
     .references(() => devices.id, { onDelete: "cascade" }),
   objectKey: text("object_key").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  deviceIdx: index("device_photos_device_id_idx").on(t.deviceId),
+}));
 
 export type Device = typeof devices.$inferSelect;
 export type NewDevice = typeof devices.$inferInsert;
