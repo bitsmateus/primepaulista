@@ -5,6 +5,14 @@ import { db } from "../db/index";
 import { whatsappInstances } from "../db/schema/index";
 import { authenticate } from "../plugins/auth";
 import { callUazapi, getInstance, getInstances } from "../services/whatsapp";
+import { storageEnabled, uploadObject, presignedUrl } from "../storage/minio";
+
+function detectImageExt(buf: Buffer): string | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpg";
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "png";
+  if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "webp";
+  return null;
+}
 
 type JwtUser = { sub: string; name: string; role: string };
 
@@ -152,5 +160,41 @@ export async function whatsappRoutes(app: FastifyInstance) {
     } catch {
       return { success: false };
     }
+  });
+
+  // POST /whatsapp/instances/:id/send-media  { phone, imageUrl, caption }
+  // NOTE: confirmar o path/payload de mídia da Uazapi (/send/media) antes de usar em produção.
+  app.post("/whatsapp/instances/:id/send-media", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z
+      .object({ phone: z.string().min(1), imageUrl: z.string().min(1), caption: z.string().optional().default("") })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Telefone e imagem são obrigatórios" });
+    const inst = await requireInstance(id, reply);
+    if (!inst) return;
+    try {
+      const r = await callUazapi(inst, "/send/media", "POST", {
+        number: p.data.phone.replace(/\D/g, ""),
+        type: "image",
+        file: p.data.imageUrl,
+        text: p.data.caption,
+      });
+      return { success: r.ok };
+    } catch {
+      return { success: false };
+    }
+  });
+
+  // POST /whatsapp/campaign-image  (multipart "file") → faz upload e devolve a URL
+  app.post("/whatsapp/campaign-image", async (req, reply) => {
+    if (!storageEnabled) return reply.code(503).send({ error: "Armazenamento (MinIO) não configurado." });
+    const file = await req.file();
+    if (!file) return reply.code(400).send({ error: "Nenhum arquivo enviado." });
+    const buffer = await file.toBuffer();
+    const ext = detectImageExt(buffer);
+    if (!ext) return reply.code(400).send({ error: "Arquivo não é uma imagem válida (JPG, PNG ou WEBP)." });
+    const objectKey = `campaigns/${crypto.randomUUID()}.${ext}`;
+    await uploadObject(objectKey, buffer, `image/${ext === "jpg" ? "jpeg" : ext}`);
+    return { url: await presignedUrl(objectKey) };
   });
 }

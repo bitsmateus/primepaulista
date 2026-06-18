@@ -430,6 +430,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ phone, message }),
     }).then((d) => d.success),
+  whatsappSendMedia: (id: string, phone: string, imageUrl: string, caption: string) =>
+    request<{ success: boolean }>(`/whatsapp/instances/${id}/send-media`, {
+      method: "POST",
+      body: JSON.stringify({ phone, imageUrl, caption }),
+    }).then((d) => d.success),
+  uploadCampaignImage: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ url: string }>("/whatsapp/campaign-image", { method: "POST", body: fd }).then((d) => d.url);
+  },
 
   // ===== CRM automático =====
   listAutomations: () =>

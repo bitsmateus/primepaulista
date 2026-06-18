@@ -217,6 +217,17 @@ export function useCRM() {
     [selectedInstanceId]
   );
 
+  const sendMedia = useCallback(
+    (phone: string, imageUrl: string, caption: string, instanceId?: string): Promise<boolean> => {
+      const id = instanceId || selectedInstanceId;
+      if (!id) return Promise.resolve(false);
+      return api.whatsappSendMedia(id, phone, imageUrl, caption);
+    },
+    [selectedInstanceId]
+  );
+
+  const uploadCampaignImage = useCallback((file: File) => api.uploadCampaignImage(file), []);
+
   return {
     leads,
     leadsLoading,
@@ -243,6 +254,8 @@ export function useCRM() {
     disconnectInstance,
     restartInstance,
     sendMessage,
+    sendMedia,
+    uploadCampaignImage,
     addMessageLog,
     getLogsForRecipient,
   };

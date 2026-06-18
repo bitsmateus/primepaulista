@@ -24,7 +24,10 @@ const TEMPLATES = [
 ];
 
 export default function CampaignsTab() {
-  const { leads, sendMessage, addMessageLog, connectionStatus, messageLogs } = useCRMContext();
+  const {
+    leads, sendMessage, sendMedia, uploadCampaignImage, addMessageLog, connectionStatus, messageLogs,
+    instances, selectedInstanceId, setSelectedInstanceId,
+  } = useCRMContext();
   const { customers, devices } = useInventoryContext();
 
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -35,6 +38,20 @@ export default function CampaignsTab() {
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [intervalMs, setIntervalMs] = useState(3000);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploadingImg, setUploadingImg] = useState(false);
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImg(true);
+    try {
+      setImageUrl(await uploadCampaignImage(file));
+      toast.success("Imagem anexada!");
+    } catch {
+      toast.error("Falha ao enviar imagem.");
+    } finally {
+      setUploadingImg(false);
+    }
+  };
   const cancelRef = useRef(false);
 
   const allRecipients = buildRecipients(leads, customers);
@@ -80,7 +97,9 @@ export default function CampaignsTab() {
       if (cancelRef.current) break;
       const r = recipients[i];
       const personalizedMsg = personalizeMessage(msg, r.name);
-      const success = await sendMessage(r.phone, personalizedMsg);
+      const success = imageUrl
+        ? await sendMedia(r.phone, imageUrl, personalizedMsg)
+        : await sendMessage(r.phone, personalizedMsg);
       addMessageLog({
         recipientId: r.source === "lead" ? r.id : null,
         recipientName: r.name, recipientPhone: r.phone,
@@ -103,6 +122,36 @@ export default function CampaignsTab() {
 
   return (
     <div className="space-y-6">
+      {/* Número e imagem */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Número e Imagem</CardTitle>
+          <CardDescription>Escolha de qual número sai o disparo e anexe uma imagem (opcional)</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Disparar pelo número</Label>
+            <Select value={selectedInstanceId} onValueChange={setSelectedInstanceId}>
+              <SelectTrigger><SelectValue placeholder="Selecione um número" /></SelectTrigger>
+              <SelectContent>
+                {instances.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>{i.name}{i.configured ? "" : " (sem credenciais)"}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Imagem (opcional)</Label>
+            <div className="flex items-center gap-2">
+              <Input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }} />
+              {imageUrl && <Button variant="ghost" size="sm" onClick={() => setImageUrl(null)}>Remover</Button>}
+            </div>
+            {uploadingImg && <p className="mt-1 text-xs text-muted-foreground">Enviando imagem…</p>}
+            {imageUrl && <img src={imageUrl} alt="prévia" className="mt-2 max-h-24 rounded border" />}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Modelos de mensagem */}
       <Card>
         <CardHeader>
