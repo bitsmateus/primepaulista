@@ -51,9 +51,12 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
   const inRange = (d: Date, start: Date, end: Date) =>
     isWithinInterval(d, { start: startOfDay(start), end: endOfDay(end) });
 
+  // Vendas devolvidas não entram em faturamento nem lucro
+  const activeSales = sales.filter(s => !s.returnedAt);
+
   // Revenue from sales
-  const currentMonthSales = sales.filter(s => inRange(s.createdAt, monthStart, monthEnd));
-  const prevMonthSales = sales.filter(s => inRange(s.createdAt, prevMonthStart, prevMonthEnd));
+  const currentMonthSales = activeSales.filter(s => inRange(s.createdAt, monthStart, monthEnd));
+  const prevMonthSales = activeSales.filter(s => inRange(s.createdAt, prevMonthStart, prevMonthEnd));
 
   const grossRevenueSales = currentMonthSales.reduce((s, sale) => s + sale.total, 0);
   const prevGrossRevenueSales = prevMonthSales.reduce((s, sale) => s + sale.total, 0);
@@ -114,7 +117,7 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
 
   // Daily cash
   const getDailyCash = (dateStr: string): DailyCashEntry => {
-    const daySales = sales.filter(s => format(s.createdAt, "yyyy-MM-dd") === dateStr);
+    const daySales = activeSales.filter(s => format(s.createdAt, "yyyy-MM-dd") === dateStr);
     const daySangrias = sangrias.filter(s => format(s.date, "yyyy-MM-dd") === dateStr);
     const pix = daySales.reduce((s, sale) => s + sale.payments.filter(p => p.method === "PIX").reduce((sum, p) => sum + p.amount, 0), 0);
     const dinheiro = daySales.reduce((s, sale) => s + sale.payments.filter(p => p.method === "Dinheiro").reduce((sum, p) => sum + p.amount, 0), 0);
@@ -174,7 +177,7 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
     return Array.from({ length: 7 }, (_, i) => {
       const date = subDays(now, 6 - i);
       const dateStr = format(date, "yyyy-MM-dd");
-      const daySales = sales.filter(s => format(s.createdAt, "yyyy-MM-dd") === dateStr);
+      const daySales = activeSales.filter(s => format(s.createdAt, "yyyy-MM-dd") === dateStr);
       const revenue = daySales.reduce((s, sale) => s + sale.total, 0);
       return { date: format(date, "dd/MM"), revenue };
     });

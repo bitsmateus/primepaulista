@@ -114,10 +114,13 @@ export default function Dashboard() {
     [accessories]
   );
 
+  // Vendas devolvidas não entram em faturamento/lucro
+  const activeSales = useMemo(() => sales.filter((s) => !s.returnedAt), [sales]);
+
   const inSeller = (s: { seller: string }) => seller === "all" || s.seller === seller;
   const periodSales = useMemo(
-    () => sales.filter((s) => new Date(s.createdAt) >= start && inSeller(s)),
-    [sales, start, seller]
+    () => activeSales.filter((s) => new Date(s.createdAt) >= start && inSeller(s)),
+    [activeSales, start, seller]
   );
 
   // ===================== VENDAS =====================
@@ -133,7 +136,7 @@ export default function Dashboard() {
     // comparação período anterior
     let delta: number | null = null;
     if (prevStart && prevEnd) {
-      const prevRev = sales
+      const prevRev = activeSales
         .filter((s) => inSeller(s) && new Date(s.createdAt) >= prevStart && new Date(s.createdAt) < prevEnd)
         .reduce((a, s) => a + s.total, 0);
       delta = prevRev > 0 ? ((revenue - prevRev) / prevRev) * 100 : null;
@@ -144,7 +147,7 @@ export default function Dashboard() {
     for (let i = 29; i >= 0; i--) {
       const d = new Date(startOfDay(new Date()).getTime() - i * 86_400_000);
       const next = new Date(d.getTime() + 86_400_000);
-      const valor = sales
+      const valor = activeSales
         .filter((s) => inSeller(s) && new Date(s.createdAt) >= d && new Date(s.createdAt) < next)
         .reduce((a, s) => a + s.total, 0);
       days.push({ dia: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), valor });
@@ -182,7 +185,7 @@ export default function Dashboard() {
     const attachRate = count ? (withAccessory / count) * 100 : 0;
 
     return { revenue, count, avg, profit, delta, days, byPayment, bySeller, byCategory, topModels, attachRate };
-  }, [periodSales, sales, deviceById, accessoryById, prevStart, prevEnd, seller]);
+  }, [periodSales, activeSales, deviceById, accessoryById, prevStart, prevEnd, seller]);
 
   // ===================== OS =====================
   const os = useMemo(() => {
