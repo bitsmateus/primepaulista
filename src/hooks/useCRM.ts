@@ -23,6 +23,11 @@ export function useCRM() {
     queryKey: ["messageLogs"],
     queryFn: api.listMessageLogs,
   });
+  const { data: leadTasks = [] } = useQuery({
+    queryKey: ["leadTasks"],
+    queryFn: api.listLeadTasks,
+  });
+  const invalidateTasks = () => qc.invalidateQueries({ queryKey: ["leadTasks"] });
 
   const invalidateLeads = () => qc.invalidateQueries({ queryKey: ["leads"] });
   const invalidateColumns = () => {
@@ -127,6 +132,31 @@ export function useCRM() {
   const getLogsForRecipient = useCallback(
     (recipientId: string) => messageLogs.filter((l) => l.recipientId === recipientId),
     [messageLogs]
+  );
+
+  // ===== Tarefas / follow-up =====
+  const addTaskMut = useMutation({
+    mutationFn: (input: { leadId: string; title: string; dueDate?: string }) => api.createLeadTask(input),
+    onSuccess: invalidateTasks,
+    onError: crmError("Não foi possível criar a tarefa."),
+  });
+  const toggleTaskMut = useMutation({
+    mutationFn: ({ id, done }: { id: string; done: boolean }) => api.updateLeadTask(id, { done }),
+    onSuccess: invalidateTasks,
+  });
+  const deleteTaskMut = useMutation({
+    mutationFn: (id: string) => api.deleteLeadTask(id),
+    onSuccess: invalidateTasks,
+  });
+  const addLeadTask = useCallback(
+    (input: { leadId: string; title: string; dueDate?: string }) => addTaskMut.mutateAsync(input),
+    [addTaskMut]
+  );
+  const toggleLeadTask = useCallback((id: string, done: boolean) => toggleTaskMut.mutate({ id, done }), [toggleTaskMut]);
+  const deleteLeadTask = useCallback((id: string) => deleteTaskMut.mutate(id), [deleteTaskMut]);
+  const getTasksForLead = useCallback(
+    (leadId: string) => leadTasks.filter((t) => t.leadId === leadId),
+    [leadTasks]
   );
 
   // ===== WhatsApp/Uazapi (instâncias; envio via backend) =====
@@ -258,5 +288,10 @@ export function useCRM() {
     uploadCampaignImage,
     addMessageLog,
     getLogsForRecipient,
+    leadTasks,
+    addLeadTask,
+    toggleLeadTask,
+    deleteLeadTask,
+    getTasksForLead,
   };
 }

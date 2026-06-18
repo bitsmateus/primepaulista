@@ -1,4 +1,4 @@
-import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { messageStatusEnum } from "./enums";
 
 export const funnelColumns = pgTable("funnel_columns", {
@@ -30,6 +30,16 @@ export const messageLogs = pgTable("message_logs", {
   message: text("message"),
   status: messageStatusEnum("status").notNull().default("pending"),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Tarefas / follow-up de leads (com lembrete por data)
+export const leadTasks = pgTable("lead_tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  dueDate: timestamp("due_date", { withTimezone: true }),
+  done: boolean("done").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // Campanhas de disparo em massa

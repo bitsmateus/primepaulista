@@ -93,6 +93,31 @@ export function buildFunnelSummary(leads: Lead[], columns: FunnelColumn[]): Funn
   return { total, byColumn, converted, conversionRate: total ? converted / total : 0 };
 }
 
+export interface FunnelStageMetric {
+  name: string;
+  color: string;
+  count: number;
+  pct: number; // 0..1 sobre o total
+}
+
+// Métricas por etapa do funil: contagem e % do total em cada coluna.
+export function buildFunnelMetrics(leads: Lead[], columns: FunnelColumn[]): FunnelStageMetric[] {
+  const total = leads.length;
+  return columns.map((c) => {
+    const count = leads.filter((l) => l.status === c.name).length;
+    return { name: c.name, color: c.color, count, pct: total ? count / total : 0 };
+  });
+}
+
+// Conta tarefas não concluídas com vencimento até o fim de hoje (inclui atrasadas).
+export function pendingTasksToday(
+  tasks: { dueDate: Date | null; done: boolean }[],
+  now: Date
+): number {
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  return tasks.filter((t) => !t.done && t.dueDate && new Date(t.dueDate).getTime() <= endOfToday.getTime()).length;
+}
+
 // Um lead "comprou" se existe venda cujo cliente tem o mesmo telefone.
 export function leadHasPurchased(lead: Lead, sales: Sale[]): boolean {
   const phone = onlyDigits(lead.phone);

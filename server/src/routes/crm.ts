@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { asc, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
-import { funnelColumns, leads, messageLogs } from "../db/schema/index";
+import { funnelColumns, leads, leadTasks, messageLogs } from "../db/schema/index";
 import { authenticate } from "../plugins/auth";
 
 const DEFAULT_COLUMNS = [
@@ -147,6 +147,47 @@ export async function crmRoutes(app: FastifyInstance) {
   app.delete("/leads/:id", async (req) => {
     const { id } = req.params as { id: string };
     await db.delete(leads).where(eq(leads.id, id));
+    return { ok: true };
+  });
+
+  // ===== Tarefas / follow-up de leads =====
+  app.get("/lead-tasks", async () => {
+    const rows = await db.select().from(leadTasks).orderBy(asc(leadTasks.dueDate));
+    return { tasks: rows };
+  });
+
+  app.post("/lead-tasks", async (req, reply) => {
+    const p = z
+      .object({
+        leadId: z.string().uuid(),
+        title: z.string().min(1).max(300),
+        dueDate: z.string().optional(),
+      })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const [row] = await db
+      .insert(leadTasks)
+      .values({
+        leadId: p.data.leadId,
+        title: p.data.title,
+        ...(p.data.dueDate ? { dueDate: new Date(p.data.dueDate) } : {}),
+      })
+      .returning();
+    return reply.code(201).send({ task: row });
+  });
+
+  app.patch("/lead-tasks/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ done: z.boolean().optional(), title: z.string().min(1).max(300).optional() }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const [row] = await db.update(leadTasks).set(p.data).where(eq(leadTasks.id, id)).returning();
+    if (!row) return reply.code(404).send({ error: "Tarefa não encontrada" });
+    return { task: row };
+  });
+
+  app.delete("/lead-tasks/:id", async (req) => {
+    const { id } = req.params as { id: string };
+    await db.delete(leadTasks).where(eq(leadTasks.id, id));
     return { ok: true };
   });
 

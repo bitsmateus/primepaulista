@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatPhoneInput, leadMatchesSearch, personalizeMessage,
   buildRecipients, filterRecipients, buildFunnelSummary, leadHasPurchased,
+  buildFunnelMetrics, pendingTasksToday,
 } from "@/lib/crm";
 import { Lead, FunnelColumn } from "@/types/crm";
 import { Customer, Sale } from "@/types/inventory";
@@ -126,5 +127,29 @@ describe("lead que comprou", () => {
   });
   it("telefone vazio nunca é comprador", () => {
     expect(leadHasPurchased(mkLead({ phone: "" }), [sale("")])).toBe(false);
+  });
+});
+
+describe("métricas do funil e tarefas (T14)", () => {
+  const columns: FunnelColumn[] = [
+    { id: "1", name: "Novo", color: "x" },
+    { id: "2", name: "Convertido", color: "y" },
+  ];
+  it("buildFunnelMetrics: contagem e % por etapa", () => {
+    const leads = [mkLead({ status: "Novo" }), mkLead({ status: "Convertido" }), mkLead({ status: "Convertido" })];
+    const m = buildFunnelMetrics(leads, columns);
+    expect(m.find((s) => s.name === "Convertido")?.count).toBe(2);
+    expect(m.find((s) => s.name === "Convertido")?.pct).toBeCloseTo(2 / 3);
+  });
+  it("pendingTasksToday: conta não concluídas até hoje (inclui atrasadas)", () => {
+    const now = new Date(2026, 5, 15);
+    const tasks = [
+      { dueDate: new Date(2026, 5, 15), done: false }, // hoje
+      { dueDate: new Date(2026, 5, 10), done: false }, // atrasada
+      { dueDate: new Date(2026, 5, 20), done: false }, // futura
+      { dueDate: new Date(2026, 5, 15), done: true },  // feita
+      { dueDate: null, done: false },                  // sem data
+    ];
+    expect(pendingTasksToday(tasks, now)).toBe(2);
   });
 });

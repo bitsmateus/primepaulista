@@ -1,6 +1,6 @@
 import { Device, Accessory, Customer, Sale, CartItem, PaymentEntry, PaymentMethod, Seller } from "@/types/inventory";
 import { ServiceOrder } from "@/types/serviceOrder";
-import { Lead, FunnelColumn, MessageLog } from "@/types/crm";
+import { Lead, FunnelColumn, MessageLog, LeadTask } from "@/types/crm";
 import { Expense, Sangria, SellerCommissionConfig } from "@/types/financial";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
@@ -391,6 +391,16 @@ export const api = {
   deleteLead: (id: string) =>
     request<{ ok: true }>(`/leads/${id}`, { method: "DELETE" }),
 
+  // ===== CRM: tarefas / follow-up =====
+  listLeadTasks: () =>
+    request<{ tasks: LeadTaskRow[] }>("/lead-tasks").then((d) => d.tasks.map(mapLeadTask)),
+  createLeadTask: (input: { leadId: string; title: string; dueDate?: string }) =>
+    request<{ task: LeadTaskRow }>("/lead-tasks", { method: "POST", body: JSON.stringify(input) }).then((d) => mapLeadTask(d.task)),
+  updateLeadTask: (id: string, patch: { done?: boolean; title?: string }) =>
+    request<{ task: LeadTaskRow }>(`/lead-tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => mapLeadTask(d.task)),
+  deleteLeadTask: (id: string) =>
+    request<{ ok: true }>(`/lead-tasks/${id}`, { method: "DELETE" }),
+
   // ===== CRM: logs de mensagens =====
   listMessageLogs: () =>
     request<{ messageLogs: MessageLogRow[] }>("/message-logs").then((d) =>
@@ -633,6 +643,15 @@ export interface AutomationRunSummary {
 // ----- Mapeamento CRM (datas como string → Date) -----
 type LeadRow = Omit<Lead, "createdAt"> & { createdAt: string };
 type MessageLogRow = Omit<MessageLog, "sentAt"> & { sentAt: string };
+
+type LeadTaskRow = { id: string; leadId: string; title: string; dueDate: string | null; done: boolean; createdAt: string };
+function mapLeadTask(r: LeadTaskRow): LeadTask {
+  return {
+    id: r.id, leadId: r.leadId, title: r.title, done: r.done,
+    dueDate: r.dueDate ? new Date(r.dueDate) : null,
+    createdAt: new Date(r.createdAt),
+  };
+}
 
 function mapLead(r: LeadRow): Lead {
   return {

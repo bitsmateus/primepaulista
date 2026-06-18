@@ -19,6 +19,15 @@ export interface Lead {
   createdAt: Date;
 }
 
+export interface LeadTask {
+  id: string;
+  leadId: string;
+  title: string;
+  dueDate: Date | null;
+  done: boolean;
+  createdAt: Date;
+}
+
 export interface MessageLog {
   id: string;
   recipientId: string;

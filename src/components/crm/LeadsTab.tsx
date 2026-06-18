@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertical, Pencil, ShoppingBag } from "lucide-react";
+import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertical, Pencil, ShoppingBag, ListChecks, BarChart3, Check } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
-import { formatPhoneInput, leadMatchesSearch, buildFunnelSummary, leadHasPurchased } from "@/lib/crm";
+import { formatPhoneInput, leadMatchesSearch, buildFunnelSummary, leadHasPurchased, buildFunnelMetrics, pendingTasksToday } from "@/lib/crm";
 import { Lead } from "@/types/crm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +34,7 @@ export default function LeadsTab() {
     leads, leadsLoading, addLead, updateLead, deleteLead, moveLeadInColumn,
     sendMessage, addMessageLog, getLogsForRecipient, connectionStatus,
     funnelColumns, columnsLoading, addFunnelColumn, removeFunnelColumn, renameFunnelColumn,
+    leadTasks, addLeadTask, toggleLeadTask, deleteLeadTask, getTasksForLead,
   } = useCRMContext();
   const { devices, sales } = useInventoryContext();
   const { user } = useAuth();
@@ -49,6 +50,20 @@ export default function LeadsTab() {
   const [showSendMsg, setShowSendMsg] = useState<string | null>(null);
   const [showFunnelSettings, setShowFunnelSettings] = useState(false);
   const [msgText, setMsgText] = useState("");
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [showTasks, setShowTasks] = useState<string | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDue, setTaskDue] = useState("");
+
+  const now = new Date();
+  const pendingToday = pendingTasksToday(leadTasks, now);
+  const metrics = buildFunnelMetrics(leads, funnelColumns);
+
+  const handleAddTask = async () => {
+    if (!showTasks || !taskTitle.trim()) return;
+    await addLeadTask({ leadId: showTasks, title: taskTitle.trim(), dueDate: taskDue ? new Date(taskDue + "T12:00:00").toISOString() : undefined });
+    setTaskTitle(""); setTaskDue("");
+  };
 
   // Form do lead
   const [name, setName] = useState("");
@@ -182,6 +197,9 @@ export default function LeadsTab() {
             {isAdmin && owners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Button variant="outline" onClick={() => setShowMetrics(true)}>
+          <BarChart3 className="h-4 w-4 mr-1" /> Métricas
+        </Button>
         <Button variant="outline" onClick={() => setShowFunnelSettings(true)}>
           <Settings2 className="h-4 w-4 mr-1" /> Funil
         </Button>
@@ -189,6 +207,13 @@ export default function LeadsTab() {
           <Plus className="h-4 w-4 mr-1" /> Novo Lead
         </Button>
       </div>
+
+      {pendingToday > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+          <ListChecks className="h-4 w-4 text-warning" />
+          Você tem <strong>{pendingToday}</strong> tarefa(s) de follow-up para hoje ou em atraso.
+        </div>
+      )}
 
       {(leadsLoading || columnsLoading) && (
         <p className="text-sm text-muted-foreground">Carregando funil…</p>
@@ -249,6 +274,12 @@ export default function LeadsTab() {
                                   <div className="flex justify-end gap-1 mt-2 border-t pt-2">
                                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Enviar mensagem" onClick={() => setShowSendMsg(lead.id)}>
                                       <MessageCircle className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 relative" title="Tarefas / follow-up" onClick={() => setShowTasks(lead.id)}>
+                                      <ListChecks className="h-3.5 w-3.5" />
+                                      {getTasksForLead(lead.id).some((t) => !t.done) && (
+                                        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-warning" />
+                                      )}
                                     </Button>
                                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Histórico" onClick={() => setShowHistory(lead.id)}>
                                       <History className="h-3.5 w-3.5" />
@@ -413,6 +444,74 @@ export default function LeadsTab() {
                 </div>
               ))
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Métricas por etapa */}
+      <Dialog open={showMetrics} onOpenChange={setShowMetrics}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Métricas do funil</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Total de leads</span><span className="font-medium text-foreground">{summary.total}</span>
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Taxa de conversão</span><span className="font-medium text-foreground">{(summary.conversionRate * 100).toFixed(0)}%</span>
+            </div>
+            <div className="space-y-2 pt-2">
+              {metrics.map((s) => (
+                <div key={s.name}>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: `hsl(${s.color})` }} />
+                      {s.name}
+                    </span>
+                    <span className="text-muted-foreground">{s.count} · {(s.pct * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="mt-1 h-2 rounded-full bg-muted">
+                    <div className="h-2 rounded-full" style={{ width: `${s.pct * 100}%`, backgroundColor: `hsl(${s.color})` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tarefas / follow-up do lead */}
+      <Dialog open={!!showTasks} onOpenChange={(o) => { if (!o) { setShowTasks(null); setTaskTitle(""); setTaskDue(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Tarefas / follow-up</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="max-h-60 space-y-1 overflow-y-auto">
+              {showTasks && getTasksForLead(showTasks).length === 0 && (
+                <p className="py-2 text-sm text-muted-foreground">Nenhuma tarefa para este lead.</p>
+              )}
+              {showTasks && getTasksForLead(showTasks).map((t) => {
+                const overdue = t.dueDate && !t.done && new Date(t.dueDate).getTime() < now.getTime();
+                return (
+                  <div key={t.id} className="flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm">
+                    <button onClick={() => toggleLeadTask(t.id, !t.done)} title="Concluir"
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${t.done ? "bg-success text-success-foreground" : ""}`}>
+                      {t.done && <Check className="h-3.5 w-3.5" />}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className={`truncate ${t.done ? "line-through text-muted-foreground" : ""}`}>{t.title}</p>
+                      {t.dueDate && <p className={`text-xs ${overdue ? "text-destructive" : "text-muted-foreground"}`}>{new Date(t.dueDate).toLocaleDateString("pt-BR")}</p>}
+                    </div>
+                    <button onClick={() => deleteLeadTask(t.id)} title="Remover"><Trash2 className="h-3.5 w-3.5 text-destructive" /></button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="space-y-2 border-t pt-3">
+              <Input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Ex.: Ligar para confirmar interesse" onKeyDown={(e) => e.key === "Enter" && handleAddTask()} />
+              <div className="flex gap-2">
+                <Input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} className="flex-1" />
+                <Button onClick={handleAddTask} disabled={!taskTitle.trim()}>Adicionar</Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
