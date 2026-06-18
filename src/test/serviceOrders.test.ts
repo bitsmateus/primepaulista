@@ -20,6 +20,30 @@ describe("lucro da OS", () => {
   it("cobrado − peça − impostos (mão de obra não entra)", () => {
     expect(osProfit(mk({ chargedAmount: 400, partCost: 100, taxes: 20 }))).toBe(280);
   });
+
+  // Regressão: mão de obra é receita interna, nunca custo. Variar laborCost
+  // não pode mudar o lucro.
+  it("laborCost não altera o lucro (independente do valor)", () => {
+    const base = mk({ chargedAmount: 300, partCost: 50, taxes: 0 });
+    expect(osProfit({ ...base, laborCost: 0 })).toBe(osProfit({ ...base, laborCost: 999 }));
+    expect(osProfit({ ...base, laborCost: 999 })).toBe(250);
+  });
+
+  it("OS só com mão de obra dá lucro positivo, nunca negativo", () => {
+    const o = mk({ chargedAmount: 100, laborCost: 80, partCost: 0, taxes: 0 });
+    expect(osProfit(o)).toBe(100);
+    expect(osProfit(o)).toBeGreaterThan(0);
+  });
+
+  it("buildOSReport: lucro do mês ignora a mão de obra", () => {
+    const now = new Date(2026, 5, 15);
+    const finalizada = mk({
+      status: "Entregue / Finalizado", completedAt: new Date(2026, 5, 10),
+      chargedAmount: 200, partCost: 50, taxes: 0, laborCost: 500,
+    });
+    // 200 − 50 − 0 = 150 (a mão de obra de 500 não vira prejuízo)
+    expect(buildOSReport([finalizada], now).monthProfit).toBe(150);
+  });
 });
 
 describe("dias no lab", () => {
