@@ -11,10 +11,10 @@ const mkCustomer = (over: Partial<Customer>): Customer => ({
 });
 
 describe("dias de garantia por condição", () => {
-  it("Lacrado = 365, Seminovo = 90", () => {
+  it("Lacrado = 365, Seminovo = 180", () => {
     expect(warrantyDaysForCondition("Lacrado")).toBe(365);
-    expect(warrantyDaysForCondition("Seminovo")).toBe(90);
-    expect(warrantyDaysForCondition("")).toBe(90);
+    expect(warrantyDaysForCondition("Seminovo")).toBe(180);
+    expect(warrantyDaysForCondition("")).toBe(180);
   });
 });
 
