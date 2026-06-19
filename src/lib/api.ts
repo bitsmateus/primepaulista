@@ -104,6 +104,7 @@ function mapCustomer(r: CustomerRow): Customer {
     whatsapp: r.whatsapp ?? "",
     birthday: r.birthday ?? "",
     leadOrigin: (r.leadOrigin ?? "Instagram") as Customer["leadOrigin"],
+    notes: r.notes ?? "",
     createdAt: new Date(r.createdAt),
   };
 }
@@ -698,6 +699,7 @@ export interface SalePayload {
   tradeInDiscount: number;
   discount: number;
   total: number;
+  notes?: string;
   items: {
     productType: "device" | "accessory";
     productId: string;
@@ -732,6 +734,7 @@ export interface SaleUpdate {
   customerId?: string;
   sellerName?: string;
   discount?: number;
+  notes?: string;
   paymentMethod?: "PIX" | "Dinheiro" | "Cartão de Crédito" | "Cartão de Débito";
   installments?: number;
 }
@@ -746,6 +749,7 @@ interface SaleFullRow {
   tradeInDiscount: string;
   discount: string;
   total: string;
+  notes: string | null;
   createdAt: string;
   returnedAt: string | null;
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
@@ -796,6 +800,7 @@ function mapSaleFull(r: SaleFullRow): Sale {
     tradeInDiscount: Number(r.tradeInDiscount),
     discount: Number(r.discount),
     total: Number(r.total),
+    notes: r.notes ?? "",
     createdAt: new Date(r.createdAt),
     returnedAt: r.returnedAt ? new Date(r.returnedAt) : undefined,
   };

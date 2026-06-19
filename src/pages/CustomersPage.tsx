@@ -85,22 +85,23 @@ export default function CustomersPage() {
   const [whatsapp, setWhatsapp] = useState("");
   const [birthday, setBirthday] = useState("");
   const [leadOrigin, setLeadOrigin] = useState<LeadOrigin>("Instagram");
+  const [notes, setNotes] = useState("");
 
   const resetForm = () => {
-    setName(""); setCpf(""); setWhatsapp(""); setBirthday(""); setLeadOrigin("Instagram");
+    setName(""); setCpf(""); setWhatsapp(""); setBirthday(""); setLeadOrigin("Instagram"); setNotes("");
   };
   const openCreate = () => { resetForm(); setEditingId(null); setOpen(true); };
   const openEdit = (c: Customer) => {
     setEditingId(c.id);
     setName(c.name); setCpf(c.cpf || ""); setWhatsapp(c.whatsapp || "");
-    setBirthday(c.birthday || ""); setLeadOrigin(c.leadOrigin || "Instagram");
+    setBirthday(c.birthday || ""); setLeadOrigin(c.leadOrigin || "Instagram"); setNotes(c.notes || "");
     setOpen(true);
   };
 
   const handleSubmit = async () => {
     if (!name.trim()) { toast.error("Informe o nome do cliente."); return; }
     if (cpf.trim() && !isValidCpf(cpf)) { toast.error("CPF inválido."); return; }
-    const payload = { name: name.trim(), cpf: cpf.trim(), whatsapp: whatsapp.trim(), birthday, leadOrigin };
+    const payload = { name: name.trim(), cpf: cpf.trim(), whatsapp: whatsapp.trim(), birthday, leadOrigin, notes: notes.trim() };
     setSaving(true);
     try {
       if (editingId) { await updateCustomer(editingId, payload); toast.success("Cliente atualizado!"); }
@@ -329,6 +330,10 @@ export default function CustomersPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Descrição / Observação</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anotações sobre o cliente (opcional)" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => { resetForm(); setEditingId(null); setOpen(false); }}>Cancelar</Button>

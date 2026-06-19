@@ -62,6 +62,7 @@ export default function VendasPage() {
   const [eDiscount, setEDiscount] = useState("");
   const [ePayment, setEPayment] = useState<PaymentMethod>("PIX");
   const [eInstallments, setEInstallments] = useState("1");
+  const [eNotes, setENotes] = useState("");
 
   const sellers = useMemo(() => [...new Set(sales.map((s) => s.seller).filter(Boolean))], [sales]);
   const now = new Date();
@@ -85,6 +86,7 @@ export default function VendasPage() {
     setECustomer(s.customer?.id || "");
     setESeller(s.seller || "");
     setEDiscount(String(s.discount ?? 0));
+    setENotes(s.notes ?? "");
     setEPayment((s.payments[0]?.method as PaymentMethod) || "PIX");
     setEInstallments(String(s.payments[0]?.installments ?? 1));
   };
@@ -97,6 +99,7 @@ export default function VendasPage() {
         customerId: eCustomer || undefined,
         sellerName: eSeller,
         discount: Number(eDiscount) || 0,
+        notes: eNotes,
         paymentMethod: ePayment,
         installments: ePayment === "Cartão de Crédito" ? Number(eInstallments) || 1 : 1,
       });
@@ -270,6 +273,12 @@ export default function VendasPage() {
                   ))}
                 </div>
               </div>
+              {viewSale.notes && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Descrição / Observação</Label>
+                  <p className="text-sm whitespace-pre-wrap">{viewSale.notes}</p>
+                </div>
+              )}
               <div className="border-t pt-3">
                 <Label className="text-xs text-muted-foreground">Nota fiscal / anexos</Label>
                 <div className="mt-2"><SaleAttachments saleId={viewSale.id} /></div>
@@ -325,6 +334,10 @@ export default function VendasPage() {
                   <Input type="number" min={1} value={eInstallments} onChange={(e) => setEInstallments(e.target.value)} />
                 </div>
               )}
+              <div>
+                <Label>Descrição / Observação</Label>
+                <Textarea value={eNotes} onChange={(e) => setENotes(e.target.value)} rows={2} placeholder="Observações da venda" />
+              </div>
               <div className="rounded-lg bg-muted p-3 flex justify-between text-sm">
                 <span className="font-medium">Novo total</span>
                 <span className="font-semibold">{fmt(editTotalPreview)}</span>

@@ -178,6 +178,7 @@ export function useInventory() {
       tradeInDiscount: sale.tradeInDiscount,
       discount: sale.discount,
       total: sale.total,
+      notes: sale.notes,
       items: sale.items.map((item) => ({
         productType: item.type,
         productId: (item.deviceId ?? item.accessoryId)!,

@@ -8,6 +8,7 @@ export const customers = pgTable("customers", {
   whatsapp: text("whatsapp"),
   birthday: text("birthday"), // formato livre (dd/mm); usar date depois se necessário
   leadOrigin: leadOriginEnum("lead_origin"),
+  notes: text("notes"), // observações / descrição do cliente
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

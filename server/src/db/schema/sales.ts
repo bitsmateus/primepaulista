@@ -22,6 +22,7 @@ export const sales = pgTable("sales", {
     .default("0"),
   discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"), // desconto geral
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  notes: text("notes"), // descrição / observação da venda
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   returnedAt: timestamp("returned_at", { withTimezone: true }), // data da devolução/estorno (se houver)
 }, (t) => ({

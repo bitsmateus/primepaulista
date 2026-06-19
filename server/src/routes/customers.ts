@@ -11,6 +11,7 @@ const customerInput = z.object({
   whatsapp: z.string().max(30).optional().default(""),
   birthday: z.string().max(20).optional().default(""),
   leadOrigin: z.enum(["Instagram", "Indicação", "Tráfego Pago"]).optional(),
+  notes: z.string().max(2000).optional().default(""),
 });
 
 export async function customerRoutes(app: FastifyInstance) {

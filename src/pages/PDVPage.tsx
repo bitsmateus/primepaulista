@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
@@ -62,6 +63,7 @@ export default function PDVPage() {
 
   // Desconto geral
   const [discountValue, setDiscountValue] = useState("");
+  const [saleNotes, setSaleNotes] = useState("");
   const [discountMode, setDiscountMode] = useState<"R$" | "%">("R$");
 
   // Última venda (2ª via) + busca avulsa de acessório
@@ -363,6 +365,7 @@ export default function PDVPage() {
         tradeInDiscount,
         discount,
         total,
+        notes: saleNotes.trim() || undefined,
       });
 
       printReceipt(sale, devices);
@@ -370,7 +373,7 @@ export default function PDVPage() {
       toast.success("Venda finalizada com sucesso!");
       // Reset
       setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
-      setCustomerQuery(""); setImeiQuery(""); setDiscountValue("");
+      setCustomerQuery(""); setImeiQuery(""); setDiscountValue(""); setSaleNotes("");
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : "Falha ao registrar a venda. Tente novamente."
@@ -639,6 +642,12 @@ export default function PDVPage() {
                     </Select>
                     {discount > 0 && <span className="text-sm font-medium text-success">-{fmt(discount)}</span>}
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-sm">Descrição / Observação (opcional)</Label>
+                  <Textarea value={saleNotes} onChange={(e) => setSaleNotes(e.target.value)} rows={2}
+                    placeholder="Ex.: condições combinadas, brinde, observações da venda…" />
                 </div>
 
                 {tradeIn && (

@@ -52,6 +52,7 @@ export interface Customer {
   whatsapp: string;
   birthday: string;
   leadOrigin: LeadOrigin;
+  notes?: string; // observações / descrição do cliente
   createdAt: Date;
 }
 
@@ -98,6 +99,7 @@ export interface Sale {
   tradeInDiscount: number;
   discount: number;
   total: number;
+  notes?: string; // descrição / observação da venda
   createdAt: Date;
   returnedAt?: Date; // preenchido se a venda foi devolvida/estornada
 }
