@@ -3,6 +3,7 @@ import { LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, Mes
 import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRoute } from "@/lib/permissions";
+import { APP_VERSION } from "@/version";
 
 const roleLabels: Record<string, string> = {
   admin: "Administrador",
@@ -79,6 +80,9 @@ export function AppSidebar() {
           <LogOut className="h-4 w-4" />
           Sair
         </button>
+        <p className="mt-2 px-3 text-center text-[11px] text-muted-foreground">
+          Prime Paulista · v{APP_VERSION}
+        </p>
       </div>
     </aside>
   );
