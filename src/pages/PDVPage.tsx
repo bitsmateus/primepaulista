@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Repeat, Printer, UserPlus, Package, RotateCcw, Tag } from "lucide-react";
+import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Repeat, Printer, UserPlus, Package, RotateCcw, Tag, Paperclip } from "lucide-react";
+import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,6 +66,7 @@ export default function PDVPage() {
 
   // Última venda (2ª via) + busca avulsa de acessório
   const [lastSale, setLastSale] = useState<Sale | null>(null);
+  const [showNf, setShowNf] = useState(false);
   const [accQuery, setAccQuery] = useState("");
   const [showAccResults, setShowAccResults] = useState(false);
   const accBoxRef = useRef<HTMLDivElement>(null);
@@ -672,6 +674,11 @@ export default function PDVPage() {
                     <RotateCcw className="h-4 w-4" /> 2ª via
                   </Button>
                 )}
+                {lastSale && (
+                  <Button variant="outline" className="gap-2" onClick={() => setShowNf(true)}>
+                    <Paperclip className="h-4 w-4" /> Anexar NF
+                  </Button>
+                )}
                 <Button
                   className={lastSale ? "gap-2" : "ml-auto gap-2"}
                   size="lg"
@@ -799,6 +806,25 @@ export default function PDVPage() {
           </div>
         </div>
       </div>
+
+      {/* Anexar Nota Fiscal (após a venda) */}
+      <Dialog open={showNf} onOpenChange={setShowNf}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nota fiscal da venda</DialogTitle>
+          </DialogHeader>
+          {lastSale ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Venda de {lastSale.customer?.name || "—"} · {lastSale.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+              </p>
+              <SaleAttachments saleId={lastSale.id} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Finalize uma venda para anexar a nota fiscal.</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* New Customer Modal */}
       <Dialog open={showNewCustomer} onOpenChange={setShowNewCustomer}>

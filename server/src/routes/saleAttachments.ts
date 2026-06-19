@@ -32,8 +32,9 @@ export async function saleAttachmentRoutes(app: FastifyInstance) {
     return { attachments };
   });
 
-  // POST /sales/:id/attachments  (multipart, campo "file") — somente admin
-  app.post("/sales/:id/attachments", { preHandler: requireRole("admin") }, async (req, reply) => {
+  // POST /sales/:id/attachments  (multipart, campo "file") — qualquer usuário logado
+  // (o vendedor anexa a NF após a venda; a exclusão fica restrita a admin)
+  app.post("/sales/:id/attachments", async (req, reply) => {
     if (!storageEnabled) {
       return reply.code(503).send({ error: "Armazenamento (MinIO) não configurado." });
     }
