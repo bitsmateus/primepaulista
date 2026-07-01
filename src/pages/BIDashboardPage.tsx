@@ -29,7 +29,7 @@ export default function BIDashboardPage() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="bg-muted">
+          <TabsList className="flex w-full justify-start overflow-x-auto bg-muted">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="cash">Caixa</TabsTrigger>
             <TabsTrigger value="expenses">Despesas</TabsTrigger>

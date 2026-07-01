@@ -154,12 +154,12 @@ export default function CustomersPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Clientes</h1>
             <p className="mt-1 text-sm text-muted-foreground">Base de clientes cadastrados</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => { setParsed(null); setImportSummary(null); setShowImport(true); }} className="gap-2">
               <Upload className="h-4 w-4" /> Importar
             </Button>
