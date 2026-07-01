@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "logo-prime-paulista.png", "robots.txt"],
+      includeAssets: ["favicon.ico", "logo-prime-paulista.png", "pwa-192.png", "pwa-512.png", "pwa-maskable-512.png", "robots.txt"],
       manifest: {
         name: "Prime Paulista",
         short_name: "Prime",
@@ -31,9 +31,9 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         scope: "/",
         icons: [
-          { src: "logo-prime-paulista.png", sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: "logo-prime-paulista.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "logo-prime-paulista.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "pwa-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "pwa-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "pwa-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
