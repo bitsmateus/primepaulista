@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,7 +13,40 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    mode === "development" && componentTagger(),
+    VitePWA({
+      registerType: "autoUpdate",
+      includeAssets: ["favicon.ico", "logo-prime-paulista.png", "robots.txt"],
+      manifest: {
+        name: "Prime Paulista",
+        short_name: "Prime",
+        description: "Sistema de gestão Prime Paulista",
+        lang: "pt-BR",
+        theme_color: "#1c1c1e",
+        background_color: "#ffffff",
+        display: "standalone",
+        orientation: "portrait",
+        start_url: "/",
+        scope: "/",
+        icons: [
+          { src: "logo-prime-paulista.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "logo-prime-paulista.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "logo-prime-paulista.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      workbox: {
+        navigateFallback: "/index.html",
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        // Não intercepta chamadas de API (outro domínio) nem rotas do backend
+        navigateFallbackDenylist: [/^\/api/],
+      },
+      devOptions: { enabled: false },
+    }),
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
