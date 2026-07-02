@@ -51,7 +51,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </button>
       </header>
 
-      <main className={`min-h-screen transition-[margin] duration-200 ${collapsed ? "lg:ml-16" : "lg:ml-60"}`}>
+      <main className={`min-h-screen transition-[margin] duration-200 ${collapsed ? "lg:ml-20" : "lg:ml-60"}`}>
         <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">{children}</div>
       </main>
     </div>

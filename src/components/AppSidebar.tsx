@@ -48,21 +48,19 @@ export function SidebarContent({ collapsed = false, onToggle, onNavigate }: Side
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
-      <div className={`flex h-16 items-center border-b ${collapsed ? "justify-center px-2" : "gap-2.5 px-4"}`}>
-        <img src={logo} alt="Prime Paulista" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+      <div className={`flex h-16 items-center border-b ${collapsed ? "justify-center gap-1 px-1" : "gap-2.5 px-4"}`}>
+        <img src={logo} alt="Prime Paulista" className={`shrink-0 rounded-full object-cover ${collapsed ? "h-8 w-8" : "h-9 w-9"}`} />
         {!collapsed && <span className="flex-1 truncate text-base font-semibold text-foreground">Prime Paulista</span>}
-        {onToggle && !collapsed && (
-          <button onClick={onToggle} aria-label="Recolher menu" className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground">
-            <PanelLeftClose className="h-4 w-4" />
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+            className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
         )}
       </div>
-
-      {onToggle && collapsed && (
-        <button onClick={onToggle} aria-label="Expandir menu" className="mx-auto mt-2 rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground">
-          <PanelLeftOpen className="h-4 w-4" />
-        </button>
-      )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems
@@ -122,7 +120,7 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
   return (
     <aside
       className={`fixed left-0 top-0 z-30 hidden h-screen border-r transition-[width] duration-200 lg:block ${
-        collapsed ? "w-16" : "w-60"
+        collapsed ? "w-20" : "w-60"
       }`}
     >
       <SidebarContent collapsed={collapsed} onToggle={onToggle} />
