@@ -1,5 +1,8 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare, Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck } from "lucide-react";
+import {
+  LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare,
+  Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen,
+} from "lucide-react";
 import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRoute } from "@/lib/permissions";
@@ -25,8 +28,14 @@ const navItems = [
   { to: "/usuarios", label: "Usuários", icon: ShieldCheck },
 ];
 
-// Conteúdo do menu — reutilizado no desktop (fixo) e no mobile (gaveta)
-export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+interface SidebarProps {
+  collapsed?: boolean;
+  onToggle?: () => void; // presente só no desktop
+  onNavigate?: () => void; // fecha a gaveta no mobile
+}
+
+// Conteúdo do menu — reutilizado no desktop (fixo/retrátil) e no mobile (gaveta)
+export function SidebarContent({ collapsed = false, onToggle, onNavigate }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -39,10 +48,21 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
-      <div className="flex h-16 items-center gap-2.5 border-b px-4">
-        <img src={logo} alt="Prime Paulista" className="h-9 w-9 rounded-full object-cover" />
-        <span className="text-base font-semibold text-foreground">Prime Paulista</span>
+      <div className={`flex h-16 items-center border-b ${collapsed ? "justify-center px-2" : "gap-2.5 px-4"}`}>
+        <img src={logo} alt="Prime Paulista" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+        {!collapsed && <span className="flex-1 truncate text-base font-semibold text-foreground">Prime Paulista</span>}
+        {onToggle && !collapsed && (
+          <button onClick={onToggle} aria-label="Recolher menu" className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground">
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
       </div>
+
+      {onToggle && collapsed && (
+        <button onClick={onToggle} aria-label="Expandir menu" className="mx-auto mt-2 rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground">
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+      )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems
@@ -54,21 +74,24 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 key={to}
                 to={to}
                 onClick={onNavigate}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                title={collapsed ? label : undefined}
+                className={`flex items-center rounded-lg py-2.5 text-sm font-medium transition-colors ${
+                  collapsed ? "justify-center px-2" : "gap-3 px-3"
+                } ${
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {label}
+                <Icon className="h-4 w-4 shrink-0" />
+                {!collapsed && label}
               </NavLink>
             );
           })}
       </nav>
 
       <div className="border-t px-3 py-3">
-        {user && (
+        {user && !collapsed && (
           <div className="mb-2 px-3">
             <p className="truncate text-sm font-medium text-foreground">{user.name}</p>
             <p className="text-xs text-muted-foreground">{roleLabels[user.role] ?? user.role}</p>
@@ -76,24 +99,33 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         )}
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          title={collapsed ? "Sair" : undefined}
+          className={`flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${
+            collapsed ? "justify-center px-2" : "gap-3 px-3"
+          }`}
         >
-          <LogOut className="h-4 w-4" />
-          Sair
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && "Sair"}
         </button>
-        <p className="mt-2 px-3 text-center text-[11px] text-muted-foreground">
-          Prime Paulista · v{APP_VERSION}
-        </p>
+        {!collapsed && (
+          <p className="mt-2 px-3 text-center text-[11px] text-muted-foreground">
+            Prime Paulista · v{APP_VERSION}
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-// Barra fixa (somente desktop ≥ lg)
-export function AppSidebar() {
+// Barra fixa (somente desktop ≥ lg), com largura retrátil
+export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   return (
-    <aside className="fixed left-0 top-0 z-30 hidden h-screen w-60 border-r lg:block">
-      <SidebarContent />
+    <aside
+      className={`fixed left-0 top-0 z-30 hidden h-screen border-r transition-[width] duration-200 lg:block ${
+        collapsed ? "w-16" : "w-60"
+      }`}
+    >
+      <SidebarContent collapsed={collapsed} onToggle={onToggle} />
     </aside>
   );
 }

@@ -6,10 +6,21 @@ import { AppSidebar, SidebarContent } from "./AppSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo-prime-paulista.png";
 
+const COLLAPSE_KEY = "pp_sidebar_collapsed";
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
   const navigate = useNavigate();
   const { logout } = useAuth();
+
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      return next;
+    });
+  };
 
   const handleLogout = () => {
     logout();
@@ -18,8 +29,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Menu fixo (desktop) */}
-      <AppSidebar />
+      {/* Menu fixo/retrátil (desktop) */}
+      <AppSidebar collapsed={collapsed} onToggle={toggleCollapsed} />
 
       {/* Barra superior (mobile/tablet) com menu-gaveta e logoff */}
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background px-4 lg:hidden">
@@ -40,7 +51,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </button>
       </header>
 
-      <main className="min-h-screen lg:ml-60">
+      <main className={`min-h-screen transition-[margin] duration-200 ${collapsed ? "lg:ml-16" : "lg:ml-60"}`}>
         <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">{children}</div>
       </main>
     </div>
