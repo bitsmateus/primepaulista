@@ -1,0 +1,1 @@
+ALTER TABLE "devices" ADD COLUMN "entry_date" timestamp with time zone;

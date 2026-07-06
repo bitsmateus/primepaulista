@@ -17,6 +17,7 @@ const deviceInput = z.object({
   salePrice: z.coerce.number().min(0).optional(),
   serialImei: z.string().optional().default(""),
   internalSerial: z.string().optional().default(""),
+  entryDate: z.coerce.date().optional(),
   status: z
     .enum(["Disponível", "Vendido", "Em Manutenção", "Reservado"])
     .default("Disponível"),

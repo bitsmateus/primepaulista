@@ -76,9 +76,10 @@ export interface ManagedUser {
 }
 
 // ---- Mapeamento de dados (banco → tipos do front) ----
-type DeviceRow = Omit<Device, "cost" | "salePrice" | "createdAt"> & {
+type DeviceRow = Omit<Device, "cost" | "salePrice" | "createdAt" | "entryDate"> & {
   cost: string;
   salePrice: string | null;
+  entryDate: string | null;
   createdAt: string;
 };
 type AccessoryRow = Omit<Accessory, "cost" | "price" | "createdAt"> & {
@@ -94,6 +95,7 @@ function mapDevice(r: DeviceRow): Device {
     ...r,
     cost: Number(r.cost),
     salePrice: r.salePrice !== null ? Number(r.salePrice) : undefined,
+    entryDate: r.entryDate ? new Date(r.entryDate) : undefined,
     createdAt: new Date(r.createdAt),
   };
 }

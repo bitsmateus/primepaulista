@@ -125,13 +125,25 @@ export default function DevicesPage() {
   const [salePrice, setSalePrice] = useState("");
   const [serialImei, setSerialImei] = useState("");
   const [internalSerial, setInternalSerial] = useState("");
+  const [entryDate, setEntryDate] = useState("");
   const [page, setPage] = useState(1);
+
+  // data de hoje no formato yyyy-mm-dd (fuso local) para o input date
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const toDateInput = (d?: Date) => {
+    if (!d) return "";
+    const dt = new Date(d);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  };
 
   const resetForm = () => {
     setCategory("iPhone"); setNewCategory(""); setModel("");
     setCapacity(""); setColor(""); setCondition("Lacrado");
     setBatteryHealth("100"); setSupplier(""); setCost(""); setSalePrice("");
-    setSerialImei(""); setInternalSerial("");
+    setSerialImei(""); setInternalSerial(""); setEntryDate(todayStr());
   };
 
   const openCreate = () => {
@@ -153,6 +165,7 @@ export default function DevicesPage() {
     setSalePrice(d.salePrice != null ? String(d.salePrice) : "");
     setSerialImei(d.serialImei || "");
     setInternalSerial(d.internalSerial || "");
+    setEntryDate(toDateInput(d.entryDate ?? d.createdAt));
     setOpen(true);
   };
 
@@ -184,6 +197,7 @@ export default function DevicesPage() {
       salePrice: salePrice ? Number(salePrice) : undefined,
       serialImei,
       internalSerial,
+      entryDate: entryDate ? new Date(`${entryDate}T12:00:00`) : undefined,
     };
     setSaving(true);
     try {
@@ -228,6 +242,13 @@ export default function DevicesPage() {
     return Array.from(set);
   }, [devices]);
 
+  // Modelos sugeridos = catálogo da categoria + modelos já cadastrados nessa categoria
+  const modelSuggestions = useMemo(() => {
+    const set = new Set<string>(MODELS_BY_CATEGORY[category as DeviceCategory] || []);
+    devices.forEach((d) => { if ((d.category || "iPhone") === category && d.model) set.add(d.model); });
+    return Array.from(set);
+  }, [devices, category]);
+
   // ----- Paginação -----
   useEffect(() => {
     setPage(1);
@@ -255,7 +276,7 @@ export default function DevicesPage() {
       "Categoria", "Modelo", "Capacidade", "Cor", "Condição", "Bateria %",
       "Serial/IMEI", "Fornecedor",
       ...(isAdmin ? ["Custo", "Margem"] : []), "Preço de venda",
-      "Status", "Dias em estoque", "Cadastro",
+      "Status", "Dias em estoque", "Data de entrada", "Cadastro",
     ];
     const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = filteredDevices.map((d) => [
@@ -263,7 +284,8 @@ export default function DevicesPage() {
       d.serialImei || d.internalSerial, d.supplier || "",
       ...(isAdmin ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
       d.salePrice != null ? d.salePrice.toFixed(2) : "",
-      d.status, daysInStock(d.createdAt),
+      d.status, daysInStock(d.entryDate ?? d.createdAt),
+      new Date(d.entryDate ?? d.createdAt).toLocaleDateString("pt-BR"),
       new Date(d.createdAt).toLocaleDateString("pt-BR"),
     ].map((c) => esc(String(c))).join(";"));
     const csv = "﻿" + [headers.map(esc).join(";"), ...rows].join("\n");
@@ -423,8 +445,8 @@ export default function DevicesPage() {
                           })()}
                         </TableCell>
                       )}
-                      <TableCell className={daysInStock(d.createdAt) > 30 ? "text-warning font-medium" : ""}>
-                        {d.status === "Vendido" ? "—" : `${daysInStock(d.createdAt)}d`}
+                      <TableCell className={daysInStock(d.entryDate ?? d.createdAt) > 30 ? "text-warning font-medium" : ""}>
+                        {d.status === "Vendido" ? "—" : `${daysInStock(d.entryDate ?? d.createdAt)}d`}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -544,7 +566,7 @@ export default function DevicesPage() {
                 placeholder="Selecione ou digite o modelo"
               />
               <datalist id="model-suggestions">
-                {(MODELS_BY_CATEGORY[category as DeviceCategory] || []).map((m) => <option key={m} value={m} />)}
+                {modelSuggestions.map((m) => <option key={m} value={m} />)}
               </datalist>
             </div>
 
@@ -585,6 +607,12 @@ export default function DevicesPage() {
             <div className="space-y-2">
               <Label>Fornecedor</Label>
               <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Nome do fornecedor" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Data de entrada</Label>
+              <Input type="date" value={entryDate} max={todayStr()} onChange={(e) => setEntryDate(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Dia da compra no fornecedor.</p>
             </div>
 
             {isAdmin && (

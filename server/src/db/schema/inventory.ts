@@ -31,6 +31,8 @@ export const devices = pgTable("devices", {
   serialImei: text("serial_imei"),
   internalSerial: text("internal_serial"),
   status: deviceStatusEnum("status").notNull().default("Disponível"),
+  // Data de entrada no estoque (dia da compra no fornecedor) — pode diferir do cadastro
+  entryDate: timestamp("entry_date", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

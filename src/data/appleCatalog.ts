@@ -43,7 +43,7 @@ export const MODELS_BY_CATEGORY: Record<DeviceCategory, string[]> = {
     "MacBook Air (M2)", "MacBook Pro 13\" (M2)",
   ],
   AirPods: [
-    "AirPods Pro 2", "AirPods 4 (com cancelamento)", "AirPods 4",
+    "AirPods Pro 3", "AirPods Pro 2", "AirPods 4 (com cancelamento)", "AirPods 4",
     "AirPods Max (USB-C)", "AirPods Max",
     "AirPods (3ª geração)", "AirPods (2ª geração)", "AirPods Pro",
   ],

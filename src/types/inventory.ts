@@ -17,6 +17,7 @@ export interface Device {
   serialImei: string;
   internalSerial: string;
   status: DeviceStatus;
+  entryDate?: Date; // data de entrada no estoque (compra no fornecedor)
   createdAt: Date;
 }
 
