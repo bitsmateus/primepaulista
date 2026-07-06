@@ -153,8 +153,8 @@ export function useInventory() {
     return devices.find(
       (d) =>
         (d.status === "Disponível" || d.status === "Reservado") &&
-        ((d.serialImei ?? "").toLowerCase() === q ||
-          (d.internalSerial ?? "").toLowerCase() === q)
+        [d.serialImei, d.imei2, d.serial, d.internalSerial]
+          .some((v) => (v ?? "").toLowerCase() === q)
     );
   };
 

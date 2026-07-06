@@ -123,7 +123,9 @@ export default function DevicesPage() {
   const [supplier, setSupplier] = useState("");
   const [cost, setCost] = useState("");
   const [salePrice, setSalePrice] = useState("");
-  const [serialImei, setSerialImei] = useState("");
+  const [serialImei, setSerialImei] = useState(""); // IMEI 1
+  const [imei2, setImei2] = useState(""); // IMEI 2
+  const [serial, setSerial] = useState(""); // número de série
   const [internalSerial, setInternalSerial] = useState("");
   const [entryDate, setEntryDate] = useState("");
   const [page, setPage] = useState(1);
@@ -143,7 +145,7 @@ export default function DevicesPage() {
     setCategory("iPhone"); setNewCategory(""); setModel("");
     setCapacity(""); setColor(""); setCondition("Lacrado");
     setBatteryHealth("100"); setSupplier(""); setCost(""); setSalePrice("");
-    setSerialImei(""); setInternalSerial(""); setEntryDate(todayStr());
+    setSerialImei(""); setImei2(""); setSerial(""); setInternalSerial(""); setEntryDate(todayStr());
   };
 
   const openCreate = () => {
@@ -163,7 +165,7 @@ export default function DevicesPage() {
     setSupplier(d.supplier || "");
     setCost(String(d.cost ?? ""));
     setSalePrice(d.salePrice != null ? String(d.salePrice) : "");
-    setSerialImei(d.serialImei || "");
+    setSerialImei(d.serialImei || ""); setImei2(d.imei2 || ""); setSerial(d.serial || "");
     setInternalSerial(d.internalSerial || "");
     setEntryDate(toDateInput(d.entryDate ?? d.createdAt));
     setOpen(true);
@@ -196,6 +198,8 @@ export default function DevicesPage() {
       cost: Number(cost) || 0,
       salePrice: salePrice ? Number(salePrice) : undefined,
       serialImei,
+      imei2,
+      serial,
       internalSerial,
       entryDate: entryDate ? new Date(`${entryDate}T12:00:00`) : undefined,
     };
@@ -469,7 +473,7 @@ export default function DevicesPage() {
                           <Button variant="ghost" size="icon" title="Imprimir etiqueta"
                             onClick={() => printDeviceLabel({
                               model: d.model, capacity: d.capacity, batteryHealth: d.batteryHealth,
-                              color: d.color, serial: d.serialImei || d.internalSerial,
+                              color: d.color, serial: d.serial || d.internalSerial || d.serialImei,
                             })}>
                             <Tag className="h-4 w-4 text-muted-foreground" />
                           </Button>
@@ -628,20 +632,38 @@ export default function DevicesPage() {
             </div>
 
             <div className="col-span-2 space-y-2">
-              <Label>Serial / IMEI</Label>
+              <Label className="text-base font-semibold">IMEI 1</Label>
+              <div className="relative">
+                <Input
+                  value={serialImei}
+                  onChange={(e) => setSerialImei(e.target.value)}
+                  placeholder="Escaneie ou digite o IMEI 1"
+                  className="h-11 pr-10 text-base font-semibold"
+                />
+                <ScanLine className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              </div>
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label className="text-base font-semibold">IMEI 2</Label>
+              <Input
+                value={imei2}
+                onChange={(e) => setImei2(e.target.value)}
+                placeholder="IMEI 2 (dual SIM, se houver)"
+                className="h-11 text-base font-semibold"
+              />
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label className="text-base font-semibold">Serial</Label>
               <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    value={serialImei}
-                    onChange={(e) => setSerialImei(e.target.value)}
-                    placeholder="Escaneie ou digite o IMEI"
-                    className="pr-10"
-                  />
-                  <ScanLine className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                </div>
+                <Input
+                  value={serial}
+                  onChange={(e) => setSerial(e.target.value)}
+                  placeholder="Número de série do aparelho"
+                  className="h-11 flex-1 text-base font-semibold"
+                />
                 <Button variant="outline" type="button" onClick={() => setInternalSerial(generateInternalSerial())}>
                   <Shuffle className="mr-2 h-4 w-4" />
-                  Gerar Serial
+                  Gerar código
                 </Button>
               </div>
               {internalSerial && (

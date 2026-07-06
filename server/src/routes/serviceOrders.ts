@@ -21,7 +21,9 @@ const osInput = z.object({
   customerCpf: z.string().max(20).optional().default(""),
   model: z.string().min(1).max(100),
   color: z.string().max(60).optional().default(""),
-  serialImei: z.string().max(60).optional().default(""),
+  serialImei: z.string().max(60).optional().default(""), // IMEI 1
+  imei2: z.string().max(60).optional().default(""), // IMEI 2
+  serial: z.string().max(60).optional().default(""), // número de série
   batteryHealth: z.coerce.number().int().min(0).max(100).optional(),
   reportedIssue: z.string().min(1).max(2000),
   technicalNotes: z.string().max(4000).optional().default(""),

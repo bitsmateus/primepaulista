@@ -30,8 +30,12 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
     const modelo = dev
       ? `${dev.model} ${formatCapacity(dev.capacity)} ${dev.color}`.trim()
       : item.name;
-    const serial = dev?.serialImei || dev?.internalSerial || item.serial || "—";
-    return { modelo, serial };
+    return {
+      modelo,
+      imei1: dev?.serialImei || item.serial || "",
+      imei2: dev?.imei2 || "",
+      serial: dev?.serial || dev?.internalSerial || "",
+    };
   });
 
   const subtotal = sale.items.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -132,7 +136,9 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
       .map(
         (d) => `
       ${fieldRow("Modelo", d.modelo)}
-      ${fieldRow("IMEI/Serial", d.serial)}`
+      ${d.imei1 ? fieldRow("IMEI 1", d.imei1) : ""}
+      ${d.imei2 ? fieldRow("IMEI 2", d.imei2) : ""}
+      ${d.serial ? fieldRow("Serial", d.serial) : ""}`
       )
       .join("")}
   </div>

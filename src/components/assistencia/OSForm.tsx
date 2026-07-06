@@ -36,7 +36,9 @@ export default function OSForm({ onCreated }: OSFormProps) {
   // Device info
   const [model, setModel] = useState("");
   const [color, setColor] = useState("");
-  const [serialImei, setSerialImei] = useState("");
+  const [serialImei, setSerialImei] = useState(""); // IMEI 1
+  const [imei2, setImei2] = useState(""); // IMEI 2
+  const [serial, setSerial] = useState(""); // número de série
   const [batteryHealth, setBatteryHealth] = useState("100");
 
   // Diagnosis
@@ -90,6 +92,8 @@ export default function OSForm({ onCreated }: OSFormProps) {
         model,
         color,
         serialImei,
+        imei2,
+        serial,
         batteryHealth: Number(batteryHealth),
         reportedIssue,
         technicalNotes,
@@ -112,7 +116,7 @@ export default function OSForm({ onCreated }: OSFormProps) {
     toast.success("Ordem de Serviço criada!");
     // Reset form
     setCustSearch(""); setSelectedCustomer(null);
-    setModel(""); setColor(""); setSerialImei(""); setBatteryHealth("100");
+    setModel(""); setColor(""); setSerialImei(""); setImei2(""); setSerial(""); setBatteryHealth("100");
     setReportedIssue(""); setTechnicalNotes("");
     setCheckCapa(false); setCheckChip(false); setCheckCarregador(false);
     setPriority("Normal"); setPartCost(""); setLaborCost("");
@@ -181,7 +185,11 @@ export default function OSForm({ onCreated }: OSFormProps) {
               <div><Label>Cor</Label><Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="Space Black" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Serial/IMEI</Label><Input value={serialImei} onChange={(e) => setSerialImei(e.target.value)} /></div>
+              <div><Label className="text-base font-semibold">IMEI 1</Label><Input value={serialImei} onChange={(e) => setSerialImei(e.target.value)} placeholder="IMEI 1" className="h-11 text-base font-semibold" /></div>
+              <div><Label className="text-base font-semibold">IMEI 2</Label><Input value={imei2} onChange={(e) => setImei2(e.target.value)} placeholder="IMEI 2 (dual SIM)" className="h-11 text-base font-semibold" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-base font-semibold">Serial</Label><Input value={serial} onChange={(e) => setSerial(e.target.value)} placeholder="Número de série" className="h-11 text-base font-semibold" /></div>
               <div><Label>Bateria (%)</Label><Input type="number" value={batteryHealth} onChange={(e) => setBatteryHealth(e.target.value)} min="0" max="100" /></div>
             </div>
           </CardContent>

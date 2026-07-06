@@ -23,7 +23,9 @@ export interface ServiceOrder {
   // Device
   model: string;
   color: string;
-  serialImei: string;
+  serialImei: string; // IMEI 1
+  imei2?: string; // IMEI 2 (dual SIM)
+  serial?: string; // número de série
   batteryHealth: number;
   // Diagnosis
   reportedIssue: string;

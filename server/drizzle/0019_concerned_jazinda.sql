@@ -1,1 +1,1 @@
-ALTER TABLE "devices" ADD COLUMN "entry_date" timestamp with time zone;
+ALTER TABLE "devices" ADD COLUMN IF NOT EXISTS "entry_date" timestamp with time zone;

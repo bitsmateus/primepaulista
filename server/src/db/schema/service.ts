@@ -21,7 +21,9 @@ export const serviceOrders = pgTable("service_orders", {
   // Aparelho
   model: text("model").notNull(),
   color: text("color"),
-  serialImei: text("serial_imei"),
+  serialImei: text("serial_imei"), // IMEI 1
+  imei2: text("imei2"), // IMEI 2 (dual SIM)
+  serial: text("serial"), // número de série
   batteryHealth: integer("battery_health"),
   // Diagnóstico
   reportedIssue: text("reported_issue").notNull(),

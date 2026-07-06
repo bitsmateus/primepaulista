@@ -77,7 +77,9 @@ export function generateOSReceiptHTML(order: ServiceOrder): string {
   <div class="section">
     <div class="section-title">Aparelho</div>
     <div class="row"><span>Modelo</span><span>${order.model}${order.color ? ` – ${order.color}` : ""}</span></div>
-    ${order.serialImei ? `<div class="row"><span>Serial/IMEI</span><span>${order.serialImei}</span></div>` : ""}
+    ${order.serialImei ? `<div class="row"><span>IMEI 1</span><span>${order.serialImei}</span></div>` : ""}
+    ${order.imei2 ? `<div class="row"><span>IMEI 2</span><span>${order.imei2}</span></div>` : ""}
+    ${order.serial ? `<div class="row"><span>Serial</span><span>${order.serial}</span></div>` : ""}
     ${order.batteryHealth ? `<div class="row"><span>Bateria</span><span>${order.batteryHealth}%</span></div>` : ""}
     ${checklistItems.length ? `<div class="row"><span>Acessórios na entrada</span><span>${checklistItems.join(", ")}</span></div>` : ""}
   </div>

@@ -95,6 +95,9 @@ function mapDevice(r: DeviceRow): Device {
     ...r,
     cost: Number(r.cost),
     salePrice: r.salePrice !== null ? Number(r.salePrice) : undefined,
+    serialImei: r.serialImei ?? "",
+    imei2: r.imei2 ?? "",
+    serial: r.serial ?? "",
     entryDate: r.entryDate ? new Date(r.entryDate) : undefined,
     createdAt: new Date(r.createdAt),
   };
@@ -121,6 +124,8 @@ interface ServiceOrderRow {
   model: string;
   color: string | null;
   serialImei: string | null;
+  imei2: string | null;
+  serial: string | null;
   batteryHealth: number | null;
   reportedIssue: string;
   technicalNotes: string | null;
@@ -151,6 +156,8 @@ function mapServiceOrder(r: ServiceOrderRow): ServiceOrder {
     model: r.model,
     color: r.color ?? "",
     serialImei: r.serialImei ?? "",
+    imei2: r.imei2 ?? "",
+    serial: r.serial ?? "",
     batteryHealth: r.batteryHealth ?? 0,
     reportedIssue: r.reportedIssue,
     technicalNotes: r.technicalNotes ?? "",

@@ -92,7 +92,7 @@ export default function OSKanban() {
     setEditing(o);
     setForm({
       customerName: o.customerName, customerPhone: o.customerPhone, model: o.model, color: o.color,
-      serialImei: o.serialImei, batteryHealth: o.batteryHealth, reportedIssue: o.reportedIssue,
+      serialImei: o.serialImei, imei2: o.imei2, serial: o.serial, batteryHealth: o.batteryHealth, reportedIssue: o.reportedIssue,
       technicalNotes: o.technicalNotes, priority: o.priority, partDescription: o.partDescription,
       partCost: o.partCost, laborCost: o.laborCost, chargedAmount: o.chargedAmount, taxes: o.taxes,
     });
@@ -263,7 +263,9 @@ export default function OSKanban() {
                 <div>
                   <Label className="text-xs text-muted-foreground">Aparelho</Label>
                   <p className="text-sm font-medium">{selectedOrder.model} — {selectedOrder.color}</p>
-                  <p className="text-xs text-muted-foreground">IMEI: {selectedOrder.serialImei}</p>
+                  <p className="text-xs text-muted-foreground">IMEI 1: {selectedOrder.serialImei || "—"}</p>
+                  {selectedOrder.imei2 && <p className="text-xs text-muted-foreground">IMEI 2: {selectedOrder.imei2}</p>}
+                  {selectedOrder.serial && <p className="text-xs text-muted-foreground">Serial: {selectedOrder.serial}</p>}
                   <p className="text-xs text-muted-foreground">Bateria: {selectedOrder.batteryHealth}%</p>
                 </div>
               </div>
@@ -344,7 +346,9 @@ export default function OSKanban() {
               <div><Label>Cor</Label><Input value={form.color ?? ""} onChange={(e) => set({ color: e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Serial/IMEI</Label><Input value={form.serialImei ?? ""} onChange={(e) => set({ serialImei: e.target.value })} /></div>
+              <div><Label className="text-base font-semibold">IMEI 1</Label><Input value={form.serialImei ?? ""} onChange={(e) => set({ serialImei: e.target.value })} className="h-11 text-base font-semibold" /></div>
+              <div><Label className="text-base font-semibold">IMEI 2</Label><Input value={form.imei2 ?? ""} onChange={(e) => set({ imei2: e.target.value })} className="h-11 text-base font-semibold" /></div>
+              <div><Label className="text-base font-semibold">Serial</Label><Input value={form.serial ?? ""} onChange={(e) => set({ serial: e.target.value })} className="h-11 text-base font-semibold" /></div>
               <div><Label>Bateria (%)</Label><Input type="number" value={form.batteryHealth ?? 0} onChange={(e) => set({ batteryHealth: num(e.target.value) })} /></div>
             </div>
             <div><Label>Defeito Relatado *</Label><Textarea value={form.reportedIssue ?? ""} onChange={(e) => set({ reportedIssue: e.target.value })} rows={2} /></div>

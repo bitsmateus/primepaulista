@@ -15,7 +15,9 @@ const deviceInput = z.object({
   supplier: z.string().optional().default(""),
   cost: z.coerce.number().min(0).default(0),
   salePrice: z.coerce.number().min(0).optional(),
-  serialImei: z.string().optional().default(""),
+  serialImei: z.string().optional().default(""), // IMEI 1
+  imei2: z.string().optional().default(""), // IMEI 2
+  serial: z.string().optional().default(""), // número de série
   internalSerial: z.string().optional().default(""),
   entryDate: z.coerce.date().optional(),
   status: z

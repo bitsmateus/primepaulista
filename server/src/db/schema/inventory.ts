@@ -28,7 +28,9 @@ export const devices = pgTable("devices", {
   supplier: text("supplier"),
   cost: numeric("cost", { precision: 12, scale: 2 }).notNull().default("0"),
   salePrice: numeric("sale_price", { precision: 12, scale: 2 }), // preço de venda (para margem)
-  serialImei: text("serial_imei"),
+  serialImei: text("serial_imei"), // IMEI 1
+  imei2: text("imei2"), // IMEI 2 (dual SIM)
+  serial: text("serial"), // número de série do aparelho
   internalSerial: text("internal_serial"),
   status: deviceStatusEnum("status").notNull().default("Disponível"),
   // Data de entrada no estoque (dia da compra no fornecedor) — pode diferir do cadastro
