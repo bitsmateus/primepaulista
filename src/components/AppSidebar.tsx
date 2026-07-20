@@ -1,11 +1,13 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare,
-  Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2,
+  Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2, RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRoute } from "@/lib/permissions";
+import { clearAppCache } from "@/lib/cache";
 import { APP_VERSION } from "@/version";
 
 const roleLabels: Record<string, string> = {
@@ -45,6 +47,11 @@ export function SidebarContent({ collapsed = false, onToggle, onNavigate }: Side
     onNavigate?.();
     logout();
     navigate("/login", { replace: true });
+  };
+
+  const handleClearCache = async () => {
+    toast.loading("Limpando cache e atualizando…", { id: "clear-cache" });
+    await clearAppCache(); // recarrega a página ao final
   };
 
   return (
@@ -96,6 +103,16 @@ export function SidebarContent({ collapsed = false, onToggle, onNavigate }: Side
             <p className="text-xs text-muted-foreground">{roleLabels[user.role] ?? user.role}</p>
           </div>
         )}
+        <button
+          onClick={handleClearCache}
+          title={collapsed ? "Limpar cache" : undefined}
+          className={`flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${
+            collapsed ? "justify-center px-2" : "gap-3 px-3"
+          }`}
+        >
+          <RefreshCw className="h-4 w-4 shrink-0" />
+          {!collapsed && "Limpar cache"}
+        </button>
         <button
           onClick={handleLogout}
           title={collapsed ? "Sair" : undefined}
