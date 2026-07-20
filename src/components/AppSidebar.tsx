@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare,
-  Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen,
+  Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2,
 } from "lucide-react";
 import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ const navItems = [
   { to: "/pdv", label: "Frente de Caixa", icon: ShoppingCart },
   { to: "/vendas", label: "Vendas", icon: Receipt },
   { to: "/devices", label: "Aparelhos", icon: Smartphone },
+  { to: "/estoque", label: "Estoque Geral", icon: Table2 },
   { to: "/accessories", label: "Acessórios", icon: Package },
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/crm", label: "CRM", icon: MessageSquare },

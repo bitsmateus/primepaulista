@@ -12,6 +12,7 @@ import { ServiceOrderProvider } from "@/contexts/ServiceOrderContext";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import DevicesPage from "./pages/DevicesPage";
+import EstoqueGeralPage from "./pages/EstoqueGeralPage";
 import AccessoriesPage from "./pages/AccessoriesPage";
 import PDVPage from "./pages/PDVPage";
 import VendasPage from "./pages/VendasPage";
@@ -65,6 +66,7 @@ const App = () => (
             <Route path="/pdv" element={<ProtectedApp><PDVPage /></ProtectedApp>} />
             <Route path="/vendas" element={<ProtectedApp><VendasPage /></ProtectedApp>} />
             <Route path="/devices" element={<ProtectedApp><DevicesPage /></ProtectedApp>} />
+            <Route path="/estoque" element={<ProtectedApp><EstoqueGeralPage /></ProtectedApp>} />
             <Route path="/accessories" element={<ProtectedApp><AccessoriesPage /></ProtectedApp>} />
             <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
             <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />

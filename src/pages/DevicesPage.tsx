@@ -411,7 +411,7 @@ export default function DevicesPage() {
                     <TableHead>Cor</TableHead>
                     <TableHead>Condição</TableHead>
                     <TableHead>Bateria</TableHead>
-                    <TableHead>Serial/IMEI</TableHead>
+                    <TableHead>Serial</TableHead>
                     {isAdmin && <TableHead>Custo</TableHead>}
                     <TableHead>Preço</TableHead>
                     {isAdmin && <TableHead>Margem</TableHead>}
@@ -430,7 +430,7 @@ export default function DevicesPage() {
                       <TableCell>{d.condition}</TableCell>
                       <TableCell>{d.batteryHealth}%</TableCell>
                       <TableCell className="font-mono text-xs">
-                        {d.serialImei || d.internalSerial}
+                        {d.serial || d.internalSerial}
                       </TableCell>
                       {isAdmin && <TableCell>{fmt(d.cost)}</TableCell>}
                       <TableCell>{d.salePrice != null ? fmt(d.salePrice) : "—"}</TableCell>
@@ -632,6 +632,26 @@ export default function DevicesPage() {
             </div>
 
             <div className="col-span-2 space-y-2">
+              <Label className="text-base font-semibold">Serial</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={serial}
+                  onChange={(e) => setSerial(e.target.value)}
+                  placeholder="Número de série do aparelho"
+                  className="h-11 flex-1 text-base font-semibold"
+                />
+                <Button variant="outline" type="button" onClick={() => setInternalSerial(generateInternalSerial())}>
+                  <Shuffle className="mr-2 h-4 w-4" />
+                  Gerar código
+                </Button>
+              </div>
+              {internalSerial && (
+                <p className="text-xs text-muted-foreground">
+                  Serial interno: <span className="font-mono font-medium text-foreground">{internalSerial}</span>
+                </p>
+              )}
+            </div>
+            <div className="col-span-2 space-y-2">
               <Label className="text-base font-semibold">IMEI 1</Label>
               <div className="relative">
                 <Input
@@ -651,26 +671,6 @@ export default function DevicesPage() {
                 placeholder="IMEI 2 (dual SIM, se houver)"
                 className="h-11 text-base font-semibold"
               />
-            </div>
-            <div className="col-span-2 space-y-2">
-              <Label className="text-base font-semibold">Serial</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={serial}
-                  onChange={(e) => setSerial(e.target.value)}
-                  placeholder="Número de série do aparelho"
-                  className="h-11 flex-1 text-base font-semibold"
-                />
-                <Button variant="outline" type="button" onClick={() => setInternalSerial(generateInternalSerial())}>
-                  <Shuffle className="mr-2 h-4 w-4" />
-                  Gerar código
-                </Button>
-              </div>
-              {internalSerial && (
-                <p className="text-xs text-muted-foreground">
-                  Serial interno: <span className="font-mono font-medium text-foreground">{internalSerial}</span>
-                </p>
-              )}
             </div>
 
             {editingId && (
