@@ -13,7 +13,8 @@ import { DevicePhotos } from "@/components/devices/DevicePhotos";
 import { parseDevicesCsv, ParsedDeviceCsv } from "@/lib/deviceCsv";
 import { Upload, Tag, Printer, LayoutGrid, List } from "lucide-react";
 import { printDeviceLabel } from "@/utils/labelGenerator";
-import { printDeviceCatalog } from "@/utils/deviceCatalog";
+import { printDeviceCatalog, printDeviceShowcase } from "@/utils/deviceCatalog";
+import { Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -262,6 +263,19 @@ export default function DevicesPage() {
   const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
   const pageDevices = filteredDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Grade agrupada por modelo (com contador), respeitando a página atual
+  const gridGroups = useMemo(() => {
+    const map = new Map<string, Device[]>();
+    for (const d of pageDevices) {
+      const key = d.model || "Sem modelo";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(d);
+    }
+    return [...map.keys()]
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((k) => [k, map.get(k)!] as [string, Device[]]);
+  }, [pageDevices]);
+
   // ----- Baixar modelo de CSV para importação -----
   const downloadTemplate = () => {
     const headers = "Categoria;Modelo;Capacidade;Cor;Condição;Bateria;Serial/IMEI;Fornecedor;Custo;Preço de venda";
@@ -370,7 +384,10 @@ export default function DevicesPage() {
               className="pl-9"
             />
           </div>
-          <Button variant="outline" onClick={() => printDeviceCatalog(filteredDevices)} className="gap-2 shrink-0">
+          <Button variant="outline" onClick={() => printDeviceShowcase(filteredDevices)} className="gap-2 shrink-0" title="Vitrine só com aparelhos disponíveis, para enviar ao cliente">
+            <Store className="h-4 w-4" /> Vitrine (cliente)
+          </Button>
+          <Button variant="outline" onClick={() => printDeviceCatalog(filteredDevices, isAdmin)} className="gap-2 shrink-0">
             <Printer className="h-4 w-4" /> Catálogo (A4)
           </Button>
           <Button variant="outline" onClick={exportCSV} className="gap-2 shrink-0">
@@ -516,54 +533,64 @@ export default function DevicesPage() {
           </CardContent>
         </Card>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {pageDevices.map((d) => {
-              const days = daysInStock(d.entryDate ?? d.createdAt);
-              const m = isAdmin ? deviceMargin(d) : null;
-              return (
-                <Card key={d.id} className="border shadow-none">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">{d.model}</p>
-                        <p className="text-xs text-muted-foreground">{formatCapacity(d.capacity)}{d.color ? ` · ${d.color}` : ""}</p>
-                      </div>
-                      <Badge variant={statusVariantMap[d.status]} className="shrink-0">{d.status}</Badge>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      <span>{d.condition}</span>
-                      <span>Bateria {d.batteryHealth}%</span>
-                      {d.status !== "Vendido" && <span className={days > 30 ? "text-warning font-medium" : ""}>{days}d em estoque</span>}
-                    </div>
-                    {(d.serialImei || d.serial || d.internalSerial) && (
-                      <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{d.serialImei || d.serial || d.internalSerial}</p>
-                    )}
-                    <div className="mt-3 flex items-end justify-between">
-                      <div>
-                        <p className="text-base font-semibold text-foreground">{d.salePrice != null ? fmt(d.salePrice) : "—"}</p>
-                        {m != null && <p className="text-xs text-muted-foreground">Margem {fmt(m)}</p>}
-                      </div>
-                      <div className="flex">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir etiqueta"
-                          onClick={() => printDeviceLabel({ model: d.model, capacity: d.capacity, batteryHealth: d.batteryHealth, color: d.color, serial: d.serial || d.internalSerial || d.serialImei })}>
-                          <Tag className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar" onClick={() => openEdit(d)}>
-                          <Pencil className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        {isAdmin && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Excluir" onClick={() => setDeleteTarget(d)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="space-y-6">
+            {gridGroups.map(([model, list]) => (
+              <div key={model} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">{model}</h3>
+                  <Badge variant="outline" className="text-xs">{list.length} un</Badge>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {list.map((d) => {
+                    const days = daysInStock(d.entryDate ?? d.createdAt);
+                    const m = isAdmin ? deviceMargin(d) : null;
+                    return (
+                      <Card key={d.id} className="border shadow-none">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-foreground">{d.model}</p>
+                              <p className="text-xs text-muted-foreground">{formatCapacity(d.capacity)}{d.color ? ` · ${d.color}` : ""}</p>
+                            </div>
+                            <Badge variant={statusVariantMap[d.status]} className="shrink-0">{d.status}</Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span>{d.condition}</span>
+                            <span>Bateria {d.batteryHealth}%</span>
+                            {d.status !== "Vendido" && <span className={days > 30 ? "text-warning font-medium" : ""}>{days}d em estoque</span>}
+                          </div>
+                          {(d.serialImei || d.serial || d.internalSerial) && (
+                            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{d.serialImei || d.serial || d.internalSerial}</p>
+                          )}
+                          <div className="mt-3 flex items-end justify-between">
+                            <div>
+                              <p className="text-base font-semibold text-foreground">{d.salePrice != null ? fmt(d.salePrice) : "—"}</p>
+                              {m != null && <p className="text-xs text-muted-foreground">Margem {fmt(m)}</p>}
+                            </div>
+                            <div className="flex">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir etiqueta"
+                                onClick={() => printDeviceLabel({ model: d.model, capacity: d.capacity, batteryHealth: d.batteryHealth, color: d.color, serial: d.serial || d.internalSerial || d.serialImei })}>
+                                <Tag className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar" onClick={() => openEdit(d)}>
+                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                              {isAdmin && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Excluir" onClick={() => setDeleteTarget(d)}>
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
             {filteredDevices.length === 0 && (
-              <p className="col-span-full py-8 text-center text-muted-foreground">
+              <p className="py-8 text-center text-muted-foreground">
                 {devicesLoading ? "Carregando aparelhos…" : "Nenhum aparelho encontrado."}
               </p>
             )}
