@@ -11,8 +11,9 @@ import { ApiError } from "@/lib/api";
 import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport } from "@/lib/devices";
 import { DevicePhotos } from "@/components/devices/DevicePhotos";
 import { parseDevicesCsv, ParsedDeviceCsv } from "@/lib/deviceCsv";
-import { Upload, Tag } from "lucide-react";
+import { Upload, Tag, Printer, LayoutGrid, List } from "lucide-react";
 import { printDeviceLabel } from "@/utils/labelGenerator";
+import { printDeviceCatalog } from "@/utils/deviceCatalog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -129,6 +130,7 @@ export default function DevicesPage() {
   const [internalSerial, setInternalSerial] = useState("");
   const [entryDate, setEntryDate] = useState("");
   const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   // data de hoje no formato yyyy-mm-dd (fuso local) para o input date
   const todayStr = () => {
@@ -368,6 +370,9 @@ export default function DevicesPage() {
               className="pl-9"
             />
           </div>
+          <Button variant="outline" onClick={() => printDeviceCatalog(filteredDevices)} className="gap-2 shrink-0">
+            <Printer className="h-4 w-4" /> Catálogo (A4)
+          </Button>
           <Button variant="outline" onClick={exportCSV} className="gap-2 shrink-0">
             <Download className="h-4 w-4" /> Exportar CSV
           </Button>
@@ -396,9 +401,18 @@ export default function DevicesPage() {
               Limpar filtros
             </Button>
           )}
+          <div className="ml-auto flex items-center gap-1 rounded-lg border p-0.5">
+            <Button variant={viewMode === "list" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1 px-2" onClick={() => setViewMode("list")}>
+              <List className="h-4 w-4" /> Lista
+            </Button>
+            <Button variant={viewMode === "grid" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1 px-2" onClick={() => setViewMode("grid")}>
+              <LayoutGrid className="h-4 w-4" /> Grade
+            </Button>
+          </div>
         </div>
 
-        {/* Tabela */}
+        {/* Tabela ou Grade */}
+        {viewMode === "list" ? (
         <Card className="border shadow-none">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -501,6 +515,60 @@ export default function DevicesPage() {
             </div>
           </CardContent>
         </Card>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {pageDevices.map((d) => {
+              const days = daysInStock(d.entryDate ?? d.createdAt);
+              const m = isAdmin ? deviceMargin(d) : null;
+              return (
+                <Card key={d.id} className="border shadow-none">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-foreground">{d.model}</p>
+                        <p className="text-xs text-muted-foreground">{formatCapacity(d.capacity)}{d.color ? ` · ${d.color}` : ""}</p>
+                      </div>
+                      <Badge variant={statusVariantMap[d.status]} className="shrink-0">{d.status}</Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>{d.condition}</span>
+                      <span>Bateria {d.batteryHealth}%</span>
+                      {d.status !== "Vendido" && <span className={days > 30 ? "text-warning font-medium" : ""}>{days}d em estoque</span>}
+                    </div>
+                    {(d.serialImei || d.serial || d.internalSerial) && (
+                      <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{d.serialImei || d.serial || d.internalSerial}</p>
+                    )}
+                    <div className="mt-3 flex items-end justify-between">
+                      <div>
+                        <p className="text-base font-semibold text-foreground">{d.salePrice != null ? fmt(d.salePrice) : "—"}</p>
+                        {m != null && <p className="text-xs text-muted-foreground">Margem {fmt(m)}</p>}
+                      </div>
+                      <div className="flex">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir etiqueta"
+                          onClick={() => printDeviceLabel({ model: d.model, capacity: d.capacity, batteryHealth: d.batteryHealth, color: d.color, serial: d.serial || d.internalSerial || d.serialImei })}>
+                          <Tag className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar" onClick={() => openEdit(d)}>
+                          <Pencil className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Excluir" onClick={() => setDeleteTarget(d)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+            {filteredDevices.length === 0 && (
+              <p className="col-span-full py-8 text-center text-muted-foreground">
+                {devicesLoading ? "Carregando aparelhos…" : "Nenhum aparelho encontrado."}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Paginação */}
         {filteredDevices.length > 0 && (
