@@ -160,10 +160,12 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
     return Array.from(names).map(seller => {
       const sellerSales = currentMonthSales.filter(s => s.seller === seller);
       const totalRevenue = sellerSales.reduce((s, sale) => s + sale.total, 0);
+      const totalProfit = salesGrossProfit(sellerSales, devicesById, accessoriesById);
       const totalItems = sellerSales.reduce((s, sale) => s + sale.items.length, 0);
       const accessoryItems = sellerSales.reduce((s, sale) => s + sale.items.filter(i => i.type === "accessory").length, 0);
       const deviceItems = sellerSales.reduce((s, sale) => s + sale.items.filter(i => i.type === "device").length, 0);
-      const avgTicket = sellerSales.length > 0 ? totalRevenue / sellerSales.length : 0;
+      // Ticket médio = lucro total do vendedor / qtd de vendas (não receita bruta).
+      const avgTicket = sellerSales.length > 0 ? totalProfit / sellerSales.length : 0;
       const accessoryRate = totalItems > 0 ? (accessoryItems / totalItems) * 100 : 0;
       return {
         seller,
@@ -176,7 +178,7 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
         commission: sellerCommissions[seller] || 0,
       };
     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
-  }, [currentMonthSales, sellerCommissions, commissionConfigs]);
+  }, [currentMonthSales, sellerCommissions, commissionConfigs, devicesById, accessoriesById]);
 
   // Inventory ABC / Stale
   const staleDevices = useMemo(() => {
