@@ -20,6 +20,7 @@ export interface Device {
   internalSerial: string;
   status: DeviceStatus;
   entryDate?: Date; // data de entrada no estoque (compra no fornecedor)
+  notes?: string; // observações (peça trocada, avarias, etc.)
   createdAt: Date;
 }
 

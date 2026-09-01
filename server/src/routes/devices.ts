@@ -20,6 +20,7 @@ const deviceInput = z.object({
   serial: z.string().optional().default(""), // número de série
   internalSerial: z.string().optional().default(""),
   entryDate: z.coerce.date().optional(),
+  notes: z.string().optional().default(""),
   status: z
     .enum(["Disponível", "Vendido", "Em Manutenção", "Reservado"])
     .default("Disponível"),

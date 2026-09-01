@@ -576,7 +576,7 @@ export default function PDVPage() {
                     <Select value={payInstallments} onValueChange={setPayInstallments}>
                       <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                        {Array.from({ length: 18 }, (_, i) => i + 1).map((n) => (
                           <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
                         ))}
                       </SelectContent>

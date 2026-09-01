@@ -35,6 +35,7 @@ export const devices = pgTable("devices", {
   status: deviceStatusEnum("status").notNull().default("Disponível"),
   // Data de entrada no estoque (dia da compra no fornecedor) — pode diferir do cadastro
   entryDate: timestamp("entry_date", { withTimezone: true }),
+  notes: text("notes"), // observações (peça trocada, avarias, etc.)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

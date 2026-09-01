@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -130,6 +131,7 @@ export default function DevicesPage() {
   const [serial, setSerial] = useState(""); // número de série
   const [internalSerial, setInternalSerial] = useState("");
   const [entryDate, setEntryDate] = useState("");
+  const [notes, setNotes] = useState("");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
@@ -149,6 +151,7 @@ export default function DevicesPage() {
     setCapacity(""); setColor(""); setCondition("Lacrado");
     setBatteryHealth("100"); setSupplier(""); setCost(""); setSalePrice("");
     setSerialImei(""); setImei2(""); setSerial(""); setInternalSerial(""); setEntryDate(todayStr());
+    setNotes("");
   };
 
   const openCreate = () => {
@@ -171,6 +174,7 @@ export default function DevicesPage() {
     setSerialImei(d.serialImei || ""); setImei2(d.imei2 || ""); setSerial(d.serial || "");
     setInternalSerial(d.internalSerial || "");
     setEntryDate(toDateInput(d.entryDate ?? d.createdAt));
+    setNotes(d.notes || "");
     setOpen(true);
   };
 
@@ -205,6 +209,7 @@ export default function DevicesPage() {
       serial,
       internalSerial,
       entryDate: entryDate ? new Date(`${entryDate}T12:00:00`) : undefined,
+      notes: notes.trim(),
     };
     setSaving(true);
     try {
@@ -765,6 +770,15 @@ export default function DevicesPage() {
                 onChange={(e) => setImei2(e.target.value)}
                 placeholder="IMEI 2 (dual SIM, se houver)"
                 className="h-11 text-base font-semibold"
+              />
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label>Observações</Label>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Ex: peça trocada, avarias..."
+                rows={2}
               />
             </div>
 

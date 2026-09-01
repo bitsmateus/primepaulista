@@ -99,6 +99,7 @@ function mapDevice(r: DeviceRow): Device {
     imei2: r.imei2 ?? "",
     serial: r.serial ?? "",
     entryDate: r.entryDate ? new Date(r.entryDate) : undefined,
+    notes: r.notes ?? "",
     createdAt: new Date(r.createdAt),
   };
 }
