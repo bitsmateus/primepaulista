@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeSaleTotal, saleItemsSummary, salePaymentLabel, saleMatchesSearch, buildSalesSummary,
+  computeSaleTotal, saleItemsSummary, salePaymentLabel, saleMatchesSearch, buildSalesSummary, saleFullValue,
 } from "@/lib/sales";
 import { Sale, Customer } from "@/types/inventory";
 
@@ -11,13 +11,26 @@ const mkCustomer = (over: Partial<Customer>): Customer => ({
 const mkSale = (over: Partial<Sale>): Sale => ({
   id: "s1", customer: mkCustomer({}), items: [], payments: [],
   seller: "Gabriel" as Sale["seller"], subtotal: 1000, tradeInDiscount: 0,
-  discount: 0, total: 1000, createdAt: new Date(), ...over,
+  discount: 0, total: 1000, giftsCost: 0, requiresInvoice: false, createdAt: new Date(), ...over,
 });
 
 describe("total da venda", () => {
   it("subtotal − troca − desconto, sem ficar negativo", () => {
     expect(computeSaleTotal(1000, 200, 100)).toBe(700);
     expect(computeSaleTotal(100, 0, 500)).toBe(0);
+  });
+});
+
+describe("valor total da venda (bruto, sem descontar a troca)", () => {
+  it("com troca: mostra o valor cheio do aparelho, não o valor pago", () => {
+    // aparelho de 6000, troca de 4500 → cliente paga só 1500, mas o total
+    // exibido na lista deve ser os 6000 do aparelho vendido
+    const sale = mkSale({ subtotal: 6000, tradeInDiscount: 4500, discount: 0, total: 1500 });
+    expect(saleFullValue(sale)).toBe(6000);
+  });
+  it("sem troca: igual ao subtotal menos o desconto geral", () => {
+    const sale = mkSale({ subtotal: 1000, tradeInDiscount: 0, discount: 100, total: 900 });
+    expect(saleFullValue(sale)).toBe(900);
   });
 });
 

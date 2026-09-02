@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   numeric,
@@ -22,6 +23,8 @@ export const sales = pgTable("sales", {
     .default("0"),
   discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"), // desconto geral
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  giftsCost: numeric("gifts_cost", { precision: 12, scale: 2 }).notNull().default("0"), // custo dos brindes incluídos na venda
+  requiresInvoice: boolean("requires_invoice").notNull().default(false), // cliente exigiu emissão de nota fiscal
   notes: text("notes"), // descrição / observação da venda
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   returnedAt: timestamp("returned_at", { withTimezone: true }), // data da devolução/estorno (se houver)

@@ -117,7 +117,7 @@ describe("lead que comprou", () => {
   const sale = (whatsapp: string): Sale => ({
     id: "s1", customer: mkCustomer({ whatsapp }), items: [], payments: [],
     seller: "Gabriel" as Sale["seller"], subtotal: 0, tradeInDiscount: 0,
-    discount: 0, total: 0, createdAt: new Date(),
+    discount: 0, total: 0, giftsCost: 0, requiresInvoice: false, createdAt: new Date(),
   });
   it("detecta por telefone igual", () => {
     expect(leadHasPurchased(mkLead({ phone: "(11) 99999-0000" }), [sale("11999990000")])).toBe(true);

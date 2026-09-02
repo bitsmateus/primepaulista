@@ -47,7 +47,7 @@ describe("registros de garantia a partir das vendas", () => {
   const mkSale = (over: Partial<Sale>): Sale => ({
     id: "s1", customer: mkCustomer({}), items: [], payments: [],
     seller: "Gabriel" as Sale["seller"], subtotal: 0, tradeInDiscount: 0,
-    discount: 0, total: 0, createdAt: new Date(2026, 0, 1), ...over,
+    discount: 0, total: 0, giftsCost: 0, requiresInvoice: false, createdAt: new Date(2026, 0, 1), ...over,
   });
   const now = new Date(2026, 1, 1);
   const sales = [

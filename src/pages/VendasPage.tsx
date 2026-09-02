@@ -7,8 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Sale, PaymentMethod } from "@/types/inventory";
 import { printReceipt } from "@/utils/receiptGenerator";
 import {
-  saleMatchesSearch, saleItemsSummary, salePaymentLabel, buildSalesSummary, computeSaleTotal,
+  saleMatchesSearch, saleItemsSummary, salePaymentLabel, buildSalesSummary, computeSaleTotal, saleFullValue,
 } from "@/lib/sales";
+import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -40,9 +42,12 @@ function inPeriod(date: Date, period: string, now: Date): boolean {
 }
 
 export default function VendasPage() {
-  const { sales, salesLoading, devices, customers, returnSale, updateSale } = useInventoryContext();
+  const { sales, salesLoading, devices, accessories, customers, returnSale, updateSale } = useInventoryContext();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+
+  const devicesById = useMemo(() => buildDeviceMap(devices), [devices]);
+  const accessoriesById = useMemo(() => buildAccessoryMap(accessories), [accessories]);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -63,6 +68,8 @@ export default function VendasPage() {
   const [ePayment, setEPayment] = useState<PaymentMethod>("PIX");
   const [eInstallments, setEInstallments] = useState("1");
   const [eNotes, setENotes] = useState("");
+  const [eGiftsCost, setEGiftsCost] = useState("");
+  const [eRequiresInvoice, setERequiresInvoice] = useState(false);
 
   const sellers = useMemo(() => [...new Set(sales.map((s) => s.seller).filter(Boolean))], [sales]);
   const now = new Date();
@@ -89,6 +96,8 @@ export default function VendasPage() {
     setENotes(s.notes ?? "");
     setEPayment((s.payments[0]?.method as PaymentMethod) || "PIX");
     setEInstallments(String(s.payments[0]?.installments ?? 1));
+    setEGiftsCost(String(s.giftsCost ?? 0));
+    setERequiresInvoice(s.requiresInvoice ?? false);
   };
 
   const handleSaveEdit = async () => {
@@ -99,6 +108,8 @@ export default function VendasPage() {
         customerId: eCustomer || undefined,
         sellerName: eSeller,
         discount: Number(eDiscount) || 0,
+        giftsCost: Number(eGiftsCost) || 0,
+        requiresInvoice: eRequiresInvoice,
         notes: eNotes,
         paymentMethod: ePayment,
         installments: ePayment === "Cartão de Crédito" ? Number(eInstallments) || 1 : 1,
@@ -182,6 +193,7 @@ export default function VendasPage() {
                     <TableHead>Itens</TableHead>
                     <TableHead>Pagamento</TableHead>
                     <TableHead>Total</TableHead>
+                    {isAdmin && <TableHead>Lucro líquido</TableHead>}
                     <TableHead>Status</TableHead>
                     <TableHead className="w-32"></TableHead>
                   </TableRow>
@@ -198,7 +210,12 @@ export default function VendasPage() {
                         {saleItemsSummary(s)}
                       </TableCell>
                       <TableCell className="text-xs">{salePaymentLabel(s)}</TableCell>
-                      <TableCell className="font-semibold">{fmt(s.total)}</TableCell>
+                      <TableCell className="font-semibold">{fmt(saleFullValue(s))}</TableCell>
+                      {isAdmin && (
+                        <TableCell className="font-semibold text-success">
+                          {fmt(saleNetProfit(s, devicesById, accessoriesById))}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {isReturned(s) ? <Badge variant="secondary">Devolvida</Badge> : <Badge variant="outline">Ativa</Badge>}
                       </TableCell>
@@ -226,7 +243,7 @@ export default function VendasPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={isAdmin ? 9 : 8} className="py-8 text-center text-muted-foreground">
                         {salesLoading ? "Carregando vendas…" : "Nenhuma venda encontrada."}
                       </TableCell>
                     </TableRow>
@@ -263,8 +280,28 @@ export default function VendasPage() {
                 <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(viewSale.subtotal)}</span></div>
                 {viewSale.tradeInDiscount > 0 && <div className="flex justify-between text-muted-foreground"><span>Troca</span><span>− {fmt(viewSale.tradeInDiscount)}</span></div>}
                 {viewSale.discount > 0 && <div className="flex justify-between text-muted-foreground"><span>Desconto</span><span>− {fmt(viewSale.discount)}</span></div>}
-                <div className="flex justify-between font-semibold"><span>Total</span><span>{fmt(viewSale.total)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Valor total da venda</span><span>{fmt(saleFullValue(viewSale))}</span></div>
+                {viewSale.tradeInDiscount > 0 && (
+                  <div className="flex justify-between text-muted-foreground"><span>Total pago (após troca)</span><span>{fmt(viewSale.total)}</span></div>
+                )}
               </div>
+              {isAdmin && (
+                <div className="space-y-1 rounded-lg border p-3">
+                  {viewSale.giftsCost > 0 && (
+                    <div className="flex justify-between text-muted-foreground"><span>Custo dos brindes</span><span>− {fmt(viewSale.giftsCost)}</span></div>
+                  )}
+                  {viewSale.requiresInvoice && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Custo de nota fiscal (0,5%)</span>
+                      <span>− {fmt(saleDeviceSaleValue(viewSale) * 0.005)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-success">
+                    <span>Lucro líquido</span>
+                    <span>{fmt(saleNetProfit(viewSale, devicesById, accessoriesById))}</span>
+                  </div>
+                </div>
+              )}
               <div>
                 <Label className="text-xs text-muted-foreground">Pagamento</Label>
                 <div className="mt-1 space-y-1">
@@ -337,6 +374,20 @@ export default function VendasPage() {
               <div>
                 <Label>Descrição / Observação</Label>
                 <Textarea value={eNotes} onChange={(e) => setENotes(e.target.value)} rows={2} placeholder="Observações da venda" />
+              </div>
+              <div className="grid grid-cols-2 gap-3 items-end">
+                <div>
+                  <Label>Custo dos brindes (R$)</Label>
+                  <Input type="number" min={0} value={eGiftsCost} onChange={(e) => setEGiftsCost(e.target.value)} />
+                </div>
+                <div className="flex items-center gap-2 pb-2">
+                  <Checkbox
+                    id="eRequiresInvoice"
+                    checked={eRequiresInvoice}
+                    onCheckedChange={(v) => setERequiresInvoice(v === true)}
+                  />
+                  <Label htmlFor="eRequiresInvoice" className="font-normal cursor-pointer">Exigiu nota fiscal</Label>
+                </div>
               </div>
               <div className="rounded-lg bg-muted p-3 flex justify-between text-sm">
                 <span className="font-medium">Novo total</span>

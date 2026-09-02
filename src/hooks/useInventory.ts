@@ -178,6 +178,8 @@ export function useInventory() {
       tradeInDiscount: sale.tradeInDiscount,
       discount: sale.discount,
       total: sale.total,
+      giftsCost: sale.giftsCost,
+      requiresInvoice: sale.requiresInvoice,
       notes: sale.notes,
       items: sale.items.map((item) => ({
         productType: item.type,

@@ -155,6 +155,13 @@
       "when": 1788263382592,
       "tag": "0021_device_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788378006037,
+      "tag": "0022_minor_sister_grimm",
+      "breakpoints": true
     }
   ]
 }

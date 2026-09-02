@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -65,6 +66,8 @@ export default function PDVPage() {
   const [discountValue, setDiscountValue] = useState("");
   const [saleNotes, setSaleNotes] = useState("");
   const [discountMode, setDiscountMode] = useState<"R$" | "%">("R$");
+  const [giftsCost, setGiftsCost] = useState("");
+  const [requiresInvoice, setRequiresInvoice] = useState(false);
 
   // Última venda (2ª via) + busca avulsa de acessório
   const [lastSale, setLastSale] = useState<Sale | null>(null);
@@ -365,6 +368,8 @@ export default function PDVPage() {
         tradeInDiscount,
         discount,
         total,
+        giftsCost: Number(giftsCost) || 0,
+        requiresInvoice,
         notes: saleNotes.trim() || undefined,
       });
 
@@ -374,6 +379,7 @@ export default function PDVPage() {
       // Reset
       setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
       setCustomerQuery(""); setImeiQuery(""); setDiscountValue(""); setSaleNotes("");
+      setGiftsCost(""); setRequiresInvoice(false);
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : "Falha ao registrar a venda. Tente novamente."
@@ -641,6 +647,30 @@ export default function PDVPage() {
                       </SelectContent>
                     </Select>
                     {discount > 0 && <span className="text-sm font-medium text-success">-{fmt(discount)}</span>}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm">Custo dos brindes</Label>
+                    <Input
+                      type="number"
+                      value={giftsCost}
+                      onChange={(e) => setGiftsCost(e.target.value)}
+                      placeholder="0"
+                      className="h-9 w-24"
+                      title="Custo dos brindes dados junto com a venda (ex.: capinha, película) — abatido do lucro líquido"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="requiresInvoice"
+                      checked={requiresInvoice}
+                      onCheckedChange={(v) => setRequiresInvoice(v === true)}
+                    />
+                    <Label htmlFor="requiresInvoice" className="text-sm font-normal cursor-pointer">
+                      Cliente exigiu nota fiscal (custo de 0,5% s/ o aparelho)
+                    </Label>
                   </div>
                 </div>
 

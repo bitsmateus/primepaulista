@@ -103,6 +103,8 @@ export interface Sale {
   tradeInDiscount: number;
   discount: number;
   total: number;
+  giftsCost: number; // custo dos brindes incluídos na venda
+  requiresInvoice: boolean; // cliente exigiu emissão de nota fiscal (custo de 0,5% s/ o aparelho)
   notes?: string; // descrição / observação da venda
   createdAt: Date;
   returnedAt?: Date; // preenchido se a venda foi devolvida/estornada

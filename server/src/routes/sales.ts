@@ -22,6 +22,8 @@ const saleInput = z.object({
   tradeInDiscount: z.coerce.number().min(0).default(0),
   discount: z.coerce.number().min(0).default(0),
   total: z.coerce.number().min(0),
+  giftsCost: z.coerce.number().min(0).default(0),
+  requiresInvoice: z.coerce.boolean().default(false),
   notes: z.string().max(2000).optional().default(""),
   items: z
     .array(
@@ -162,6 +164,8 @@ export async function saleRoutes(app: FastifyInstance) {
             tradeInDiscount: String(s.tradeInDiscount),
             discount: String(s.discount),
             total: String(total),
+            giftsCost: String(s.giftsCost),
+            requiresInvoice: s.requiresInvoice,
             notes: s.notes,
           })
           .returning({ id: sales.id });
@@ -277,6 +281,8 @@ export async function saleRoutes(app: FastifyInstance) {
         customerId: z.string().uuid().optional(),
         sellerName: z.string().max(120).optional(),
         discount: z.coerce.number().min(0).optional(),
+        giftsCost: z.coerce.number().min(0).optional(),
+        requiresInvoice: z.coerce.boolean().optional(),
         notes: z.string().max(2000).optional(),
         paymentMethod: z
           .enum(["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"])
@@ -296,6 +302,8 @@ export async function saleRoutes(app: FastifyInstance) {
         if (p.data.customerId !== undefined) update.customerId = p.data.customerId;
         if (p.data.sellerName !== undefined) update.sellerName = p.data.sellerName;
         if (p.data.notes !== undefined) update.notes = p.data.notes;
+        if (p.data.giftsCost !== undefined) update.giftsCost = String(p.data.giftsCost);
+        if (p.data.requiresInvoice !== undefined) update.requiresInvoice = p.data.requiresInvoice;
 
         let total = Number(sale.total);
         if (p.data.discount !== undefined) {

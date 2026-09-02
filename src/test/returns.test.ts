@@ -9,7 +9,7 @@ const mkCustomer = (): Customer => ({
 const mkSale = (over: Partial<Sale>): Sale => ({
   id: "s1", customer: mkCustomer(), items: [], payments: [],
   seller: "Gabriel" as Sale["seller"], subtotal: 0, tradeInDiscount: 0,
-  discount: 0, total: 1000, createdAt: new Date(), ...over,
+  discount: 0, total: 1000, giftsCost: 0, requiresInvoice: false, createdAt: new Date(), ...over,
 });
 
 describe("devolução", () => {

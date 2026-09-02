@@ -5,6 +5,14 @@ export function computeSaleTotal(subtotal: number, tradeInDiscount: number, disc
   return Math.max(0, subtotal - tradeInDiscount - discount);
 }
 
+// Valor total da venda do(s) item(ns) vendido(s) (ex.: aparelho novo), sem
+// descontar o crédito da troca — a troca é uma forma de pagamento, não um
+// abatimento do valor vendido. Usado para exibir o "Total" da venda na lista,
+// diferente de `sale.total`, que é líquido de troca (usado no caixa/recibo).
+export function saleFullValue(sale: Sale): number {
+  return Math.max(0, sale.subtotal - sale.discount);
+}
+
 export function saleItemsSummary(sale: Sale): string {
   if (!sale.items.length) return "—";
   return sale.items.map((i) => `${i.quantity}× ${i.name}`).join(", ");

@@ -714,6 +714,8 @@ export interface SalePayload {
   tradeInDiscount: number;
   discount: number;
   total: number;
+  giftsCost: number;
+  requiresInvoice: boolean;
   notes?: string;
   items: {
     productType: "device" | "accessory";
@@ -749,6 +751,8 @@ export interface SaleUpdate {
   customerId?: string;
   sellerName?: string;
   discount?: number;
+  giftsCost?: number;
+  requiresInvoice?: boolean;
   notes?: string;
   paymentMethod?: "PIX" | "Dinheiro" | "Cartão de Crédito" | "Cartão de Débito";
   installments?: number;
@@ -764,6 +768,8 @@ interface SaleFullRow {
   tradeInDiscount: string;
   discount: string;
   total: string;
+  giftsCost: string;
+  requiresInvoice: boolean;
   notes: string | null;
   createdAt: string;
   returnedAt: string | null;
@@ -815,6 +821,8 @@ function mapSaleFull(r: SaleFullRow): Sale {
     tradeInDiscount: Number(r.tradeInDiscount),
     discount: Number(r.discount),
     total: Number(r.total),
+    giftsCost: Number(r.giftsCost),
+    requiresInvoice: r.requiresInvoice,
     notes: r.notes ?? "",
     createdAt: new Date(r.createdAt),
     returnedAt: r.returnedAt ? new Date(r.returnedAt) : undefined,

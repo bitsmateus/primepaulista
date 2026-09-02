@@ -54,7 +54,7 @@ describe("estatísticas e relatório", () => {
   const sale = (id: string, custId: string, total: number, date: Date): Sale => ({
     id, customer: mkCustomer({ id: custId }), items: [], payments: [],
     seller: "Gabriel" as Sale["seller"], subtotal: total, tradeInDiscount: 0,
-    discount: 0, total, createdAt: date,
+    discount: 0, total, giftsCost: 0, requiresInvoice: false, createdAt: date,
   });
   const sales = [
     sale("s1", "c1", 1000, new Date("2026-01-10")),
