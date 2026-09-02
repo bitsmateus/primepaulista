@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { ApiError } from "@/lib/api";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { InventoryProvider } from "@/contexts/InventoryContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CRMProvider } from "@/contexts/CRMContext";
 import { ServiceOrderProvider } from "@/contexts/ServiceOrderContext";
 import LoginPage from "./pages/LoginPage";
@@ -53,6 +54,32 @@ function ProtectedApp({
   );
 }
 
+// Isola erros de render por rota: se uma tela quebrar, a troca de rota
+// (nova key) remonta o boundary em vez de deixar a tela branca presa.
+function AppRoutes() {
+  const location = useLocation();
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<ProtectedApp><Dashboard /></ProtectedApp>} />
+        <Route path="/pdv" element={<ProtectedApp><PDVPage /></ProtectedApp>} />
+        <Route path="/vendas" element={<ProtectedApp><VendasPage /></ProtectedApp>} />
+        <Route path="/devices" element={<ProtectedApp><DevicesPage /></ProtectedApp>} />
+        <Route path="/estoque" element={<ProtectedApp><EstoqueGeralPage /></ProtectedApp>} />
+        <Route path="/accessories" element={<ProtectedApp><AccessoriesPage /></ProtectedApp>} />
+        <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
+        <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />
+        <Route path="/assistencia" element={<ProtectedApp><AssistenciaPage /></ProtectedApp>} />
+        <Route path="/garantias" element={<ProtectedApp><GarantiasPage /></ProtectedApp>} />
+        <Route path="/bi" element={<ProtectedApp adminOnly><BIDashboardPage /></ProtectedApp>} />
+        <Route path="/usuarios" element={<ProtectedApp adminOnly><UsersPage /></ProtectedApp>} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </ErrorBoundary>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -60,22 +87,7 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={<ProtectedApp><Dashboard /></ProtectedApp>} />
-            <Route path="/pdv" element={<ProtectedApp><PDVPage /></ProtectedApp>} />
-            <Route path="/vendas" element={<ProtectedApp><VendasPage /></ProtectedApp>} />
-            <Route path="/devices" element={<ProtectedApp><DevicesPage /></ProtectedApp>} />
-            <Route path="/estoque" element={<ProtectedApp><EstoqueGeralPage /></ProtectedApp>} />
-            <Route path="/accessories" element={<ProtectedApp><AccessoriesPage /></ProtectedApp>} />
-            <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
-            <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />
-            <Route path="/assistencia" element={<ProtectedApp><AssistenciaPage /></ProtectedApp>} />
-            <Route path="/garantias" element={<ProtectedApp><GarantiasPage /></ProtectedApp>} />
-            <Route path="/bi" element={<ProtectedApp adminOnly><BIDashboardPage /></ProtectedApp>} />
-            <Route path="/usuarios" element={<ProtectedApp adminOnly><UsersPage /></ProtectedApp>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

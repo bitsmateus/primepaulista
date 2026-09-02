@@ -98,6 +98,8 @@ function mapDevice(r: DeviceRow): Device {
     serialImei: r.serialImei ?? "",
     imei2: r.imei2 ?? "",
     serial: r.serial ?? "",
+    internalSerial: r.internalSerial ?? "",
+    supplier: r.supplier ?? "",
     entryDate: r.entryDate ? new Date(r.entryDate) : undefined,
     notes: r.notes ?? "",
     createdAt: new Date(r.createdAt),
@@ -203,6 +205,9 @@ function mapAccessory(r: AccessoryRow): Accessory {
     ...r,
     cost: Number(r.cost),
     price: r.price !== null ? Number(r.price) : undefined,
+    subcategory: (r.subcategory ?? "") as Accessory["subcategory"],
+    compatibleModel: r.compatibleModel ?? "",
+    barcode: r.barcode ?? "",
     createdAt: new Date(r.createdAt),
   };
 }
