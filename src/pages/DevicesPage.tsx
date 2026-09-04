@@ -299,14 +299,14 @@ export default function DevicesPage() {
   const exportCSV = () => {
     const headers = [
       "Categoria", "Modelo", "Capacidade", "Cor", "Condição", "Bateria %",
-      "Serial/IMEI", "Fornecedor",
+      "Serial", "Fornecedor",
       ...(isAdmin ? ["Custo", "Margem"] : []), "Preço de venda",
       "Status", "Dias em estoque", "Data de entrada", "Cadastro",
     ];
     const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = filteredDevices.map((d) => [
       d.category || "iPhone", d.model, d.capacity, d.color, d.condition, d.batteryHealth,
-      d.serialImei || d.internalSerial, d.supplier || "",
+      d.serial || d.internalSerial, d.supplier || "",
       ...(isAdmin ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
       d.salePrice != null ? d.salePrice.toFixed(2) : "",
       d.status, daysInStock(d.entryDate ?? d.createdAt),
