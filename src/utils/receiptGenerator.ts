@@ -95,15 +95,15 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   .warranty-foot { border: 1px solid #111; border-radius: 6px; margin-top: 10px; padding: 8px; text-align: center; font-weight: 700; font-size: 11px; line-height: 1.5; }
 
   /* Termo (verso) */
-  .term h1 { text-align: center; font-size: 18px; margin-bottom: 12px; }
-  .term p { font-size: 11px; line-height: 1.5; margin-bottom: 6px; text-align: justify; }
+  .term h1 { text-align: center; font-size: 14px; margin-bottom: 6px; }
+  .term p { font-size: 9.5px; line-height: 1.3; margin-bottom: 3px; text-align: justify; }
   .term .lead { font-weight: 700; }
-  .term ul { margin: 0 0 8px 16px; }
-  .term li { font-size: 11px; line-height: 1.5; margin-bottom: 3px; text-align: justify; }
-  .term .sec { font-weight: 700; margin-top: 8px; }
-  .sign { margin-top: 40px; text-align: center; }
-  .sign .agree { font-weight: 600; margin-bottom: 28px; }
-  .sign .line { width: 70%; margin: 0 auto; border-top: 1px solid #111; padding-top: 4px; font-size: 11px; }
+  .term ul { margin: 0 0 4px 14px; }
+  .term li { font-size: 9.5px; line-height: 1.3; margin-bottom: 2px; text-align: justify; }
+  .term .sec { font-weight: 700; margin-top: 4px; }
+  .sign { margin-top: 18px; text-align: center; }
+  .sign .agree { font-weight: 600; margin-bottom: 14px; }
+  .sign .line { width: 70%; margin: 0 auto; border-top: 1px solid #111; padding-top: 4px; font-size: 9.5px; }
 
   @media print { .page { padding: 6px; } @page { margin: 8mm; } }
 </style>
