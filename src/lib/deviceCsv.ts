@@ -28,7 +28,7 @@ function headerField(h: string): keyof DeviceImportInput | "salePrice" | null {
 
 // Converte número aceitando formatos pt-BR ("5.000,00" / "5000,00") e en ("5000.00")
 function parseNum(raw: string): number {
-  let s = (raw || "").trim().replace(/[R$\s]/g, "");
+  let s = (raw || "").trim().replace(/[R$%\s]/g, "");
   if (!s) return 0;
   if (s.includes(",") && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");
   else if (s.includes(",")) s = s.replace(",", ".");
@@ -54,13 +54,21 @@ function splitLine(line: string, sep: string): string[] {
   return out.map((s) => s.trim());
 }
 
+// Detecta o separador pelo cabeçalho: tabulação (colado do Excel/Sheets), ; ou ,
+function detectSeparator(headerLine: string): string {
+  const count = (ch: string) => (headerLine.match(new RegExp(ch === "\t" ? "\t" : `\\${ch}`, "g")) ?? []).length;
+  const candidates: [string, number][] = [["\t", count("\t")], [";", count(";")], [",", count(",")]];
+  candidates.sort((a, b) => b[1] - a[1]);
+  return candidates[0][1] > 0 ? candidates[0][0] : ";";
+}
+
 export function parseDevicesCsv(text: string): ParsedDeviceCsv {
   const errors: string[] = [];
   const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length < 2) {
     return { devices: [], errors: ["Arquivo vazio ou sem dados (precisa de cabeçalho + linhas)."] };
   }
-  const sep = (lines[0].match(/;/g)?.length ?? 0) >= (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+  const sep = detectSeparator(lines[0]);
   const headers = splitLine(lines[0], sep).map(headerField);
   if (!headers.includes("model")) {
     return { devices: [], errors: ['Cabeçalho deve conter a coluna "Modelo".'] };
@@ -87,7 +95,8 @@ export function parseDevicesCsv(text: string): ParsedDeviceCsv {
       supplier: rec.supplier?.trim() || "",
       cost: parseNum(rec.cost),
       salePrice: rec.salePrice && parseNum(rec.salePrice) > 0 ? parseNum(rec.salePrice) : undefined,
-      serialImei: rec.serialImei?.trim() || "",
+      // Remove espaços internos (comuns em serial/IMEI colado do Excel, ex.: "D V 6 F F 5")
+      serialImei: rec.serialImei?.replace(/\s+/g, "").trim() || "",
       internalSerial: "",
       status: "Disponível",
     });

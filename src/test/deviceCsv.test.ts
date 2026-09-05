@@ -32,6 +32,27 @@ describe("parseDevicesCsv", () => {
     expect(devices[0].cost).toBe(3000);
   });
 
+  it("aceita separador tabulação (colado do Excel/Google Sheets)", () => {
+    const csv = "Categoria\tModelo\tCusto\tSerial/IMEI\niPhone\tiPhone 13\t1000\tABC123";
+    const { devices, errors } = parseDevicesCsv(csv);
+    expect(errors).toHaveLength(0);
+    expect(devices).toHaveLength(1);
+    expect(devices[0].model).toBe("iPhone 13");
+    expect(devices[0].cost).toBe(1000);
+  });
+
+  it("remove espaços internos do serial/IMEI (comum ao colar do Excel)", () => {
+    const csv = "Modelo\tSerial/IMEI\niPhone 13\tD V 6 F F 5 F T N 7 3 6";
+    const { devices } = parseDevicesCsv(csv);
+    expect(devices[0].serialImei).toBe("DV6FF5FTN736");
+  });
+
+  it("aceita bateria com símbolo % (ex.: 69%)", () => {
+    const csv = "Modelo\tBateria\niPhone 13\t69%";
+    const { devices } = parseDevicesCsv(csv);
+    expect(devices[0].batteryHealth).toBe(69);
+  });
+
   it("ignora linha sem modelo e reporta erro", () => {
     const csv = "Modelo;Custo\n;1000\niPhone 12;2000";
     const { devices, errors } = parseDevicesCsv(csv);
