@@ -63,19 +63,18 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 12px; }
   .page { max-width: 620px; margin: 0 auto; padding: 18px; }
-  .page + .page { page-break-before: always; }
 
   /* Cabeçalho */
-  .head { background: #3a3a3c; color: #fff; border-radius: 8px; padding: 14px 16px; display: flex; gap: 14px; align-items: center; }
-  .head img { height: 56px; width: 56px; object-fit: contain; border-radius: 50%; background: #fff; padding: 4px; }
-  .head .contacts { font-size: 11px; line-height: 1.6; }
+  .head { background: #3a3a3c; color: #fff; border-radius: 8px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; }
+  .head img { height: 44px; width: 44px; object-fit: contain; border-radius: 50%; background: #fff; padding: 4px; }
+  .head .contacts { font-size: 10px; line-height: 1.4; }
   .head .contacts b { font-weight: 600; }
-  .addr { text-align: center; font-weight: 700; font-size: 12px; margin-top: 8px; }
-  .cnpj { text-align: right; font-size: 11px; color: #444; margin-top: 2px; }
+  .addr { text-align: center; font-weight: 700; font-size: 11px; margin-top: 6px; }
+  .cnpj { text-align: right; font-size: 10px; color: #444; margin-top: 2px; }
 
   /* Campos */
-  .fields { border: 1px solid #111; border-radius: 6px; padding: 10px 12px; margin-top: 8px; }
-  .field { display: flex; gap: 6px; padding: 3px 0; border-bottom: 1px dotted #bbb; }
+  .fields { border: 1px solid #111; border-radius: 6px; padding: 6px 10px; margin-top: 6px; }
+  .field { display: flex; gap: 6px; padding: 2px 0; border-bottom: 1px dotted #bbb; font-size: 11px; }
   .field:last-child { border-bottom: none; }
   .field .lbl { font-weight: 600; min-width: 64px; }
   .field .val { flex: 1; }
@@ -83,34 +82,35 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   .two .field { flex: 1; }
 
   /* Tabela de itens */
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { border: 1px solid #111; padding: 6px 8px; font-size: 11px; }
-  th { background: #f0f0f0; text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th, td { border: 1px solid #111; padding: 4px 6px; font-size: 10.5px; }
+  th { background: #f0f0f0; text-transform: uppercase; font-size: 9.5px; letter-spacing: .5px; }
   td.c { text-align: center; }
   td.r { text-align: right; }
-  .totrow td { font-weight: 700; font-size: 13px; }
+  .totrow td { font-weight: 700; font-size: 12px; }
   .subrow td { color: #444; }
 
   /* Rodapé garantia (frente) */
-  .warranty-foot { border: 1px solid #111; border-radius: 6px; margin-top: 10px; padding: 8px; text-align: center; font-weight: 700; font-size: 11px; line-height: 1.5; }
+  .warranty-foot { border: 1px solid #111; border-radius: 6px; margin-top: 6px; padding: 6px; text-align: center; font-weight: 700; font-size: 10.5px; line-height: 1.35; }
 
-  /* Termo (verso) */
+  /* Termo (mesma folha, abaixo do recibo) */
+  .term { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #999; }
   .term h1 { text-align: center; font-size: 14px; margin-bottom: 6px; }
   .term p { font-size: 9.5px; line-height: 1.3; margin-bottom: 3px; text-align: justify; }
   .term .lead { font-weight: 700; }
   .term ul { margin: 0 0 4px 14px; }
   .term li { font-size: 9.5px; line-height: 1.3; margin-bottom: 2px; text-align: justify; }
   .term .sec { font-weight: 700; margin-top: 4px; }
-  .sign { margin-top: 18px; text-align: center; }
-  .sign .agree { font-weight: 600; margin-bottom: 14px; }
+  .sign { margin-top: 12px; text-align: center; }
+  .sign .agree { font-weight: 600; margin-bottom: 8px; }
   .sign .line { width: 70%; margin: 0 auto; border-top: 1px solid #111; padding-top: 4px; font-size: 9.5px; }
 
-  @media print { .page { padding: 6px; } @page { margin: 8mm; } }
+  @media print { .page { padding: 4px; } @page { margin: 6mm; } }
 </style>
 </head>
 <body>
 
-<!-- ===== FRENTE: RECIBO ===== -->
+<!-- ===== RECIBO + TERMO DE GARANTIA, em 1 única folha ===== -->
 <div class="page">
   <div class="head">
     <img src="${logoUrl}" alt="Prime Paulista" />
@@ -170,12 +170,11 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
 
   <div class="warranty-foot">
     APARELHO LACRADO 1 ANO DE GARANTIA PELO FABRICANTE<br/>
-    APARELHO SEMI NOVOS GARANTIA VIDE TERMO NO VERSO
+    APARELHO SEMI NOVOS GARANTIA VIDE TERMO ABAIXO
   </div>
-</div>
 
-<!-- ===== VERSO: TERMO DE GARANTIA ===== -->
-<div class="page term">
+  <!-- ===== TERMO DE GARANTIA (mesma folha) ===== -->
+  <div class="term">
   <h1>TERMO DE GARANTIA</h1>
   <p class="lead">A garantia do aparelho é de 6 MESES ou 180 (CENTO E OITENTA) dias, a partir da data de compra; sendo:</p>
   <ul>
@@ -194,6 +193,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   <div class="sign">
     <p class="agree">Li e concordo com os termos descritos acima.</p>
     <div class="line">ASSINATURA DO CLIENTE</div>
+  </div>
   </div>
 </div>
 
