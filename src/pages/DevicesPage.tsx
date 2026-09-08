@@ -13,7 +13,7 @@ import { DevicePhotos } from "@/components/devices/DevicePhotos";
 import { parseDevicesCsv, ParsedDeviceCsv } from "@/lib/deviceCsv";
 import { Upload, Tag, Printer, LayoutGrid, List } from "lucide-react";
 import { printDeviceLabel } from "@/utils/labelGenerator";
-import { printDeviceCatalog, printDeviceShowcase } from "@/utils/deviceCatalog";
+import { printDeviceCatalog, printDeviceShowcase, printDeviceStockReport } from "@/utils/deviceCatalog";
 import { Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -395,6 +395,16 @@ export default function DevicesPage() {
           <Button variant="outline" onClick={() => printDeviceCatalog(filteredDevices, isAdmin)} className="gap-2 shrink-0">
             <Printer className="h-4 w-4" /> Catálogo (A4)
           </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              onClick={() => printDeviceStockReport(filteredDevices)}
+              className="gap-2 shrink-0"
+              title="Relatório com cor, modelo, condição, bateria, serial, IMEI e custo — para conferência de estoque"
+            >
+              <Printer className="h-4 w-4" /> Relatório de Estoque
+            </Button>
+          )}
           <Button variant="outline" onClick={exportCSV} className="gap-2 shrink-0">
             <Download className="h-4 w-4" /> Exportar CSV
           </Button>

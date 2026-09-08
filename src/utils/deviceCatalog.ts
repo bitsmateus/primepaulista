@@ -152,6 +152,110 @@ export function printDeviceCatalog(devices: Device[], isAdmin = false) {
 }
 
 // ---------------------------------------------------------------------------
+// 1b) Relatório de estoque — conferência física (custo, serial e IMEI
+//     separados). Uso interno/admin, para bater com a planilha da loja.
+// ---------------------------------------------------------------------------
+export function generateStockReportHTML(devices: Device[]): string {
+  const grouped = groupByModel(devices);
+
+  const sections = grouped
+    .map(([model, list]) => {
+      const rows = list
+        .map(
+          (d) => `
+          <tr>
+            <td>${formatCapacity(d.capacity) || "—"}</td>
+            <td>${d.color || "—"}</td>
+            <td>${d.condition || "—"}</td>
+            <td class="c">${d.batteryHealth != null ? d.batteryHealth + "%" : "—"}</td>
+            <td class="mono">${d.serial || d.internalSerial || "—"}</td>
+            <td class="mono">${d.serialImei || "—"}</td>
+            <td class="r">${money(d.cost)}</td>
+            <td><span class="dot" style="background:${statusColor[d.status] || "#8e8e93"}"></span>${d.status}</td>
+          </tr>`
+        )
+        .join("");
+      const subtotal = `
+        <tr class="subtotal">
+          <td colspan="6">Subtotal — ${list.length} un</td>
+          <td class="r">${money(sumCost(list))}</td>
+          <td></td>
+        </tr>`;
+      return `
+        <div class="group">
+          <h2>${model} <span class="count">${list.length} un</span></h2>
+          <table>
+            <thead>
+              <tr><th>Capac.</th><th>Cor</th><th>Condição</th><th>Bateria</th><th>Serial</th><th>IMEI</th><th>Custo</th><th>Status</th></tr>
+            </thead>
+            <tbody>${rows}${subtotal}</tbody>
+          </table>
+        </div>`;
+    })
+    .join("");
+
+  const totalUnits = devices.length;
+  const totalCost = sumCost(devices);
+  const now = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório de Estoque – Prime Paulista</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 11px; padding: 14px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
+  .head h1 { font-size: 18px; }
+  .head .meta { font-size: 11px; color: #555; text-align: right; }
+  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .sumcard { flex: 1; min-width: 120px; border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; }
+  .sumcard .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .3px; color: #777; }
+  .sumcard .val { font-size: 14px; font-weight: 700; }
+  .group { margin-bottom: 14px; break-inside: avoid; }
+  h2 { font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .count { font-size: 10px; font-weight: 600; color: #555; background: #eee; border-radius: 10px; padding: 1px 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+  th { background: #f2f2f2; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
+  thead { display: table-header-group; }
+  td.c { text-align: center; }
+  td.r { text-align: right; font-weight: 600; }
+  td.mono { font-family: monospace; font-size: 10px; }
+  tr.subtotal td { background: #fafafa; font-weight: 600; font-size: 10px; color: #444; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .foot { margin-top: 14px; text-align: center; font-size: 10px; color: #777; }
+  @page { size: A4; margin: 12mm; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Relatório de Estoque — Prime Paulista</h1>
+    <div class="meta">${totalUnits} aparelho(s)<br/>${now}</div>
+  </div>
+  <div class="summary">
+    <div class="sumcard"><span class="lbl">Aparelhos</span><span class="val">${totalUnits}</span></div>
+    <div class="sumcard"><span class="lbl">Valor em custo</span><span class="val">${money(totalCost)}</span></div>
+  </div>
+  ${sections || "<p>Nenhum aparelho para exibir.</p>"}
+  <div class="foot">Prime Paulista · relatório de conferência de estoque (uso interno)</div>
+</body>
+</html>`;
+}
+
+export function printDeviceStockReport(devices: Device[]) {
+  const html = generateStockReportHTML(devices);
+  const win = window.open("", "_blank", "width=900,height=1000");
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 400);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 2) Vitrine para o cliente — só disponíveis, visual, para enviar no WhatsApp
 //    (sem custo, sem serial, sem margem — voltado ao cliente final)
 // ---------------------------------------------------------------------------
