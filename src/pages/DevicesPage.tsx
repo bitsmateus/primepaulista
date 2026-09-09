@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Plus, ScanLine, Shuffle, Trash2, Pencil, Search, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -114,6 +115,7 @@ export default function DevicesPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [tab, setTab] = useState<"active" | "sold">("active");
 
   // Form state
   const [category, setCategory] = useState<string>("iPhone");
@@ -231,18 +233,37 @@ export default function DevicesPage() {
   };
 
   // ----- Filtros + busca -----
-  const filteredDevices = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return devices.filter((d) => {
-      if (filterStatus !== "all" && d.status !== filterStatus) return false;
+  const matchesCategoryAndSearch = useCallback(
+    (d: Device, q: string) => {
       if (filterCategory !== "all" && (d.category || "iPhone") !== filterCategory) return false;
       if (q) {
         const hay = `${d.model} ${d.color} ${d.capacity} ${d.serialImei} ${d.internalSerial} ${d.supplier}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
+    },
+    [filterCategory]
+  );
+
+  const filteredDevices = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return devices.filter((d) => {
+      if (tab === "sold") {
+        if (d.status !== "Vendido") return false;
+      } else {
+        if (d.status === "Vendido") return false;
+        if (filterStatus !== "all" && d.status !== filterStatus) return false;
+      }
+      return matchesCategoryAndSearch(d, q);
     });
-  }, [devices, filterStatus, filterCategory, search]);
+  }, [devices, tab, filterStatus, search, matchesCategoryAndSearch]);
+
+  // Aparelhos vendidos nunca entram nos relatórios/catálogo impressos —
+  // só o que está realmente disponível para vender.
+  const reportDevices = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return devices.filter((d) => d.status === "Disponível" && matchesCategoryAndSearch(d, q));
+  }, [devices, search, matchesCategoryAndSearch]);
 
   // ----- Relatório / resumo -----
   const report = useMemo(() => buildStockReport(devices), [devices]);
@@ -264,7 +285,7 @@ export default function DevicesPage() {
   // ----- Paginação -----
   useEffect(() => {
     setPage(1);
-  }, [search, filterStatus, filterCategory]);
+  }, [search, filterStatus, filterCategory, tab]);
   const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
   const pageDevices = filteredDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -378,6 +399,20 @@ export default function DevicesPage() {
           ))}
         </div>
 
+        {/* Aba: estoque ativo x vendidos */}
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "active" | "sold")}>
+          <TabsList>
+            <TabsTrigger value="active" className="gap-2">
+              Estoque
+              <Badge variant="secondary">{report.total - report.sold}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="sold" className="gap-2">
+              Vendidos
+              <Badge variant="secondary">{report.sold}</Badge>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
         {/* Busca + exportar */}
         <div className="flex items-center gap-2">
           <div className="relative max-w-md flex-1">
@@ -389,18 +424,18 @@ export default function DevicesPage() {
               className="pl-9"
             />
           </div>
-          <Button variant="outline" onClick={() => printDeviceShowcase(filteredDevices)} className="gap-2 shrink-0" title="Vitrine só com aparelhos disponíveis, para enviar ao cliente">
+          <Button variant="outline" onClick={() => printDeviceShowcase(reportDevices)} className="gap-2 shrink-0" title="Vitrine só com aparelhos disponíveis, para enviar ao cliente">
             <Store className="h-4 w-4" /> Vitrine (cliente)
           </Button>
-          <Button variant="outline" onClick={() => printDeviceCatalog(filteredDevices, isAdmin)} className="gap-2 shrink-0">
+          <Button variant="outline" onClick={() => printDeviceCatalog(reportDevices, isAdmin)} className="gap-2 shrink-0" title="Catálogo só com aparelhos disponíveis (vendidos não entram)">
             <Printer className="h-4 w-4" /> Catálogo (A4)
           </Button>
           {isAdmin && (
             <Button
               variant="outline"
-              onClick={() => printDeviceStockReport(filteredDevices)}
+              onClick={() => printDeviceStockReport(reportDevices)}
               className="gap-2 shrink-0"
-              title="Relatório com cor, modelo, condição, bateria, serial, IMEI e custo — para conferência de estoque"
+              title="Relatório com cor, modelo, condição, bateria, serial, IMEI e custo — só aparelhos disponíveis, para conferência de estoque"
             >
               <Printer className="h-4 w-4" /> Relatório de Estoque
             </Button>
@@ -419,15 +454,17 @@ export default function DevicesPage() {
               {allCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-52"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              {["Disponível", "Vendido", "Em Manutenção", "Reservado"].map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {tab === "active" && (
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-52"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                {["Disponível", "Em Manutenção", "Reservado"].map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {(filterCategory !== "all" || filterStatus !== "all") && (
             <Button variant="ghost" size="sm" onClick={() => { setFilterCategory("all"); setFilterStatus("all"); }}>
               Limpar filtros
