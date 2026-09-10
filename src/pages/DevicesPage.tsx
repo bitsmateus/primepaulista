@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from "react";
 import { Plus, ScanLine, Shuffle, Trash2, Pencil, Search, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
@@ -8,7 +8,7 @@ import { DeviceStatus, DeviceCategory, DeviceCondition, Device } from "@/types/i
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { formatCapacity } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
-import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport } from "@/lib/devices";
+import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport, deviceGroupKey, sortDevicesByModel } from "@/lib/devices";
 import { DevicePhotos } from "@/components/devices/DevicePhotos";
 import { parseDevicesCsv, ParsedDeviceCsv } from "@/lib/deviceCsv";
 import { Upload, Tag, Printer, LayoutGrid, List } from "lucide-react";
@@ -257,6 +257,7 @@ export default function DevicesPage() {
       return matchesCategoryAndSearch(d, q);
     });
   }, [devices, tab, filterStatus, search, matchesCategoryAndSearch]);
+  const sortedFilteredDevices = useMemo(() => sortDevicesByModel(filteredDevices), [filteredDevices]);
 
   // Aparelhos vendidos nunca entram nos relatórios/catálogo impressos —
   // só o que está realmente disponível para vender.
@@ -286,8 +287,8 @@ export default function DevicesPage() {
   useEffect(() => {
     setPage(1);
   }, [search, filterStatus, filterCategory, tab]);
-  const totalPages = Math.max(1, Math.ceil(filteredDevices.length / PAGE_SIZE));
-  const pageDevices = filteredDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredDevices.length / PAGE_SIZE));
+  const pageDevices = sortedFilteredDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Grade agrupada por modelo (com contador), respeitando a página atual
   const gridGroups = useMemo(() => {
@@ -504,8 +505,14 @@ export default function DevicesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pageDevices.map((d) => (
-                    <TableRow key={d.id}>
+                  {pageDevices.map((d, idx) => (
+                    <Fragment key={d.id}>
+                      {idx > 0 && deviceGroupKey(pageDevices[idx - 1]) !== deviceGroupKey(d) && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={isAdmin ? 13 : 11} className="h-3 border-0 p-0" />
+                        </TableRow>
+                      )}
+                      <TableRow>
                       <TableCell className="text-muted-foreground">{d.category || "iPhone"}</TableCell>
                       <TableCell className="font-medium">{d.model}</TableCell>
                       <TableCell>{formatCapacity(d.capacity)}</TableCell>
@@ -570,7 +577,8 @@ export default function DevicesPage() {
                           )}
                         </div>
                       </TableCell>
-                    </TableRow>
+                      </TableRow>
+                    </Fragment>
                   ))}
                   {filteredDevices.length === 0 && (
                     <TableRow>

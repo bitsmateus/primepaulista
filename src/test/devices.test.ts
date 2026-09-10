@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { daysInStock, deviceMargin, deviceMarginPct, buildStockReport } from "@/lib/devices";
+import {
+  daysInStock, deviceMargin, deviceMarginPct, buildStockReport,
+  capacityInGB, deviceGroupKey, sortDevicesByModel,
+} from "@/lib/devices";
 import { formatCapacity } from "@/lib/utils";
 import { Device } from "@/types/inventory";
 
@@ -85,5 +88,45 @@ describe("relatório de estoque", () => {
   });
   it("quebra por categoria", () => {
     expect(r.byCategory).toEqual({ iPhone: 2, iPad: 1, Mac: 1 });
+  });
+});
+
+describe("capacityInGB", () => {
+  it("numero puro = GB", () => expect(capacityInGB("128")).toBe(128));
+  it("com sufixo GB", () => expect(capacityInGB("256GB")).toBe(256));
+  it("TB vira GB (×1024)", () => expect(capacityInGB("1TB")).toBe(1024));
+  it("vazio = 0", () => expect(capacityInGB("")).toBe(0));
+});
+
+describe("deviceGroupKey", () => {
+  it("mesmo modelo + capacidade = mesma chave", () => {
+    const a = mkDevice({ model: "iPhone 13", capacity: "128" });
+    const b = mkDevice({ model: "iPhone 13", capacity: "128" });
+    expect(deviceGroupKey(a)).toBe(deviceGroupKey(b));
+  });
+  it("capacidade diferente = chave diferente", () => {
+    const a = mkDevice({ model: "iPhone 13", capacity: "128" });
+    const b = mkDevice({ model: "iPhone 13", capacity: "256" });
+    expect(deviceGroupKey(a)).not.toBe(deviceGroupKey(b));
+  });
+});
+
+describe("sortDevicesByModel", () => {
+  it("ordena por modelo e depois por capacidade (numerico, nao alfabetico)", () => {
+    const devices = [
+      mkDevice({ model: "iPhone 13", capacity: "512" }),
+      mkDevice({ model: "iPhone 13", capacity: "64" }),
+      mkDevice({ model: "iPhone 13", capacity: "128" }),
+      mkDevice({ model: "iPhone 13", capacity: "256" }),
+      mkDevice({ model: "iPhone 11", capacity: "64" }),
+    ];
+    const sorted = sortDevicesByModel(devices).map((d) => `${d.model} ${d.capacity}`);
+    expect(sorted).toEqual([
+      "iPhone 11 64",
+      "iPhone 13 64",
+      "iPhone 13 128",
+      "iPhone 13 256",
+      "iPhone 13 512",
+    ]);
   });
 });

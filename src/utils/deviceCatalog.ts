@@ -1,5 +1,6 @@
 import { Device } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
+import { capacityInGB } from "@/lib/devices";
 import logo from "@/assets/logo-prime-paulista.png";
 
 // Dados da loja (cabeçalho da vitrine para o cliente)
@@ -20,7 +21,9 @@ const statusColor: Record<string, string> = {
   "Em Manutenção": "#ff9f0a",
 };
 
-// Agrupa os aparelhos por modelo, em ordem alfabética.
+// Agrupa os aparelhos por modelo (ordem alfabética) e, dentro de cada
+// modelo, ordena por capacidade — para poder separar visualmente os
+// aparelhos de capacidades diferentes com uma linha em branco.
 function groupByModel(devices: Device[]): [string, Device[]][] {
   const groups = new Map<string, Device[]>();
   for (const d of devices) {
@@ -30,7 +33,13 @@ function groupByModel(devices: Device[]): [string, Device[]][] {
   }
   return [...groups.keys()]
     .sort((a, b) => a.localeCompare(b, "pt-BR"))
-    .map((k) => [k, groups.get(k)!] as [string, Device[]]);
+    .map((k) => [k, [...groups.get(k)!].sort((a, b) => capacityInGB(a.capacity) - capacityInGB(b.capacity))] as [string, Device[]]);
+}
+
+// Linha em branco (sem borda) para separar visualmente aparelhos de
+// capacidade/variante diferente dentro da tabela do mesmo modelo.
+function spacerRow(colSpan: number): string {
+  return `<tr class="spacer"><td colspan="${colSpan}"></td></tr>`;
 }
 
 const sumPrice = (list: Device[]) => list.reduce((s, d) => s + (d.salePrice ?? 0), 0);
@@ -45,9 +54,10 @@ export function generateCatalogHTML(devices: Device[], isAdmin = false): string 
   const sections = grouped
     .map(([model, list]) => {
       const rows = list
-        .map((d) => {
+        .map((d, idx) => {
           const serial = d.serialImei || d.serial || d.internalSerial || "—";
-          return `
+          const spacer = idx > 0 && list[idx - 1].capacity !== d.capacity ? spacerRow(7) : "";
+          return `${spacer}
           <tr>
             <td>${formatCapacity(d.capacity) || "—"}</td>
             <td>${d.color || "—"}</td>
@@ -123,6 +133,7 @@ export function generateCatalogHTML(devices: Device[], isAdmin = false): string 
   td.r { text-align: right; font-weight: 600; }
   td.mono { font-family: monospace; font-size: 10px; }
   tr.subtotal td { background: #fafafa; font-weight: 600; font-size: 10px; color: #444; }
+  tr.spacer td { border: none; padding: 0; height: 10px; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
   .foot { margin-top: 14px; text-align: center; font-size: 10px; color: #777; }
   @page { size: A4; margin: 12mm; }
@@ -161,8 +172,9 @@ export function generateStockReportHTML(devices: Device[]): string {
   const sections = grouped
     .map(([model, list]) => {
       const rows = list
-        .map(
-          (d) => `
+        .map((d, idx) => {
+          const spacer = idx > 0 && list[idx - 1].capacity !== d.capacity ? spacerRow(8) : "";
+          return `${spacer}
           <tr>
             <td>${formatCapacity(d.capacity) || "—"}</td>
             <td>${d.color || "—"}</td>
@@ -172,8 +184,8 @@ export function generateStockReportHTML(devices: Device[]): string {
             <td class="mono">${d.serialImei || "—"}</td>
             <td class="r">${money(d.cost)}</td>
             <td><span class="dot" style="background:${statusColor[d.status] || "#8e8e93"}"></span>${d.status}</td>
-          </tr>`
-        )
+          </tr>`;
+        })
         .join("");
       const subtotal = `
         <tr class="subtotal">
@@ -224,6 +236,7 @@ export function generateStockReportHTML(devices: Device[]): string {
   td.r { text-align: right; font-weight: 600; }
   td.mono { font-family: monospace; font-size: 10px; }
   tr.subtotal td { background: #fafafa; font-weight: 600; font-size: 10px; color: #444; }
+  tr.spacer td { border: none; padding: 0; height: 10px; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
   .foot { margin-top: 14px; text-align: center; font-size: 10px; color: #777; }
   @page { size: A4; margin: 12mm; }
