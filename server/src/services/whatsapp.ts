@@ -54,6 +54,7 @@ export async function callUazapi(
     method,
     headers: { "Content-Type": "application/json", apikey: cfg.apiKey },
     ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(15000), // não trava a API se o provedor não responder
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };

@@ -50,6 +50,8 @@ export const quoteStatusEnum = pgEnum("quote_status", [
 // Assistência técnica
 export const osStatusEnum = pgEnum("os_status", [
   "Aguardando Diagnóstico",
+  "Em Diagnóstico",
+  "Aguardando Aprovação",
   "Aguardando Peça",
   "Em Reparo",
   "Pronto para Retirada",

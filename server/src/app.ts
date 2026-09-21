@@ -20,6 +20,7 @@ import { whatsappRoutes } from "./routes/whatsapp";
 import { automationRoutes } from "./routes/automations";
 import { financeRoutes } from "./routes/finance";
 import { quoteRoutes } from "./routes/quotes";
+import { settingsRoutes } from "./routes/settings";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -67,6 +68,7 @@ export function buildApp() {
   app.register(automationRoutes);
   app.register(financeRoutes);
   app.register(quoteRoutes);
+  app.register(settingsRoutes);
 
   return app;
 }
