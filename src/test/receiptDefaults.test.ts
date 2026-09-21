@@ -12,7 +12,10 @@ import type { ServiceOrder } from "@/types/serviceOrder";
 // Os HTMLs abaixo foram gerados com o código ANTES das configurações editáveis da loja
 // (Fase 4A). Com os padrões, a saída precisa ser exatamente igual (byte a byte).
 const FIX = path.resolve(__dirname, "fixtures");
-const read = (f: string) => fs.readFileSync(path.join(FIX, f), "utf8");
+// (no Windows o git pode converter as quebras de linha dos arquivos de referência: normaliza)
+const read = (f: string) => fs.readFileSync(path.join(FIX, f), "utf8").replace(/
+/g, "
+");
 const UPDATE = process.env.UPDATE_FIXTURES === "1";
 function compare(file: string, html: string) {
   if (UPDATE) {
