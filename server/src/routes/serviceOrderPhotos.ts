@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index";
 import { serviceOrderPhotos, serviceOrders } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireCapability } from "../plugins/auth";
 import {
   storageEnabled,
   uploadObject,
@@ -34,7 +34,7 @@ export async function serviceOrderPhotoRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
   // GET /service-orders/:id/photos  → fotos com URL temporária
-  app.get("/service-orders/:id/photos", async (req) => {
+  app.get("/service-orders/:id/photos", { preHandler: requireCapability("viewOS") }, async (req) => {
     const { id } = req.params as { id: string };
     const rows = await db
       .select()
@@ -53,7 +53,7 @@ export async function serviceOrderPhotoRoutes(app: FastifyInstance) {
   });
 
   // POST /service-orders/:id/photos?type=antes|depois  (multipart, campo "file")
-  app.post("/service-orders/:id/photos", async (req, reply) => {
+  app.post("/service-orders/:id/photos", { preHandler: requireCapability("editOS") }, async (req, reply) => {
     if (!storageEnabled) {
       return reply
         .code(503)
@@ -105,7 +105,7 @@ export async function serviceOrderPhotoRoutes(app: FastifyInstance) {
   });
 
   // DELETE /service-orders/:id/photos/:photoId
-  app.delete("/service-orders/:id/photos/:photoId", async (req, reply) => {
+  app.delete("/service-orders/:id/photos/:photoId", { preHandler: requireCapability("editOS") }, async (req, reply) => {
     const { id, photoId } = req.params as { id: string; photoId: string };
     const [row] = await db
       .select()

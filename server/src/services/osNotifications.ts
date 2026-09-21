@@ -3,7 +3,7 @@ import { db } from "../db/index";
 import { osNotifications, serviceOrders } from "../db/schema/index";
 import { callUazapi, getDefaultInstance } from "./whatsapp";
 import { getSetting } from "./settings";
-import { renderOsMessage, type OsEvent } from "./osMessages";
+import { renderOsMessage, withStoreFallback, type OsEvent } from "./osMessages";
 
 // Status da OS -> evento de notificação
 export const EVENT_BY_STATUS: Record<string, OsEvent | undefined> = {
@@ -41,7 +41,7 @@ export async function notifyOs(
   try {
     const [os] = await db.select().from(serviceOrders).where(eq(serviceOrders.id, osId)).limit(1);
     if (!os) return null;
-    const settings = await getSetting("os_messages");
+    const settings = withStoreFallback(await getSetting("os_messages"), await getSetting("store"));
     if (!opts.manual && !settings.enabled[event]) return null;
 
     const phone = normalizePhone(os.customerPhone);

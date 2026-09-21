@@ -21,6 +21,11 @@ import { automationRoutes } from "./routes/automations";
 import { financeRoutes } from "./routes/finance";
 import { quoteRoutes } from "./routes/quotes";
 import { settingsRoutes } from "./routes/settings";
+import { supplierRoutes } from "./routes/suppliers";
+import { auditLogRoutes } from "./routes/auditLogs";
+import { customVarRoutes } from "./routes/customVars";
+import { backupRoutes } from "./routes/backup";
+import { notificationRoutes } from "./routes/notifications";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -69,6 +74,11 @@ export function buildApp() {
   app.register(financeRoutes);
   app.register(quoteRoutes);
   app.register(settingsRoutes);
+  app.register(supplierRoutes);
+  app.register(auditLogRoutes);
+  app.register(customVarRoutes);
+  app.register(backupRoutes);
+  app.register(notificationRoutes);
 
   return app;
 }

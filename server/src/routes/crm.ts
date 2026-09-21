@@ -3,7 +3,7 @@ import { asc, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { funnelColumns, leads, leadTasks, messageLogs } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireCapability } from "../plugins/auth";
 
 const DEFAULT_COLUMNS = [
   { name: "Novo", color: "211 100% 45%", position: 0 },
@@ -33,6 +33,14 @@ const messageLogInput = z.object({
 
 export async function crmRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
+  // Todo o CRM exige useCRM. Exceção de compatibilidade: a LEITURA de leads também é liberada
+  // a quem edita OS (o técnico usa os leads para sugerir clientes ao abrir uma ordem de serviço).
+  const crmGuard = requireCapability("useCRM");
+  const leadsReadGuard = requireCapability("useCRM", "editOS");
+  app.addHook("preHandler", async (req, reply) => {
+    const guard = req.method === "GET" && req.routeOptions.url === "/leads" ? leadsReadGuard : crmGuard;
+    return guard(req, reply);
+  });
 
   // ===== Colunas do funil =====
   app.get("/funnel-columns", async () => {

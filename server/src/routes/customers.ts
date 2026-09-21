@@ -3,7 +3,8 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { customers } from "../db/schema/index";
-import { authenticate, requireRole } from "../plugins/auth";
+import { authenticate, requireCapability } from "../plugins/auth";
+import { logAudit } from "../services/audit";
 
 const customerInput = z.object({
   name: z.string().min(1).max(200),
@@ -24,7 +25,7 @@ export async function customerRoutes(app: FastifyInstance) {
   });
 
   // POST /customers
-  app.post("/customers", async (req, reply) => {
+  app.post("/customers", { preHandler: requireCapability("editCustomers") }, async (req, reply) => {
     const parsed = customerInput.safeParse(req.body);
     if (!parsed.success) {
       return reply
@@ -36,7 +37,7 @@ export async function customerRoutes(app: FastifyInstance) {
   });
 
   // POST /customers/import — importação em lote com deduplicação por CPF/WhatsApp
-  app.post("/customers/import", async (req, reply) => {
+  app.post("/customers/import", { preHandler: requireCapability("editCustomers") }, async (req, reply) => {
     const parsed = z.object({ customers: z.array(customerInput).max(5000) }).safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Dados inválidos" });
@@ -69,7 +70,7 @@ export async function customerRoutes(app: FastifyInstance) {
   });
 
   // PATCH /customers/:id — editar cliente
-  app.patch("/customers/:id", async (req, reply) => {
+  app.patch("/customers/:id", { preHandler: requireCapability("editCustomers") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = customerInput.partial().safeParse(req.body);
     if (!parsed.success) {
@@ -85,10 +86,19 @@ export async function customerRoutes(app: FastifyInstance) {
   });
 
   // DELETE /customers/:id (somente admin)
-  app.delete("/customers/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
+  app.delete("/customers/:id", { preHandler: requireCapability("deleteRecords") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
+      const [cust] = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
       await db.delete(customers).where(eq(customers.id, id));
+      if (cust) {
+        await logAudit(req, {
+          action: "customer.delete",
+          entity: "customer",
+          entityId: id,
+          description: `Excluiu o cliente ${cust.name}`,
+        });
+      }
       return { ok: true };
     } catch (err) {
       // 23503 = violação de chave estrangeira (cliente possui vendas)

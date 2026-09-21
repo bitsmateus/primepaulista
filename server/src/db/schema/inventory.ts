@@ -15,6 +15,7 @@ import {
   productTypeEnum,
 } from "./enums";
 import { profiles } from "./auth";
+import { suppliers } from "./suppliers";
 
 export const devices = pgTable("devices", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -28,7 +29,8 @@ export const devices = pgTable("devices", {
   color: text("color").notNull(),
   condition: deviceConditionEnum("condition").notNull(),
   batteryHealth: integer("battery_health").notNull().default(100),
-  supplier: text("supplier"),
+  supplier: text("supplier"), // nome exibido (mantido por compatibilidade)
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
   cost: numeric("cost", { precision: 12, scale: 2 }).notNull().default("0"),
   salePrice: numeric("sale_price", { precision: 12, scale: 2 }), // preço de venda (para margem)
   serialImei: text("serial_imei"), // IMEI 1

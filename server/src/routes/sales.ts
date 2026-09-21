@@ -15,7 +15,8 @@ import {
   quotes,
   paymentMethodEnum,
 } from "../db/schema/index";
-import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
+import { authenticate, requireCapability, type JwtUser } from "../plugins/auth";
+import { brl, logAudit } from "../services/audit";
 
 // Métodos de pagamento aceitos = valores do enum do banco (uma única fonte)
 const paymentMethod = z.enum(paymentMethodEnum.enumValues);
@@ -72,13 +73,13 @@ export async function saleRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
   // GET /sales — lista vendas (resumo)
-  app.get("/sales", async () => {
+  app.get("/sales", { preHandler: requireCapability("viewSalesData") }, async () => {
     const rows = await db.select().from(sales).orderBy(desc(sales.createdAt));
     return { sales: rows };
   });
 
   // GET /sales/full — vendas com itens, pagamentos, troca e cliente aninhados (para BI)
-  app.get("/sales/full", async () => {
+  app.get("/sales/full", { preHandler: requireCapability("viewSalesData") }, async () => {
     const saleRows = await db.select().from(sales).orderBy(desc(sales.createdAt));
     if (saleRows.length === 0) return { sales: [] };
 
@@ -116,7 +117,7 @@ export async function saleRoutes(app: FastifyInstance) {
   });
 
   // POST /sales — finaliza a venda de forma transacional
-  app.post("/sales", async (req, reply) => {
+  app.post("/sales", { preHandler: requireCapability("sell") }, async (req, reply) => {
     const parsed = saleInput.safeParse(req.body);
     if (!parsed.success) {
       return reply
@@ -290,6 +291,14 @@ export async function saleRoutes(app: FastifyInstance) {
         return sale.id;
       });
 
+      const [cust] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, s.customerId)).limit(1);
+      await logAudit(req, {
+        action: "sale.create",
+        entity: "sale",
+        entityId: saleId,
+        description: `Registrou a venda de ${brl(total)} para ${cust?.name ?? "cliente"}`,
+        details: { total, discount: s.discount, items: s.items.length, seller: s.sellerName || null },
+      });
       return reply.code(201).send({ saleId });
     } catch (err) {
       const code = (err as { statusCode?: number }).statusCode;
@@ -302,7 +311,7 @@ export async function saleRoutes(app: FastifyInstance) {
   });
 
   // PATCH /sales/:id — edita dados da venda (sem mexer no estoque). Somente admin.
-  app.patch("/sales/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
+  app.patch("/sales/:id", { preHandler: requireCapability("editSales") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const p = z
       .object({
@@ -319,10 +328,21 @@ export async function saleRoutes(app: FastifyInstance) {
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
 
     try {
+      let audit: { desc: string; details: Record<string, unknown> } | null = null;
       await db.transaction(async (tx) => {
         const [sale] = await tx.select().from(sales).where(eq(sales.id, id)).for("update").limit(1);
         if (!sale) throw saleError("Venda não encontrada.", 404);
         if (sale.returnedAt) throw saleError("Venda devolvida não pode ser editada.");
+        const [cust] = await tx.select({ name: customers.name }).from(customers).where(eq(customers.id, sale.customerId ?? id)).limit(1);
+        const changes: Record<string, unknown> = {};
+        if (p.data.customerId !== undefined && p.data.customerId !== sale.customerId) changes.cliente = { de: sale.customerId, para: p.data.customerId };
+        if (p.data.sellerName !== undefined && p.data.sellerName !== sale.sellerName) changes.vendedor = { de: sale.sellerName, para: p.data.sellerName };
+        if (p.data.discount !== undefined && p.data.discount !== Number(sale.discount)) changes.desconto = { de: Number(sale.discount), para: p.data.discount };
+        if (p.data.giftsCost !== undefined && p.data.giftsCost !== Number(sale.giftsCost)) changes.custoBrindes = { de: Number(sale.giftsCost), para: p.data.giftsCost };
+        if (p.data.requiresInvoice !== undefined && p.data.requiresInvoice !== sale.requiresInvoice) changes.nota = { de: sale.requiresInvoice, para: p.data.requiresInvoice };
+        if (p.data.notes !== undefined && p.data.notes !== (sale.notes ?? "")) changes.observacao = true;
+        if (p.data.paymentMethod) changes.formaPagamento = p.data.paymentMethod;
+        audit = { desc: `Editou a venda de ${brl(sale.total)} de ${cust?.name ?? "cliente"} (${Object.keys(changes).join(", ") || "sem mudanças"})`, details: changes };
 
         const update: Record<string, unknown> = {};
         if (p.data.customerId !== undefined) update.customerId = p.data.customerId;
@@ -352,6 +372,10 @@ export async function saleRoutes(app: FastifyInstance) {
           });
         }
       });
+      if (audit) {
+        const a = audit as { desc: string; details: Record<string, unknown> };
+        await logAudit(req, { action: "sale.update", entity: "sale", entityId: id, description: a.desc, details: a.details });
+      }
       return { ok: true };
     } catch (err) {
       const code = (err as { statusCode?: number }).statusCode;
@@ -363,17 +387,20 @@ export async function saleRoutes(app: FastifyInstance) {
   });
 
   // POST /sales/:id/return — devolução/estorno total (somente admin)
-  app.post("/sales/:id/return", { preHandler: requireRole("admin") }, async (req, reply) => {
+  app.post("/sales/:id/return", { preHandler: requireCapability("returnSales") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const p = z.object({ reason: z.string().max(500).optional().default("") }).safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
     const userId = (req.user as JwtUser).sub;
 
     try {
+      let retAudit: { total: string; customer: string } | null = null;
       await db.transaction(async (tx) => {
         const [sale] = await tx.select().from(sales).where(eq(sales.id, id)).for("update").limit(1);
         if (!sale) throw saleError("Venda não encontrada.", 404);
         if (sale.returnedAt) throw saleError("Esta venda já foi devolvida.");
+        const [cust] = await tx.select({ name: customers.name }).from(customers).where(eq(customers.id, sale.customerId ?? id)).limit(1);
+        retAudit = { total: sale.total, customer: cust?.name ?? "cliente" };
 
         const items = await tx.select().from(saleItems).where(eq(saleItems.saleId, id));
         // Restitui o estoque de cada item
@@ -417,6 +444,16 @@ export async function saleRoutes(app: FastifyInstance) {
         });
         await tx.update(sales).set({ returnedAt: new Date() }).where(eq(sales.id, id));
       });
+      if (retAudit) {
+        const r = retAudit as { total: string; customer: string };
+        await logAudit(req, {
+          action: "sale.return",
+          entity: "sale",
+          entityId: id,
+          description: `Devolveu a venda de ${brl(r.total)} para ${r.customer}`,
+          details: { total: r.total, reason: p.data.reason || null },
+        });
+      }
       return { ok: true };
     } catch (err) {
       const code = (err as { statusCode?: number }).statusCode;

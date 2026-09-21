@@ -10,7 +10,7 @@ import {
   serviceOrders,
   stockMovements,
 } from "../db/schema/index";
-import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
+import { authenticate, requireCapability, type JwtUser } from "../plugins/auth";
 import { logAudit } from "../services/audit";
 import { EVENT_BY_STATUS, notifyOs } from "../services/osNotifications";
 import { COST_RESPONSIBILITIES, OS_EVENTS, isExemptResponsibility } from "../services/osMessages";
@@ -175,14 +175,14 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
   // GET /service-orders
-  app.get("/service-orders", async () => {
+  app.get("/service-orders", { preHandler: requireCapability("viewOS") }, async () => {
     const rows = await db.select().from(serviceOrders).orderBy(desc(serviceOrders.createdAt));
     const sent = await sentEventsByOs();
     return { serviceOrders: rows.map((r) => ({ ...r, sentEvents: sent.get(r.id) ?? [] })) };
   });
 
   // POST /service-orders
-  app.post("/service-orders", async (req, reply) => {
+  app.post("/service-orders", { preHandler: requireCapability("editOS") }, async (req, reply) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply
@@ -270,7 +270,7 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   });
 
   // PATCH /service-orders/:id
-  app.patch("/service-orders/:id", async (req, reply) => {
+  app.patch("/service-orders/:id", { preHandler: requireCapability("editOS") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
     const parsed = patchSchema.safeParse(req.body);
@@ -336,7 +336,7 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   });
 
   // DELETE /service-orders/:id (somente admin). OS aberta de aparelho do estoque devolve o aparelho.
-  app.delete("/service-orders/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
+  app.delete("/service-orders/:id", { preHandler: requireCapability("deleteRecords") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
     const userId = (req.user as JwtUser).sub;
@@ -359,7 +359,7 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   });
 
   // GET /service-orders/:id/notifications — histórico da OS
-  app.get("/service-orders/:id/notifications", async (req, reply) => {
+  app.get("/service-orders/:id/notifications", { preHandler: requireCapability("viewOS") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
     const rows = await db
@@ -382,7 +382,7 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   });
 
   // POST /service-orders/:id/notify { event? } — "Notificar agora" / reenviar
-  app.post("/service-orders/:id/notify", async (req, reply) => {
+  app.post("/service-orders/:id/notify", { preHandler: requireCapability("editOS") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
     const p = z.object({ event: z.enum(OS_EVENTS as [string, ...string[]]).optional() }).safeParse(req.body ?? {});
@@ -399,7 +399,7 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   });
 
   // GET /os-notifications?status=&limit= — histórico geral
-  app.get("/os-notifications", async (req, reply) => {
+  app.get("/os-notifications", { preHandler: requireCapability("viewOS") }, async (req, reply) => {
     const q = z
       .object({
         status: z.enum(["sent", "failed", "pending"]).optional(),

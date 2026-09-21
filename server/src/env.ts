@@ -7,6 +7,8 @@ const schema = z.object({
   PORT: z.coerce.number().default(3333),
   // Origens permitidas para CORS (separadas por vírgula). Vazio = libera todas (dev).
   CORS_ORIGIN: z.string().optional().default(""),
+  // Chave para cifrar variáveis customizadas em repouso (opcional; sem ela usa o JWT_SECRET)
+  SETTINGS_ENC_KEY: z.string().optional().default(""),
 });
 
 const parsed = schema.safeParse(process.env);

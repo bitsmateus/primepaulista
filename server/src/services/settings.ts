@@ -3,6 +3,10 @@ import { z } from "zod";
 import { db } from "../db/index";
 import { appSettings } from "../db/schema/index";
 import { DEFAULT_OS_MESSAGES, type OsMessagesSettings } from "./osMessages";
+import {
+  DEFAULT_SECURITY, DEFAULT_STORE, DEFAULT_WARRANTY_TERMS,
+  type SecuritySettings, type StoreSettings, type WarrantyTerms,
+} from "../lib/settingsDefaults";
 
 // Armazenamento genérico de configurações (chave -> JSON).
 // Para adicionar uma configuração nova, basta registrar uma entrada em SETTINGS
@@ -27,15 +31,68 @@ const osMessagesSchema = z
     enabled: z.object({ aguardando_aprovacao: flag, pronto_retirada: flag, entregue: flag }).strict(),
     includePixKey: z.boolean(),
     pixKey: z.string().trim().max(200),
-    storeName: z.string().trim().min(1).max(80),
+    storeName: z.string().trim().max(80),
   })
   .strict();
+
+const optText = (max: number) => z.string().trim().max(max);
+
+const storeSchema = z
+  .object({
+    name: z.string().trim().min(1, "Informe o nome da loja").max(80),
+    slogan: optText(120),
+    whatsapp: optText(40),
+    facebook: optText(80),
+    instagram: optText(80),
+    email: optText(120),
+    address: optText(200),
+    cnpj: optText(30),
+    pixKey: optText(200),
+  })
+  .strict();
+
+// Logo: "" = logo padrão; senão data URL de imagem (o navegador já reduz para <= 512 px)
+const logoSchema = z
+  .object({
+    dataUrl: z
+      .string()
+      .max(900_000, "Imagem muito grande")
+      .refine((v) => v === "" || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v), "Formato de imagem inválido"),
+  })
+  .strict();
+
+const termText = (max: number) => z.string().max(max);
+const warrantyTermsSchema = z
+  .object({
+    days: z
+      .object({
+        lacrado: z.number().int().min(0).max(3650),
+        seminovo: z.number().int().min(0).max(3650),
+        bateria: z.number().int().min(0).max(3650),
+        servico: z.number().int().min(0).max(3650),
+      })
+      .strict(),
+    footer: termText(400),
+    title: termText(120),
+    lead: termText(800),
+    bullets: z.array(termText(800)).max(20),
+    sections: z.array(z.object({ title: termText(300), text: termText(2000) }).strict()).max(8),
+    agree: termText(200),
+    signLabel: termText(120),
+  })
+  .strict();
+
+const securitySchema = z.object({ autoLockMinutes: z.number().int().min(0).max(1440) }).strict();
 
 export const SETTINGS = {
   os_messages: {
     schema: osMessagesSchema,
     defaults: DEFAULT_OS_MESSAGES,
   } satisfies SettingDef<OsMessagesSettings>,
+  store: { schema: storeSchema, defaults: DEFAULT_STORE } satisfies SettingDef<StoreSettings>,
+  logo: { schema: logoSchema, defaults: { dataUrl: "" } } satisfies SettingDef<{ dataUrl: string }>,
+  warranty_terms: { schema: warrantyTermsSchema, defaults: DEFAULT_WARRANTY_TERMS } satisfies SettingDef<WarrantyTerms>,
+  security: { schema: securitySchema, defaults: DEFAULT_SECURITY } satisfies SettingDef<SecuritySettings>,
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

@@ -183,6 +183,13 @@
       "when": 1789995480619,
       "tag": "0025_fase3_assistencia",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790002016261,
+      "tag": "0026_fase4a_fornecedores_cargos",
+      "breakpoints": true
     }
   ]
 }

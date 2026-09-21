@@ -3,7 +3,8 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { customers, quoteItems, quotes } from "../db/schema/index";
-import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
+import { authenticate, requireCapability, currentRole, type JwtUser } from "../plugins/auth";
+import { can } from "../lib/permissions";
 import { logAudit } from "../services/audit";
 
 const VALIDITY_DAYS = 7;
@@ -51,7 +52,7 @@ function quoteError(message: string, statusCode: number) {
 // Vendedor e admin usam orçamentos; técnico não.
 export async function quoteRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireRole("admin", "vendedor"));
+  app.addHook("preHandler", requireCapability("sell"));
 
   async function loadWithItems(ids: string[]) {
     if (ids.length === 0) return {} as Record<string, (typeof quoteItems.$inferSelect)[]>;
@@ -231,13 +232,11 @@ export async function quoteRoutes(app: FastifyInstance) {
     if (q.status === "Convertido") {
       return reply.code(409).send({ error: "Orçamento já convertido em venda não pode ser excluído." });
     }
-    // O JWT tem o cargo do momento do login; confirma no banco quem é admin
+    // Quem criou pode excluir; os demais precisam da capacidade deleteRecords.
+    // O cargo vem do banco (o hook requireCapability já o revalidou nesta requisição).
     const isOwner = q.sellerId === user.sub;
-    if (!isOwner) {
-      // requireRole responde 401/403 por conta própria; o valor retornado por `await`
-      // numa resposta do Fastify é sempre undefined, então o teste é `reply.sent`.
-      await requireRole("admin")(req, reply);
-      if (reply.sent) return reply;
+    if (!isOwner && !can(currentRole(req), "deleteRecords")) {
+      return reply.code(403).send({ error: "Sem permissão para esta ação" });
     }
     await db.delete(quotes).where(eq(quotes.id, id));
     await logAudit(req, {

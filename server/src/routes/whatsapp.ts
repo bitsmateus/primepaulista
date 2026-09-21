@@ -1,9 +1,10 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { whatsappInstances } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireCapability, currentRole } from "../plugins/auth";
+import { can } from "../lib/permissions";
 import { callUazapi, getInstance, getInstances } from "../services/whatsapp";
 import { storageEnabled, uploadObject, presignedUrl } from "../storage/minio";
 
@@ -36,6 +37,7 @@ function publicInstance(i: typeof whatsappInstances.$inferSelect, userId: string
 
 export async function whatsappRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
+  app.addHook("preHandler", requireCapability("useCRM"));
 
   // GET /whatsapp/instances — todas (cada um vê as suas e também as dos outros)
   app.get("/whatsapp/instances", async (req) => {
@@ -49,7 +51,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
     const inst = await getInstance(id);
     if (!inst) { reply.code(404).send({ error: "Instância não encontrada" }); return null; }
     const user = req.user as JwtUser;
-    if (inst.ownerId && inst.ownerId !== user.sub && user.role !== "admin") {
+    if (inst.ownerId && inst.ownerId !== user.sub && !can(currentRole(req as FastifyRequest), "manageWhatsapp")) {
       reply.code(403).send({ error: "Sem permissão para esta instância." });
       return null;
     }

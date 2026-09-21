@@ -1,7 +1,7 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 
 // Usuários / cargos
-export const roleEnum = pgEnum("role", ["admin", "vendedor", "tecnico"]);
+export const roleEnum = pgEnum("role", ["admin", "vendedor", "tecnico", "gerente", "estoquista", "financeiro"]);
 
 // Estoque
 export const deviceConditionEnum = pgEnum("device_condition", ["Lacrado", "Seminovo"]);
