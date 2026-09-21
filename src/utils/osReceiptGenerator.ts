@@ -1,5 +1,7 @@
 import { ServiceOrder } from "@/types/serviceOrder";
 import { WARRANTY_DAYS, WARRANTY_TEXT } from "@/lib/warranty";
+import { escapeHtml as esc } from "@/utils/html";
+import { receiptValueLine } from "@/lib/serviceOrders";
 
 // Garantia padrão do reparo (dias). Política centralizada em src/lib/warranty.ts.
 export const OS_WARRANTY_DAYS = WARRANTY_DAYS.servico;
@@ -29,11 +31,14 @@ export function generateOSReceiptHTML(order: ServiceOrder): string {
     order.checklist.carregador ? "Carregador" : null,
   ].filter(Boolean);
 
+  const valueLine = receiptValueLine(order, formatCurrency);
+  const fromStock = order.origin === "Estoque da loja";
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Recibo OS – ${order.id.slice(0, 8)}</title>
+  <title>Recibo OS – ${esc(order.id.slice(0, 8))}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, sans-serif; color: #1c1c1e; padding: 32px; max-width: 380px; margin: auto; font-size: 13px; }
@@ -62,38 +67,40 @@ export function generateOSReceiptHTML(order: ServiceOrder): string {
 
   <div class="section">
     <div class="section-title">Dados da OS</div>
-    <div class="row"><span>Nº</span><span>${order.id.slice(0, 8).toUpperCase()}</span></div>
+    <div class="row"><span>Nº</span><span>${esc(order.id.slice(0, 8).toUpperCase())}</span></div>
     <div class="row"><span>Abertura</span><span>${formatDate(order.createdAt)}</span></div>
-    <div class="row"><span>Status</span><span>${order.status}</span></div>
+    <div class="row"><span>Status</span><span>${esc(order.status)}</span></div>
+    ${fromStock ? `<div class="row"><span>Origem</span><span>Aparelho do estoque da loja</span></div>` : ""}
   </div>
 
   <div class="section">
     <div class="section-title">Cliente</div>
-    <div class="row"><span>Nome</span><span>${order.customerName}</span></div>
-    ${order.customerCpf ? `<div class="row"><span>CPF</span><span>${order.customerCpf}</span></div>` : ""}
-    ${order.customerPhone ? `<div class="row"><span>WhatsApp</span><span>${order.customerPhone}</span></div>` : ""}
+    <div class="row"><span>Nome</span><span>${esc(order.customerName)}</span></div>
+    ${order.customerCpf ? `<div class="row"><span>CPF</span><span>${esc(order.customerCpf)}</span></div>` : ""}
+    ${order.customerPhone ? `<div class="row"><span>WhatsApp</span><span>${esc(order.customerPhone)}</span></div>` : ""}
   </div>
 
   <div class="section">
     <div class="section-title">Aparelho</div>
-    <div class="row"><span>Modelo</span><span>${order.model}${order.color ? ` – ${order.color}` : ""}</span></div>
-    ${order.serialImei ? `<div class="row"><span>IMEI 1</span><span>${order.serialImei}</span></div>` : ""}
-    ${order.imei2 ? `<div class="row"><span>IMEI 2</span><span>${order.imei2}</span></div>` : ""}
-    ${order.serial ? `<div class="row"><span>Serial</span><span>${order.serial}</span></div>` : ""}
-    ${order.batteryHealth ? `<div class="row"><span>Bateria</span><span>${order.batteryHealth}%</span></div>` : ""}
-    ${checklistItems.length ? `<div class="row"><span>Acessórios na entrada</span><span>${checklistItems.join(", ")}</span></div>` : ""}
+    <div class="row"><span>Modelo</span><span>${esc(order.model)}${order.color ? ` – ${esc(order.color)}` : ""}</span></div>
+    ${order.serialImei ? `<div class="row"><span>IMEI 1</span><span>${esc(order.serialImei)}</span></div>` : ""}
+    ${order.imei2 ? `<div class="row"><span>IMEI 2</span><span>${esc(order.imei2)}</span></div>` : ""}
+    ${order.serial ? `<div class="row"><span>Serial</span><span>${esc(order.serial)}</span></div>` : ""}
+    ${order.batteryHealth ? `<div class="row"><span>Bateria</span><span>${esc(order.batteryHealth)}%</span></div>` : ""}
+    ${checklistItems.length ? `<div class="row"><span>Acessórios na entrada</span><span>${esc(checklistItems.join(", "))}</span></div>` : ""}
   </div>
 
   <div class="section">
     <div class="section-title">Serviço</div>
-    <p class="text"><strong>Defeito relatado:</strong> ${order.reportedIssue || "-"}</p>
-    ${order.partDescription ? `<p class="text" style="margin-top:4px;"><strong>Peça/Serviço:</strong> ${order.partDescription}</p>` : ""}
-    ${order.technicalNotes ? `<p class="text" style="margin-top:4px;"><strong>Observações:</strong> ${order.technicalNotes}</p>` : ""}
+    <p class="text"><strong>Defeito relatado:</strong> ${esc(order.reportedIssue || "-")}</p>
+    ${order.partDescription ? `<p class="text" style="margin-top:4px;"><strong>Peça/Serviço:</strong> ${esc(order.partDescription)}</p>` : ""}
+    ${order.technicalNotes ? `<p class="text" style="margin-top:4px;"><strong>Observações:</strong> ${esc(order.technicalNotes)}</p>` : ""}
   </div>
 
   <div class="section">
     <div class="section-title">Valores</div>
-    <div class="row total"><span>Total do serviço</span><span>${formatCurrency(order.chargedAmount)}</span></div>
+    <div class="row total"><span>${esc(valueLine.label)}</span><span>${esc(valueLine.value)}</span></div>
+    ${valueLine.note ? `<div class="row"><span>${esc(valueLine.note)}</span><span></span></div>` : ""}
   </div>
 
   <div class="section">

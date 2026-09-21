@@ -11,7 +11,7 @@ const mk = (over: Partial<ServiceOrder>): ServiceOrder => ({
   checklist: { capa: false, chip: false, carregador: false },
   status: "Em Reparo", priority: "Normal",
   partCost: 100, laborCost: 50, partDescription: "", partFromStock: false,
-  chargedAmount: 400, taxes: 20,
+  chargedAmount: 400, taxes: 20, origin: "Cliente", costResponsibility: "Cliente",
   createdAt: new Date(2026, 5, 1), updatedAt: new Date(2026, 5, 1),
   ...over,
 });

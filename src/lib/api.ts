@@ -1,5 +1,6 @@
 import { Device, Accessory, Customer, Sale, CartItem, PaymentEntry, PaymentMethod, Seller } from "@/types/inventory";
-import { ServiceOrder } from "@/types/serviceOrder";
+import { ServiceOrder, OSEvent, NotificationStatus } from "@/types/serviceOrder";
+import type { OsMessagesSettings } from "@/lib/osMessages";
 import { Lead, FunnelColumn, MessageLog, LeadTask } from "@/types/crm";
 import { Expense, Sangria, SellerCommissionConfig } from "@/types/financial";
 import { Quote, QuoteInput, QuoteItem, QuoteStatus } from "@/types/quote";
@@ -149,9 +150,44 @@ interface ServiceOrderRow {
   stockAccessoryId: string | null;
   chargedAmount: string;
   taxes: string;
+  origin?: ServiceOrder["origin"] | null;
+  deviceId?: string | null;
+  costResponsibility?: ServiceOrder["costResponsibility"] | null;
+  sentEvents?: OSEvent[] | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+}
+
+export interface OsNotifyResult {
+  id: string;
+  status: NotificationStatus;
+  error: string | null;
+  event: OSEvent;
+}
+export interface OsNotification {
+  id: string;
+  osId: string;
+  event: OSEvent;
+  phone: string;
+  message: string;
+  status: NotificationStatus;
+  error: string | null;
+  createdAt: Date;
+  createdByName: string | null;
+  customerName?: string;
+  model?: string;
+}
+interface OsNotificationRaw extends Omit<OsNotification, "createdAt"> {
+  createdAt: string;
+}
+function mapOsNotification(r: OsNotificationRaw): OsNotification {
+  return { ...r, createdAt: new Date(r.createdAt) };
+}
+// Resultado de criar/editar OS: a OS + o que aconteceu com o aviso por WhatsApp (se houve)
+export interface OsMutationResult {
+  order: ServiceOrder;
+  notification: OsNotifyResult | null;
 }
 
 function mapServiceOrder(r: ServiceOrderRow): ServiceOrder {
@@ -183,6 +219,10 @@ function mapServiceOrder(r: ServiceOrderRow): ServiceOrder {
     stockAccessoryId: r.stockAccessoryId ?? undefined,
     chargedAmount: Number(r.chargedAmount),
     taxes: Number(r.taxes),
+    origin: r.origin ?? "Cliente",
+    deviceId: r.deviceId ?? undefined,
+    costResponsibility: r.costResponsibility ?? "Cliente",
+    sentEvents: r.sentEvents ?? [],
     createdAt: new Date(r.createdAt),
     updatedAt: new Date(r.updatedAt),
     completedAt: r.completedAt ? new Date(r.completedAt) : undefined,
@@ -203,6 +243,7 @@ function serviceOrderToWire(o: Partial<ServiceOrder>): Record<string, unknown> {
   delete wire.createdAt;
   delete wire.updatedAt;
   delete wire.completedAt;
+  delete wire.sentEvents;
   return wire;
 }
 function mapAccessory(r: AccessoryRow): Accessory {
@@ -419,17 +460,47 @@ export const api = {
       d.serviceOrders.map(mapServiceOrder)
     ),
   createServiceOrder: (input: Omit<ServiceOrder, "id" | "createdAt" | "updatedAt">) =>
-    request<{ serviceOrder: ServiceOrderRow }>("/service-orders", {
+    request<{ serviceOrder: ServiceOrderRow; notification?: OsNotifyResult | null }>("/service-orders", {
       method: "POST",
       body: JSON.stringify(serviceOrderToWire(input)),
-    }).then((d) => mapServiceOrder(d.serviceOrder)),
+    }).then((d): OsMutationResult => ({ order: mapServiceOrder(d.serviceOrder), notification: d.notification ?? null })),
   updateServiceOrder: (id: string, patch: Partial<ServiceOrder>) =>
-    request<{ serviceOrder: ServiceOrderRow }>(`/service-orders/${id}`, {
+    request<{ serviceOrder: ServiceOrderRow; notification?: OsNotifyResult | null }>(`/service-orders/${id}`, {
       method: "PATCH",
       body: JSON.stringify(serviceOrderToWire(patch)),
-    }).then((d) => mapServiceOrder(d.serviceOrder)),
+    }).then((d): OsMutationResult => ({ order: mapServiceOrder(d.serviceOrder), notification: d.notification ?? null })),
   deleteServiceOrder: (id: string) =>
     request<{ ok: true }>(`/service-orders/${id}`, { method: "DELETE" }),
+  // Notificações de WhatsApp da OS
+  listOsNotifications: (params: { status?: NotificationStatus; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.limit) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return request<{ notifications: OsNotificationRaw[] }>(`/os-notifications${q ? `?${q}` : ""}`).then((d) =>
+      d.notifications.map(mapOsNotification)
+    );
+  },
+  listOrderNotifications: (osId: string) =>
+    request<{ notifications: OsNotificationRaw[] }>(`/service-orders/${osId}/notifications`).then((d) =>
+      d.notifications.map(mapOsNotification)
+    ),
+  notifyServiceOrder: (osId: string, event?: OSEvent) =>
+    request<{ notification: OsNotifyResult; sentEvents: OSEvent[] }>(`/service-orders/${osId}/notify`, {
+      method: "POST",
+      body: JSON.stringify(event ? { event } : {}),
+    }),
+  // Configurações da loja (genérico): só chaves registradas no servidor
+  getSetting: <T>(key: string) => request<{ key: string; value: T }>(`/settings/${key}`).then((d) => d.value),
+  saveSetting: <T>(key: string, value: T) =>
+    request<{ key: string; value: T }>(`/settings/${key}`, { method: "PUT", body: JSON.stringify(value) }).then((d) => d.value),
+  getOsMessages: () =>
+    request<{ key: string; value: OsMessagesSettings }>("/settings/os_messages").then((d) => d.value),
+  saveOsMessages: (v: OsMessagesSettings) =>
+    request<{ key: string; value: OsMessagesSettings }>("/settings/os_messages", {
+      method: "PUT",
+      body: JSON.stringify(v),
+    }).then((d) => d.value),
 
   // Fotos da OS (antes/depois)
   listOrderPhotos: (osId: string) =>

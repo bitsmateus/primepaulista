@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Store } from "lucide-react";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeCost } from "@/lib/permissions";
-import { OSPriority } from "@/types/serviceOrder";
+import { OSPriority, OSOrigin, CostResponsibility } from "@/types/serviceOrder";
+import { OS_ORIGINS, COST_RESPONSIBILITIES, isExempt, chargedFieldLabel, isOpenOS } from "@/lib/serviceOrders";
+import { Device } from "@/types/inventory";
+import { Badge } from "@/components/ui/badge";
 import { ApiError } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,7 +24,7 @@ interface OSFormProps {
 }
 
 export default function OSForm({ onCreated }: OSFormProps) {
-  const { addOrder } = useServiceOrderContext();
+  const { addOrder, orders } = useServiceOrderContext();
   const { customers, accessories, devices } = useInventoryContext();
   const { leads } = useCRMContext();
   const { user } = useAuth();
@@ -48,6 +51,28 @@ export default function OSForm({ onCreated }: OSFormProps) {
   const [checkChip, setCheckChip] = useState(false);
   const [checkCarregador, setCheckCarregador] = useState(false);
 
+  // Origem: aparelho do cliente ou do estoque da loja
+  const [origin, setOrigin] = useState<OSOrigin>("Cliente");
+  const [deviceSearch, setDeviceSearch] = useState("");
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [costResp, setCostResp] = useState<CostResponsibility>("Cliente");
+  const fromStock = origin === "Estoque da loja";
+  const exempt = isExempt(costResp);
+
+  // Aparelhos do estoque disponíveis para OS: não vendidos e fora de outra OS aberta
+  const busyDeviceIds = new Set(orders.filter((o) => isOpenOS(o) && o.deviceId).map((o) => o.deviceId as string));
+  const deviceResults = (() => {
+    const q = deviceSearch.trim().toLowerCase();
+    if (!q) return [];
+    return devices
+      .filter((d) => d.status !== "Vendido" && !busyDeviceIds.has(d.id))
+      .filter((d) =>
+        [d.model, d.color, d.capacity, d.serialImei, d.imei2, d.serial, d.internalSerial]
+          .some((v) => (v ?? "").toLowerCase().includes(q))
+      )
+      .slice(0, 8);
+  })();
+
   // Repair
   const [priority, setPriority] = useState<OSPriority>("Normal");
   const [partCost, setPartCost] = useState("");
@@ -73,28 +98,43 @@ export default function OSForm({ onCreated }: OSFormProps) {
     : [];
 
   const handleSubmit = async () => {
-    if (!selectedCustomer) {
-      toast.error("Selecione um cliente");
-      return;
-    }
-    if (!model.trim() || !reportedIssue.trim()) {
-      toast.error("Preencha modelo e defeito relatado");
-      return;
+    if (fromStock) {
+      if (!selectedDevice) {
+        toast.error("Escolha o aparelho do estoque");
+        return;
+      }
+      if (!reportedIssue.trim()) {
+        toast.error("Preencha o defeito / serviço a realizar");
+        return;
+      }
+    } else {
+      if (!selectedCustomer) {
+        toast.error("Selecione um cliente");
+        return;
+      }
+      if (!model.trim() || !reportedIssue.trim()) {
+        toast.error("Preencha modelo e defeito relatado");
+        return;
+      }
     }
 
     // A baixa da peça do estoque é feita pelo backend, de forma transacional
     try {
       await addOrder({
-        customerId: selectedCustomer.id,
-        customerName: selectedCustomer.name,
-        customerPhone: selectedCustomer.phone,
-        customerCpf: selectedCustomer.cpf,
-        model,
-        color,
-        serialImei,
-        imei2,
-        serial,
-        batteryHealth: Number(batteryHealth),
+        origin,
+        deviceId: fromStock ? selectedDevice!.id : undefined,
+        costResponsibility: costResp,
+        customerId: selectedCustomer?.id,
+        customerName: selectedCustomer?.name ?? "",
+        customerPhone: selectedCustomer?.phone ?? "",
+        customerCpf: selectedCustomer?.cpf ?? "",
+        // OS de estoque: o servidor preenche modelo/cor/IMEI/serial a partir do aparelho
+        model: fromStock ? selectedDevice!.model : model,
+        color: fromStock ? selectedDevice!.color : color,
+        serialImei: fromStock ? selectedDevice!.serialImei ?? "" : serialImei,
+        imei2: fromStock ? selectedDevice!.imei2 ?? "" : imei2,
+        serial: fromStock ? selectedDevice!.serial ?? "" : serial,
+        batteryHealth: fromStock ? selectedDevice!.batteryHealth : Number(batteryHealth),
         reportedIssue,
         technicalNotes,
         checklist: { capa: checkCapa, chip: checkChip, carregador: checkCarregador },
@@ -105,7 +145,7 @@ export default function OSForm({ onCreated }: OSFormProps) {
         partDescription,
         partFromStock,
         stockAccessoryId: partFromStock ? stockAccessoryId : undefined,
-        chargedAmount: Number(chargedAmount) || 0,
+        chargedAmount: exempt ? 0 : Number(chargedAmount) || 0,
         taxes: Number(taxes) || 0,
       });
     } catch (err) {
@@ -122,11 +162,12 @@ export default function OSForm({ onCreated }: OSFormProps) {
     setPriority("Normal"); setPartCost(""); setLaborCost("");
     setPartDescription(""); setChargedAmount(""); setTaxes("");
     setPartFromStock(false); setStockAccessoryId("");
+    setOrigin("Cliente"); setDeviceSearch(""); setSelectedDevice(null); setCostResp("Cliente");
 
     onCreated?.();
   };
 
-  const calcProfit = (Number(chargedAmount) || 0) - (Number(partCost) || 0) - (Number(taxes) || 0);
+  const calcProfit = (exempt ? 0 : Number(chargedAmount) || 0) - (Number(partCost) || 0) - (Number(taxes) || 0);
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -134,7 +175,10 @@ export default function OSForm({ onCreated }: OSFormProps) {
       <div className="space-y-6">
         {/* Customer */}
         <Card>
-          <CardHeader><CardTitle className="text-lg">Cliente</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-lg">{fromStock ? "Cliente (opcional)" : "Cliente"}</CardTitle>
+            {fromStock && <p className="text-xs text-muted-foreground">Aparelho da própria loja: só informe um cliente se ele for avisado quando ficar pronto.</p>}
+          </CardHeader>
           <CardContent className="space-y-3">
             {selectedCustomer ? (
               <div className="flex items-center justify-between rounded-lg border p-3">
@@ -172,10 +216,68 @@ export default function OSForm({ onCreated }: OSFormProps) {
           </CardContent>
         </Card>
 
+        {/* Origem */}
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Origem do aparelho</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <Select value={origin} onValueChange={(v) => { setOrigin(v as OSOrigin); setSelectedDevice(null); setDeviceSearch(""); }}>
+              <SelectTrigger aria-label="Origem da OS"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {OS_ORIGINS.map((o) => <SelectItem key={o} value={o}>{o === "Cliente" ? "Aparelho do cliente" : "Estoque da loja"}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {fromStock && (
+              <p className="text-xs text-muted-foreground">
+                Ao abrir a OS o aparelho passa para <strong>Em Manutenção</strong> e local <strong>Assistência</strong>; ao entregar/finalizar ele volta ao estoque.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Device */}
         <Card>
           <CardHeader><CardTitle className="text-lg">Aparelho</CardTitle></CardHeader>
           <CardContent className="space-y-3">
+            {fromStock ? (
+              selectedDevice ? (
+                <div className="flex items-center justify-between rounded-lg border p-3" data-testid="os-selected-device">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium flex items-center gap-2"><Store className="h-4 w-4" />{selectedDevice.model} {/^d+$/.test(selectedDevice.capacity) ? `${selectedDevice.capacity}GB` : selectedDevice.capacity}</p>
+                    <p className="text-xs text-muted-foreground">{selectedDevice.color} · IMEI/Serial: {selectedDevice.serialImei || selectedDevice.serial || "—"}</p>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">Local: {selectedDevice.location} · <Badge variant="outline" className="text-[10px]">{selectedDevice.status}</Badge></div>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedDevice(null)}>Trocar</Button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    aria-label="Buscar aparelho do estoque"
+                    placeholder="Buscar por modelo, IMEI ou serial..."
+                    value={deviceSearch}
+                    onChange={(e) => setDeviceSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                  {deviceSearch.trim() && (
+                    <div className="mt-1 w-full rounded-lg border bg-popover shadow-sm" data-testid="os-device-results">
+                      {deviceResults.length === 0 ? (
+                        <p className="px-4 py-3 text-sm text-muted-foreground">Nenhum aparelho disponível encontrado.</p>
+                      ) : deviceResults.map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          className="w-full text-left px-4 py-2 hover:bg-accent text-sm"
+                          onClick={() => { setSelectedDevice(d); setDeviceSearch(""); }}
+                        >
+                          <span className="font-medium">{d.model} {d.capacity}</span>
+                          <span className="text-muted-foreground ml-2">{d.color} · {d.serialImei || d.serial || "sem IMEI"} · {d.location}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            ) : (<>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Modelo *</Label>
@@ -192,6 +294,7 @@ export default function OSForm({ onCreated }: OSFormProps) {
               <div><Label className="text-base font-semibold">Serial</Label><Input value={serial} onChange={(e) => setSerial(e.target.value)} placeholder="Número de série" className="h-11 text-base font-semibold" /></div>
               <div><Label>Bateria (%)</Label><Input type="number" value={batteryHealth} onChange={(e) => setBatteryHealth(e.target.value)} min="0" max="100" /></div>
             </div>
+            </>)}
           </CardContent>
         </Card>
 
@@ -251,8 +354,21 @@ export default function OSForm({ onCreated }: OSFormProps) {
               <div><Label>Custo da Peça (R$)</Label><Input type="number" value={partCost} onChange={(e) => setPartCost(e.target.value)} placeholder="0" /></div>
               <div><Label>Mão de Obra (R$)</Label><Input type="number" value={laborCost} onChange={(e) => setLaborCost(e.target.value)} placeholder="0" /></div>
             </div>
+            <div>
+              <Label>Quem paga o custo</Label>
+              <Select value={costResp} onValueChange={(v) => setCostResp(v as CostResponsibility)}>
+                <SelectTrigger aria-label="Quem paga o custo"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {COST_RESPONSIBILITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Valor Cobrado (R$)</Label><Input type="number" value={chargedAmount} onChange={(e) => setChargedAmount(e.target.value)} placeholder="0" /></div>
+              <div>
+                <Label htmlFor="os-charged">{chargedFieldLabel(costResp)}</Label>
+                <Input id="os-charged" type="number" value={exempt ? "0" : chargedAmount} disabled={exempt} onChange={(e) => setChargedAmount(e.target.value)} placeholder="0" />
+                {exempt && <p className="mt-1 text-xs text-muted-foreground">Coberto pela loja: nada é cobrado do cliente.</p>}
+              </div>
               <div><Label>Impostos/Taxas (R$)</Label><Input type="number" value={taxes} onChange={(e) => setTaxes(e.target.value)} placeholder="0" /></div>
             </div>
             <div className="rounded-lg bg-muted p-3">

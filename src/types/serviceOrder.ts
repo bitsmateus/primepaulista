@@ -1,11 +1,23 @@
 export type OSStatus =
   | "Aguardando Diagnóstico"
+  | "Em Diagnóstico"
+  | "Aguardando Aprovação"
   | "Aguardando Peça"
   | "Em Reparo"
   | "Pronto para Retirada"
   | "Entregue / Finalizado";
 
 export type OSPriority = "Normal" | "Urgente" | "Crítico";
+
+// Origem da OS: aparelho trazido pelo cliente ou aparelho do estoque da loja
+export type OSOrigin = "Cliente" | "Estoque da loja";
+
+// Quem paga o custo do reparo
+export type CostResponsibility = "Cliente" | "Garantia da Loja" | "Cortesia / Loja" | "Dividido / Co-participação";
+
+export type OSEvent = "aguardando_aprovacao" | "pronto_retirada" | "entregue";
+
+export type NotificationStatus = "sent" | "failed" | "pending";
 
 export interface ChecklistEntry {
   capa: boolean;
@@ -40,8 +52,14 @@ export interface ServiceOrder {
   partFromStock: boolean;
   stockAccessoryId?: string;
   // Financials
-  chargedAmount: number;
+  chargedAmount: number; // em "Dividido": parte paga pelo cliente
   taxes: number;
+  // Origem e responsabilidade pelo custo
+  origin: OSOrigin;
+  deviceId?: string;
+  costResponsibility: CostResponsibility;
+  // Eventos de WhatsApp já enviados com sucesso (só leitura; vem do servidor)
+  sentEvents?: OSEvent[];
   // Metadata
   createdAt: Date;
   updatedAt: Date;

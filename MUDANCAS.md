@@ -32,6 +32,24 @@ Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual
 - **Vendas realizadas**: coluna e filtro de **origem** (Venda de balcão / De orçamento) e card **Lucro líquido acumulado** (admin) do período filtrado.
 - **Dashboard**: **comparativo por vendedor** no período (qtd de vendas, faturamento, ticket médio e, para admin, lucro total e lucro por venda).
 
+### Fase 3 — Assistência técnica (Ordens de Serviço)
+- **Origem da OS**: "Aparelho do cliente" (como sempre) ou **"Estoque da loja"**. Na OS de estoque você busca o aparelho por modelo/IMEI/serial (só aparecem os não vendidos e que não estão em outra OS aberta); modelo, cor, IMEI e serial vêm do cadastro do aparelho e o cliente é opcional.
+  - Ao abrir a OS, o aparelho vai automaticamente para **Em Manutenção** e local **Assistência** (a movimentação fica no histórico do aparelho). Ao **entregar/finalizar** ou **excluir** a OS aberta, ele volta para o status e o local em que estava. Se o aparelho foi vendido ou alterado nesse meio tempo, o sistema **não sobrescreve**.
+  - Aparelho vendido ou já em outra OS aberta é recusado com mensagem clara. O custo do reparo **não** é somado ao custo do aparelho (o lucro da assistência já desconta a peça).
+  - Selo "Estoque da loja" no cartão do Kanban, no detalhe, filtro por origem e coluna no CSV.
+- **Quem paga o custo**: Cliente (padrão), **Garantia da Loja**, **Cortesia / Loja** ou **Dividido / Co-participação**.
+  - Garantia e Cortesia: o valor cobrado do cliente fica travado em **R$ 0,00** (o servidor também zera) e o recibo sai como **R$ 0,00 (ISENTO - COBERTO PELA GARANTIA DA LOJA)** ou **(ISENTO - CORTESIA DA LOJA)**.
+  - Dividido: o campo passa a se chamar "Parte paga pelo cliente" e o recibo mostra "Valor pago pelo cliente" + "Custo dividido com a loja".
+  - A receita dos dashboards continua sendo o valor cobrado (sem contar em dobro); o custo das peças entra como antes. Filtro por "Quem paga" no painel.
+- **Novos status**: **Em Diagnóstico** e **Aguardando Aprovação**. Colunas do Kanban: Aguardando Diagnóstico → Em Diagnóstico → Aguardando Aprovação → Aguardando Peça → Em Reparo → Pronto para Retirada → Entregue / Finalizado. Dashboards e filtros já contam os status novos.
+- **Mensagens de WhatsApp editáveis** (nova aba **Mensagens** na Assistência):
+  - O administrador edita o texto de cada aviso (Aguardando Aprovação, Pronto para Retirada, Entregue), liga/desliga cada um, define o nome da loja e a **chave PIX**, com **prévia em tempo real** e lista de variáveis clicáveis: `{cliente} {primeiro_nome} {os} {aparelho} {marca} {modelo} {imei} {valor} {loja} {chave_pix}`. O `{valor}` respeita "quem paga" (ex.: "R$ 0,00 (isento – coberto pela garantia da loja)").
+  - Quando a OS muda para essas etapas, **o servidor** envia o aviso pelo WhatsApp já conectado (Uazapi). Sem telefone na OS, sem número conectado ou WhatsApp desconectado, a mudança de status **não quebra**: o aviso fica registrado como **Pendente** com o motivo; se o provedor recusar, fica como **Falhou**.
+  - **Histórico de avisos**: lista geral (data, OS, cliente, aviso, status, motivo, com filtro) e o histórico de cada OS no detalhe, com botões **Notificar agora** e **Reenviar**. Vendedor e técnico veem o histórico e podem reenviar; só o administrador edita os modelos.
+  - Filtro **Pendentes (N)** no painel: OS em Pronto para Retirada ou Aguardando Aprovação que ainda não tiveram aviso enviado com sucesso (cartão ganha o selo "Aviso pendente").
+- **Base para as próximas fases**: armazenamento genérico de configurações da loja (`/settings/:chave`, só o administrador grava), já usado pelas mensagens.
+- O aviso "pronto para retirada" que antes saía do navegador (só quando o CRM estava aberto e conectado) agora sai pelo servidor, com o texto editável.
+
 ---
 
 ## 19/06/2026 — v1.0.0

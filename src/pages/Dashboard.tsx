@@ -18,6 +18,7 @@ import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeCost } from "@/lib/permissions";
+import { OS_STATUSES } from "@/lib/serviceOrders";
 import { salesGrossProfit } from "@/lib/profit";
 import { sellerComparison } from "@/lib/sellerStats";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -215,8 +216,7 @@ export default function Dashboard() {
     const servRevenue = completedPeriod.reduce((a, o) => a + o.chargedAmount, 0);
     const servProfit = completedPeriod.reduce((a, o) => a + (o.chargedAmount - o.partCost - o.taxes), 0);
 
-    const statuses = ["Aguardando Diagnóstico", "Aguardando Peça", "Em Reparo", "Pronto para Retirada", "Entregue / Finalizado"];
-    const byStatus = statuses.map((st) => ({ name: st.replace("Aguardando ", "Ag. "), qtd: orders.filter((o) => o.status === st).length }));
+    const byStatus = OS_STATUSES.map((st) => ({ name: st.replace("Aguardando ", "Ag. "), qtd: orders.filter((o) => o.status === st).length }));
     const prMap: Record<string, number> = {};
     for (const o of open) prMap[o.priority] = (prMap[o.priority] || 0) + 1;
     const byPriority = Object.entries(prMap).map(([name, value]) => ({ name, value }));

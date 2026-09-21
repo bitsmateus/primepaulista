@@ -37,9 +37,29 @@ Nada foi enviado ao GitHub nem colocado em produção.
 - **Vendas antigas** ficam como origem "Balcão".
 - **Lista de vendedores** no orçamento reaproveita a do PDV (Gabriel, Matheus, Tassio + usuário logado).
 
+### Fase 3 — Assistência técnica
+- **O envio real pelo Uazapi NÃO foi testado** (não há instância real aqui). Testei o caminho completo do servidor contra um servidor HTTP falso local que imita os endpoints `/instance/status` e `/message/text` (enviado, recusa do provedor, desconectado, sem instância, sem telefone). Se o formato real do Uazapi for diferente do que o resto do sistema já usa, o aviso ficará como "Pendente/Falhou" com o motivo na tela, sem quebrar nada. Teste um envio real antes de confiar.
+- **Números de telefone**: se o telefone da OS tiver 10 ou 11 dígitos, o servidor acrescenta o **55** (Brasil) antes de enviar. O envio manual do CRM continua como era.
+- **Situação dos avisos**: "Pendente" = nem tentou enviar (sem telefone, sem número ativo, WhatsApp desconectado); "Falhou" = tentou e o provedor recusou/deu erro. Só "Enviado" tira a OS do filtro Pendentes. Cada mudança de coluna que gera aviso envia uma mensagem; arrastar a OS passando por "Aguardando Aprovação" no caminho para "Pronto" (arrasto passo a passo) dispara também o aviso de aprovação. Se preferir que só o destino final avise, é ajuste pequeno.
+- **Usa sempre a primeira instância de WhatsApp ativa** (a mesma escolha da automação do CRM). Se houver vários números, não dá para escolher qual envia os avisos de OS ainda.
+- **Chave PIX**: a linha do modelo que contém `{chave_pix}` some sozinha se a chave estiver desligada/vazia ou se a OS for isenta (garantia/cortesia/valor zero). No modelo padrão de "Pronto para Retirada" existe a linha "Pagamento via PIX: {chave_pix}".
+- **Filtro Pendentes** ignora eventos desligados e ignora OS de estoque **sem telefone** (não há cliente para avisar). OS de cliente sem telefone continua pendente (é o sinal para corrigir o cadastro). Não conta OS "Entregue" antigas como pendentes.
+- **Aparelho do estoque restaurado**: volta ao status anterior (Disponível ou Reservado; se já estava "Em Manutenção" volta para Disponível) e ao local anterior — mas só se o local ainda for "Assistência" (se alguém mudou o local à mão, mantém o que está). Não sobrescreve se o aparelho foi vendido/alterado.
+- **Reabrir uma OS finalizada** (arrastar de volta) de aparelho de estoque tenta travar o aparelho de novo; se ele foi vendido ou entrou em outra OS, a reabertura é recusada (409). Reabrir também limpa a data de conclusão.
+- **Origem e aparelho não mudam depois** de criada a OS (para não bagunçar o estoque). Para trocar, exclua e abra outra.
+- **OS de estoque sem cliente** fica com o nome "Estoque da loja".
+- **Vendas de aparelho "Em Manutenção"**: o PDV só bloqueia aparelho Vendido; um aparelho que está numa OS ainda pode ser vendido. Se isso ocorrer, a OS finalizada não mexe no aparelho (regra pedida). Se quiser bloquear a venda de aparelho em assistência, é uma linha no servidor.
+- **Excluir aparelho que está numa OS**: a OS continua existindo com os dados copiados (o vínculo é solto), sem erro.
+- **Movimentações de estoque**: envio à assistência registra "saída" e o retorno registra "entrada" no histórico do aparelho (motivo com o número da OS).
+- **Quem pode o quê**: qualquer usuário logado cria/edita/move OS e envia aviso; só admin exclui OS e edita as mensagens/configurações (como antes para excluir).
+- **Configurações genéricas** (`app_settings`): a lista de chaves permitidas fica em `server/src/services/settings.ts` (hoje só `os_messages`). Leitura por qualquer usuário logado; gravação só admin, com validação. A chave PIX fica legível por todos os cargos (aparece nos avisos de qualquer forma).
+- A regra de montar a mensagem existe em **duas cópias** (`src/lib/osMessages.ts` para a prévia e `server/src/services/osMessages.ts` para o envio), porque a API é implantada separada do site. Um teste roda os mesmos casos nas duas e falha se divergirem.
+- **Kanban com 7 colunas** exige rolagem horizontal em telas menores (já era assim com 5). Arrastar para colunas fora da tela usa a rolagem automática do arrasto.
+
 ## Pendências que dependem de você
 _(preenchido ao longo das fases)_
 
 ## Observações de segurança encontradas
-- O **recibo de venda** (e o recibo de OS) monta HTML com nome/CPF/observação sem escapar caracteres especiais. O orçamento novo já escapa. Vale aplicar o mesmo escape nos recibos antigos (não mexi para não alterar o layout aprovado).
+- O **recibo de venda** monta HTML com nome/CPF/observação sem escapar caracteres especiais. O orçamento novo já escapa. Vale aplicar o mesmo escape no recibo de venda (não mexi para não alterar o layout aprovado). **O recibo de OS foi corrigido na Fase 3**: tudo que o usuário digita é escapado (testado com `<img onerror>`).
+- O limite geral da API é 200 requisições por minuto por IP; o Kanban com avisos e histórico faz algumas chamadas a mais, mas é folgado para uso normal.
 - `GET /devices` devolve o **custo** de todos os aparelhos para qualquer usuário logado (vendedor/técnico). A tela esconde, mas a API entrega. Não alterei por não ter sido pedido e para não quebrar telas; vale corrigir depois.

@@ -1,7 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ServiceOrder, OSStatus } from "@/types/serviceOrder";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, OsMutationResult, OsNotifyResult } from "@/lib/api";
+import { OS_EVENT_LABELS } from "@/lib/osMessages";
+
+// Avisa o usuário do que aconteceu com a notificação de WhatsApp (nunca bloqueia a mudança de status)
+export function announceNotification(n: OsNotifyResult | null | undefined) {
+  if (!n) return;
+  const label = OS_EVENT_LABELS[n.event];
+  if (n.status === "sent") toast.success(`Cliente avisado por WhatsApp (${label}).`);
+  else if (n.status === "failed") toast.warning(`Aviso de WhatsApp não enviado (${label}): ${n.error ?? "erro do provedor"}`);
+  else toast.info(`Aviso de WhatsApp pendente (${label}): ${n.error ?? "aguardando envio"}`);
+}
 
 export function useServiceOrders() {
   const qc = useQueryClient();
@@ -14,24 +24,35 @@ export function useServiceOrders() {
     queryFn: api.listServiceOrders,
   });
   const invalidate = () => qc.invalidateQueries({ queryKey: ["serviceOrders"] });
+  // OS de aparelho do estoque mexe no status/local do aparelho; avisos entram no histórico
+  const invalidateRelated = () => {
+    invalidate();
+    qc.invalidateQueries({ queryKey: ["devices"] });
+    qc.invalidateQueries({ queryKey: ["osNotifications"] });
+    qc.invalidateQueries({ queryKey: ["orderNotifications"] });
+  };
 
   const addOrderMut = useMutation({
     mutationFn: (order: Omit<ServiceOrder, "id" | "createdAt" | "updatedAt">) =>
       api.createServiceOrder(order),
-    onSuccess: () => {
-      invalidate();
+    onSuccess: (res: OsMutationResult) => {
+      invalidateRelated();
       qc.invalidateQueries({ queryKey: ["accessories"] }); // peça pode ter baixado
+      announceNotification(res.notification);
     },
   });
   const updateOrderMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ServiceOrder> }) =>
       api.updateServiceOrder(id, data),
-    onSuccess: invalidate,
+    onSuccess: (res: OsMutationResult) => {
+      invalidateRelated();
+      announceNotification(res.notification);
+    },
     onError: osError("Não foi possível atualizar a OS."),
   });
   const deleteOrderMut = useMutation({
     mutationFn: (id: string) => api.deleteServiceOrder(id),
-    onSuccess: invalidate,
+    onSuccess: invalidateRelated,
     onError: osError("Não foi possível excluir a OS."),
   });
 
