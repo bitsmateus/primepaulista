@@ -89,6 +89,30 @@ Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual
   - **Custo, margem e lucro só saem para quem pode ver custo** — em colunas, totais, resumos e nos três formatos de arquivo.
   - Orçamentos: o cargo Financeiro passou a poder **ler** (só ler) os orçamentos, para o relatório funcionar.
 
+### Fase 5A — CRM: funil de 10 etapas, agenda de follow-up, respostas rápidas e respostas automáticas
+- **Funil com 10 etapas** (cada uma com cor): Novo Lead, Primeiro Contato, Atendimento, Cliente Interessado, Orçamento Enviado, Negociação, Aguardando Pagamento, Venda Concluída, Pós-venda e Perdido. Instalações novas já nascem assim.
+  - **Bancos que já tinham etapas não são mexidos**: em **Funil** há o botão **"Restaurar etapas padrão"**, que cria só as que faltam (comparando o nome sem acento/maiúsculas) e **nunca apaga nem renomeia** nada.
+  - Em **Funil** também dá para **renomear, recolorir, reordenar (setas)**, adicionar e **remover a etapa só se estiver vazia** (se tiver leads, o sistema avisa para movê-los antes). Nomes repetidos são recusados.
+  - As métricas por etapa e o selo "Comprou" continuam. A taxa de conversão passou a contar **Venda Concluída** e **Pós-venda** (e "Convertido", do funil antigo).
+  - **Integração com Orçamentos e Vendas**: ao criar ou marcar como **Enviado** um orçamento para um cliente que também é lead (mesmo telefone, ignorando formatação, o 55 e o 9º dígito antigo), o lead vai para **Orçamento Enviado**; ao **vender** para esse cliente (inclusive orçamento convertido), vai para **Venda Concluída**. O lead só **avança** (nunca volta uma etapa) e um lead **Perdido** que volta a pedir orçamento ou comprar é reaberto. Só age se a etapa existir.
+- **Agenda de follow-up** (nova aba **Agenda** no CRM), por grupo (**Atrasados, Hoje, Próximos 7 dias, Depois, Sem data**) ou por **semana** (segunda a domingo, com navegação):
+  - Mostra as **tarefas dos leads** e **sugestões automáticas** de contato com clientes: **aniversariantes da semana**, **clientes com compra há 30 dias ou mais e sem contato**, **orçamentos enviados sem resposta há 3 dias ou mais** e **garantia vencendo nos próximos 15 dias**. Os números (30, 3, 15, e "não sugerir compras com mais de 365 dias") são configuráveis no botão **Sugestões** (administrador e gerente).
+  - Ações rápidas: **concluir** (e reabrir), **reagendar** (hoje, amanhã, em 7 dias ou data escolhida), **abrir o WhatsApp** (link wa.me já com o texto sugerido), **criar tarefa a partir da sugestão** (se o cliente ainda não é lead, o lead é criado no funil) e **"já entrei em contato"** (a sugestão some). Filtro **Todos / Minhas / por responsável**.
+- **Respostas rápidas** (nova aba): modelos de mensagem com categorias (Boas-vindas, Preço, Garantia, Endereço, Pagamento, Troca…), variáveis **{nome} {primeiro_nome} {modelo} {loja} {endereco} {chave_pix}**, botão para inserir variável e **prévia** com um lead de exemplo ou um lead real. Já vêm **6 modelos padrão** (boas-vindas, endereço, formas de pagamento, garantia, avaliação de troca, chave PIX), criados uma única vez e sem sobrescrever nada.
+  - Na conversa do lead, o botão **Respostas rápidas** insere o texto **já com as variáveis resolvidas** (nome e modelo de interesse do lead, dados da loja). A linha que depende de algo que não existe (ex.: sem chave PIX cadastrada) some sozinha.
+  - **Administrador e gerente** criam/editam/excluem; o **vendedor só usa** (e só vê as ativas).
+- **Respostas automáticas por palavra-chave** (nova aba): o cliente escreve no WhatsApp e a **primeira regra ativa (na ordem de prioridade) que casar e estiver dentro do horário** responde sozinha.
+  - Cada regra tem nome, categoria (Preço, Garantia, Endereço, Pagamento, Troca, Orçamento, Pós-venda, Outro), **palavras-chave** (casa a palavra inteira, sem diferenciar acento/maiúsculas; **garant\*** casa garantia/garantido), modo **qualquer palavra / todas as palavras**, texto com variáveis, **quando responder** (sempre, só no horário comercial, só fora dele, ou janela de dias e horas), **período de campanha** (ex.: Black Friday, Natal, feriado), **intervalo mínimo entre respostas ao mesmo cliente** (padrão 60 minutos) e ligar/desligar. Ordem por **setas** (prioridade).
+  - **Horário comercial** editável (padrão segunda a sábado, 09h às 19h, fuso de São Paulo).
+  - Por regra: **total de disparos, último disparo e taxa de resposta enviada**; gráficos de **disparos ao longo do tempo** e **por categoria** e lista dos últimos disparos.
+  - **Simulador**: escreva uma mensagem (e, se quiser, um telefone e um dia/horário) e veja **qual regra responderia, por quê (palavra que casou), o texto final e se o horário permite** — **sem enviar nada**.
+  - "Ação: IA" aparece como **"Em breve: IA (Fase 5B)"**, desabilitada; o motor já devolve a regra e a ação para a IA entrar depois sem mexer no restante.
+  - Administrador e gerente editam (tudo vai para a **Auditoria**); vendedor vê, simula e usa.
+- **Entrada de mensagens do WhatsApp (webhook do Uazapi)**: na aba **Conectar WhatsApp**, cada número mostra a **URL do webhook** (com um segredo aleatório) para colar no painel do Uazapi, com botões **Copiar** e **Gerar novo segredo** (o antigo deixa de valer na hora).
+  - Quando chega uma mensagem: o sistema **cria o lead** (etapa **Novo Lead**, origem WhatsApp) ou reaproveita o que tem o mesmo telefone, **guarda a mensagem** no histórico do lead, avalia as regras e **responde pelo mesmo número**. Mensagens **próprias**, de **grupos** e repetidas são ignoradas; o webhook **nunca** devolve erro ao provedor por falha interna, mesmo sem WhatsApp conectado (o motivo fica no disparo).
+  - No cartão do lead aparece o selo **"N nova(s)"** enquanto houver mensagem recebida não vista; abrir a conversa ou o histórico marca como lida. A conversa mostra as mensagens recebidas e as respostas. O aviso da Fase 4A ganhou **"mensagens novas no WhatsApp"**.
+  - **O Uazapi de verdade não foi testado** (os testes usaram um servidor falso): o formato da mensagem recebida é lido de forma tolerante, mas é uma suposição a confirmar com uma mensagem real.
+
 ---
 
 ## 19/06/2026 — v1.0.0

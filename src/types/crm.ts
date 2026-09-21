@@ -25,6 +25,7 @@ export interface LeadTask {
   title: string;
   dueDate: Date | null;
   done: boolean;
+  sourceKey?: string; // sugestão da Agenda que originou a tarefa
   createdAt: Date;
 }
 
@@ -37,6 +38,8 @@ export interface MessageLog {
   message: string;
   sentAt: Date;
   status: "sent" | "failed" | "pending";
+  direction?: "in" | "out"; // "in" = mensagem RECEBIDA (webhook do WhatsApp); ausente = enviada
+  readAt?: Date | null; // recebida ainda não vista = null
 }
 
 export interface UazapiConfig {

@@ -18,6 +18,9 @@ export function useCRM() {
   const crmOn = usesCRMData && can(user?.role, "useCRM");
   const leadsOn = usesCRMData && (can(user?.role, "useCRM") || can(user?.role, "editOS"));
 
+  // No CRM, leads e mensagens recebidas (webhook do WhatsApp) são atualizados sozinhos a cada 30 s
+  const livePoll = /^\/crm(\/|$)/.test(pathname) ? 30_000 : false;
+
   const crmError = (fallback: string) => (err: unknown) =>
     toast.error(err instanceof ApiError ? err.message : fallback);
 
@@ -26,6 +29,7 @@ export function useCRM() {
     queryKey: ["leads"],
     queryFn: api.listLeads,
     enabled: leadsOn,
+    refetchInterval: livePoll,
   });
   const { data: funnelColumns = [], isLoading: columnsLoading } = useQuery({
     queryKey: ["funnelColumns"],
@@ -36,6 +40,7 @@ export function useCRM() {
     queryKey: ["messageLogs"],
     queryFn: api.listMessageLogs,
     enabled: crmOn,
+    refetchInterval: livePoll,
   });
   const { data: leadTasks = [] } = useQuery({
     queryKey: ["leadTasks"],
@@ -87,6 +92,26 @@ export function useCRM() {
     mutationFn: (id: string) => api.deleteFunnelColumn(id),
     onSuccess: invalidateColumns,
     onError: crmError("Não foi possível remover a coluna."),
+  });
+
+  const reorderColumnsMut = useMutation({
+    mutationFn: (ids: string[]) => api.reorderFunnelColumns(ids),
+    onSuccess: invalidateColumns,
+    onError: crmError("Não foi possível reordenar as etapas."),
+  });
+  const restoreDefaultsMut = useMutation({
+    mutationFn: () => api.restoreFunnelDefaults(),
+    onSuccess: invalidateColumns,
+    onError: crmError("Não foi possível restaurar as etapas."),
+  });
+  const markReadMut = useMutation({
+    mutationFn: (leadId: string) => api.markLeadMessagesRead(leadId),
+    onSuccess: (n) => {
+      if (n > 0) {
+        qc.invalidateQueries({ queryKey: ["messageLogs"] });
+        qc.invalidateQueries({ queryKey: ["notificationsSummary"] });
+      }
+    },
   });
 
   const addFunnelColumn = useCallback(
@@ -296,6 +321,10 @@ export function useCRM() {
     addFunnelColumn,
     removeFunnelColumn,
     renameFunnelColumn,
+    updateFunnelColumn: (id: string, patch: { name?: string; color?: string }) => updateColumnMut.mutateAsync({ id, patch }),
+    reorderFunnelColumns: (ids: string[]) => reorderColumnsMut.mutateAsync(ids),
+    restoreFunnelDefaults: () => restoreDefaultsMut.mutateAsync(),
+    markLeadMessagesRead: (leadId: string) => markReadMut.mutate(leadId),
     createInstance,
     updateInstance,
     deleteInstance,

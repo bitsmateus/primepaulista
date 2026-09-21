@@ -8,6 +8,7 @@ import type { Role } from "@/lib/permissions";
 import type { AuditStatus, ReconciliationFilters, ReconciliationRow, StatusSummary } from "@/lib/reconciliation";
 import { cleanFilters, filtersToQuery } from "@/lib/reconciliation";
 import type { PlanningTask } from "@/lib/planningView";
+import type { KeywordRule, RuleAction } from "@/lib/keywordRules";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
 const TOKEN_KEY = "pp_token";
@@ -632,6 +633,10 @@ export const api = {
     }).then((d) => d.funnelColumn),
   deleteFunnelColumn: (id: string) =>
     request<{ ok: true }>(`/funnel-columns/${id}`, { method: "DELETE" }),
+  restoreFunnelDefaults: () =>
+    request<{ created: string[]; funnelColumns: FunnelColumn[] }>("/funnel-columns/restore-defaults", { method: "POST", body: JSON.stringify({}) }),
+  reorderFunnelColumns: (ids: string[]) =>
+    request<{ funnelColumns: FunnelColumn[] }>("/funnel-columns/reorder", { method: "POST", body: JSON.stringify({ ids }) }).then((d) => d.funnelColumns),
 
   // ===== CRM: leads =====
   listLeads: () =>
@@ -654,7 +659,18 @@ export const api = {
     request<{ tasks: LeadTaskRow[] }>("/lead-tasks").then((d) => d.tasks.map(mapLeadTask)),
   createLeadTask: (input: { leadId: string; title: string; dueDate?: string }) =>
     request<{ task: LeadTaskRow }>("/lead-tasks", { method: "POST", body: JSON.stringify(input) }).then((d) => mapLeadTask(d.task)),
-  updateLeadTask: (id: string, patch: { done?: boolean; title?: string }) =>
+  // Tarefa a partir de um contato (sugestão da Agenda): o servidor acha o lead pelo telefone ou cria um
+  createTaskFromContact: (input: {
+    contact: { name: string; phone: string; origin?: string; stage?: string };
+    title: string;
+    dueDate?: string;
+    sourceKey?: string;
+    done?: boolean;
+  }) =>
+    request<{ task: LeadTaskRow; leadId: string; leadCreated: boolean }>("/lead-tasks", { method: "POST", body: JSON.stringify(input) }).then((d) => ({
+      task: mapLeadTask(d.task), leadId: d.leadId, leadCreated: d.leadCreated,
+    })),
+  updateLeadTask: (id: string, patch: { done?: boolean; title?: string; dueDate?: string | null }) =>
     request<{ task: LeadTaskRow }>(`/lead-tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => mapLeadTask(d.task)),
   deleteLeadTask: (id: string) =>
     request<{ ok: true }>(`/lead-tasks/${id}`, { method: "DELETE" }),
@@ -664,6 +680,8 @@ export const api = {
     request<{ messageLogs: MessageLogRow[] }>("/message-logs").then((d) =>
       d.messageLogs.map(mapMessageLog)
     ),
+  markLeadMessagesRead: (leadId: string) =>
+    request<{ marked: number }>(`/leads/${leadId}/messages/read`, { method: "POST", body: JSON.stringify({}) }).then((d) => d.marked),
   createMessageLog: (input: Omit<MessageLog, "id" | "sentAt">) =>
     request<{ messageLog: MessageLogRow }>("/message-logs", {
       method: "POST",
@@ -683,6 +701,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }).then((d) => d.instance),
+  regenerateWebhookSecret: (id: string) =>
+    request<{ instance: WhatsappInstance }>(`/whatsapp/instances/${id}/webhook-secret`, { method: "POST", body: JSON.stringify({}) }).then((d) => d.instance),
   deleteWhatsappInstance: (id: string) =>
     request<{ ok: true }>(`/whatsapp/instances/${id}`, { method: "DELETE" }),
   whatsappStatus: (id: string) =>
@@ -708,6 +728,29 @@ export const api = {
     fd.append("file", file);
     return request<{ url: string }>("/whatsapp/campaign-image", { method: "POST", body: fd }).then((d) => d.url);
   },
+
+  // ===== CRM: respostas rápidas =====
+  listQuickReplies: () => request<{ quickReplies: QuickReply[] }>("/quick-replies").then((d) => d.quickReplies),
+  createQuickReply: (input: QuickReplyInput) =>
+    request<{ quickReply: QuickReply }>("/quick-replies", { method: "POST", body: JSON.stringify(input) }).then((d) => d.quickReply),
+  updateQuickReply: (id: string, patch: Partial<QuickReplyInput>) =>
+    request<{ quickReply: QuickReply }>(`/quick-replies/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.quickReply),
+  deleteQuickReply: (id: string) => request<{ ok: true }>(`/quick-replies/${id}`, { method: "DELETE" }),
+
+  // ===== CRM: respostas automáticas por palavra-chave =====
+  listKeywordRules: () => request<{ rules: KeywordRuleView[] }>("/keyword-rules").then((d) => d.rules),
+  createKeywordRule: (input: KeywordRuleInput) =>
+    request<{ rule: KeywordRule }>("/keyword-rules", { method: "POST", body: JSON.stringify(input) }).then((d) => d.rule),
+  updateKeywordRule: (id: string, patch: Partial<KeywordRuleInput>) =>
+    request<{ rule: KeywordRule }>(`/keyword-rules/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.rule),
+  deleteKeywordRule: (id: string) => request<{ ok: true }>(`/keyword-rules/${id}`, { method: "DELETE" }),
+  reorderKeywordRules: (ids: string[]) =>
+    request<{ ok: true }>("/keyword-rules/reorder", { method: "POST", body: JSON.stringify({ ids }) }),
+  simulateKeywordRule: (input: { text: string; phone?: string; at?: string }) =>
+    request<{ result: KeywordSimulation }>("/keyword-rules/simulate", { method: "POST", body: JSON.stringify(input) }).then((d) => d.result),
+  keywordRuleStats: (days = 30) => request<KeywordRuleStats>(`/keyword-rules/stats?days=${days}`),
+  keywordRuleHits: (limit = 30) =>
+    request<{ hits: KeywordHit[] }>(`/keyword-rules/hits?limit=${limit}`).then((d) => d.hits),
 
   // ===== CRM automático =====
   listAutomations: () =>
@@ -877,7 +920,56 @@ function mapReceivable(r: ReceivableRow): Receivable {
   };
 }
 
+export interface QuickReply {
+  id: string;
+  title: string;
+  body: string;
+  category: string;
+  active: boolean;
+  createdAt: string;
+}
+export type QuickReplyInput = { title: string; body: string; category: string; active: boolean };
+
+export interface KeywordRuleView extends KeywordRule {
+  createdAt: string;
+  stats: { total: number; replied: number; lastAt: string | null; rate: number };
+}
+export type KeywordRuleInput = Omit<KeywordRule, "id" | "priority"> & { priority?: number };
+export interface KeywordSimulation {
+  status: "fire" | "cooldown" | "outside_schedule" | "no_match" | "no_rules";
+  wouldSend: boolean;
+  action: RuleAction | null;
+  rule: { id: string; name: string; category: string; priority: number; action: RuleAction; cooldownMinutes: number } | null;
+  matchedKeywords: string[];
+  scheduleOk: boolean | null;
+  scheduleReason: string | null;
+  cooldown: { active: boolean; until: string | null };
+  replyText: string | null;
+  businessOpen: boolean;
+  leadFound: boolean;
+  considered: { id: string; name: string; priority: number; matchedKeywords: string[]; scheduleOk: boolean; scheduleReason: string }[];
+  message: string;
+}
+export interface KeywordRuleStats {
+  days: number;
+  daily: { date: string; total: number; replied: number }[];
+  byCategory: { category: string; total: number; replied: number }[];
+}
+export interface KeywordHit {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  phone: string;
+  leadId: string | null;
+  inboundText: string;
+  matched: string;
+  replied: boolean;
+  error: string | null;
+  createdAt: string;
+}
+
 export interface WhatsappInstance {
+  webhookPath?: string | null; // caminho do webhook de entrada (só para o dono do número e quem gerencia WhatsApp)
   id: string;
   name: string;
   instanceUrl: string;
@@ -906,12 +998,12 @@ export interface AutomationRunSummary {
 
 // ----- Mapeamento CRM (datas como string → Date) -----
 type LeadRow = Omit<Lead, "createdAt"> & { createdAt: string };
-type MessageLogRow = Omit<MessageLog, "sentAt"> & { sentAt: string };
+type MessageLogRow = Omit<MessageLog, "sentAt" | "readAt"> & { sentAt: string; readAt?: string | null };
 
-type LeadTaskRow = { id: string; leadId: string; title: string; dueDate: string | null; done: boolean; createdAt: string };
+type LeadTaskRow = { id: string; leadId: string; title: string; dueDate: string | null; done: boolean; sourceKey?: string | null; createdAt: string };
 function mapLeadTask(r: LeadTaskRow): LeadTask {
   return {
-    id: r.id, leadId: r.leadId, title: r.title, done: r.done,
+    id: r.id, leadId: r.leadId, title: r.title, done: r.done, sourceKey: r.sourceKey ?? undefined,
     dueDate: r.dueDate ? new Date(r.dueDate) : null,
     createdAt: new Date(r.createdAt),
   };
@@ -938,7 +1030,14 @@ function mapMessageLog(r: MessageLogRow): MessageLog {
     templateType: r.templateType ?? "",
     message: r.message ?? "",
     sentAt: new Date(r.sentAt),
+    direction: r.direction === "in" ? "in" : "out",
+    readAt: r.readAt ? new Date(r.readAt) : null,
   };
+}
+
+// URL completa do webhook para colar no painel do Uazapi
+export function webhookUrl(path: string): string {
+  return `${API_URL.replace(/\/$/, "")}${path}`;
 }
 
 export interface OrderPhoto {
@@ -1169,6 +1268,7 @@ export interface NotificationCounts {
   lowStock: number;
   staleDevices: number;
   taskReminders: number; // lembretes de tarefa entregues NESTA consulta (uma vez só)
+  newMessages: number; // mensagens de WhatsApp recebidas que ninguém abriu ainda
 }
 
 export interface TaskReminderNotice {

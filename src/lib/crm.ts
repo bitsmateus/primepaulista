@@ -77,8 +77,11 @@ export interface FunnelSummary {
   conversionRate: number; // 0..1
 }
 
+// Etapas que contam como convertido: "Convertido" (funil antigo), "Venda Concluída" e "Pós-venda" (funil novo)
+export const CONVERTED_STAGE_RE = /convert|venda conclu|p[oó]s.?venda/i;
+
 // Resumo do funil: total, contagem por coluna e taxa de conversão.
-// "Convertido" = leads em colunas cujo nome casa /convert/i.
+// "Convertido" = leads em colunas cujo nome casa CONVERTED_STAGE_RE.
 export function buildFunnelSummary(leads: Lead[], columns: FunnelColumn[]): FunnelSummary {
   const byColumn = columns.map((c) => ({
     name: c.name,
@@ -86,7 +89,7 @@ export function buildFunnelSummary(leads: Lead[], columns: FunnelColumn[]): Funn
     count: leads.filter((l) => l.status === c.name).length,
   }));
   const convertedNames = new Set(
-    columns.filter((c) => /convert/i.test(c.name)).map((c) => c.name)
+    columns.filter((c) => CONVERTED_STAGE_RE.test(c.name)).map((c) => c.name)
   );
   const converted = leads.filter((l) => convertedNames.has(l.status)).length;
   const total = leads.length;

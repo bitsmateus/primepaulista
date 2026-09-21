@@ -3,7 +3,7 @@ import type { NotificationCounts, TaskReminderNotice } from "@/lib/api";
 // Regras puras das notificações do navegador (o hook só cuida de buscar e exibir).
 
 export type CountKey = Exclude<keyof NotificationCounts, "taskReminders">; // lembretes de tarefa chegam a parte
-export const COUNT_KEYS: CountKey[] = ["osReady", "tasksDue", "quotesToday", "lowStock", "staleDevices"];
+export const COUNT_KEYS: CountKey[] = ["osReady", "tasksDue", "quotesToday", "lowStock", "staleDevices", "newMessages"];
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -13,6 +13,7 @@ export const NOTIFICATION_TEXT: Record<CountKey, (n: number) => string> = {
   quotesToday: (n) => `${plural(n, "orçamento vence", "orçamentos vencem")} hoje`,
   lowStock: (n) => `${plural(n, "acessório", "acessórios")} com estoque baixo`,
   staleDevices: (n) => `${plural(n, "aparelho parado", "aparelhos parados")} há mais de 30 dias`,
+  newMessages: (n) => `${plural(n, "mensagem nova", "mensagens novas")} no WhatsApp (CRM)`,
 };
 
 // Lembretes de tarefa já vencidos (não fazem parte dos contadores: chegam uma vez só)
