@@ -60,6 +60,15 @@ describe("matriz de permissões (proposta da Fase 4A)", () => {
     for (const c of ["viewBI", "manageFinance", "viewCost", "viewSales", "viewStock", "viewReports"] as const) expect(front.can("financeiro", c)).toBe(true);
     for (const c of ["sell", "useCRM", "editStock", "editSales", "returnSales", "editOS"] as const) expect(front.can("financeiro", c)).toBe(false);
   });
+  it("Fase 4B: conferência financeira só para admin, gerente e financeiro", () => {
+    for (const r of ["admin", "gerente", "financeiro"] as const) expect(front.can(r, "reconcile"), r).toBe(true);
+    for (const r of ["vendedor", "tecnico", "estoquista"] as const) expect(front.can(r, "reconcile"), r).toBe(false);
+  });
+  it("Fase 4B: planejamento (criar/atribuir) só para admin e gerente; relatórios para quem já tinha", () => {
+    for (const r of front.ROLES) expect(front.can(r, "managePlanning"), r).toBe(r === "admin" || r === "gerente");
+    for (const r of ["admin", "gerente", "financeiro", "estoquista"] as const) expect(front.can(r, "viewReports"), r).toBe(true);
+    for (const r of ["vendedor", "tecnico"] as const) expect(front.can(r, "viewReports"), r).toBe(false);
+  });
   it("todo cargo tem ao menos uma capacidade e toda capacidade pertence a algum cargo", () => {
     for (const r of front.ROLES) expect(caps(r).size).toBeGreaterThan(0);
     for (const c of front.CAPABILITIES) expect(front.ROLES.some((r) => front.can(r, c))).toBe(true);
@@ -81,6 +90,10 @@ describe("menu e rotas derivados da matriz", () => {
     expect(front.canAccessRoute("estoquista", "/bi")).toBe(false);
     expect(front.canAccessRoute("estoquista", "/pdv")).toBe(false);
     expect(front.canAccessRoute("financeiro", "/pdv")).toBe(false);
+  });
+  it("Fase 4B: /planejamento para todos; /relatorios só quem tem viewReports", () => {
+    for (const r of front.ROLES) expect(front.canAccessRoute(r, "/planejamento"), r).toBe(true);
+    for (const r of front.ROLES) expect(front.canAccessRoute(r, "/relatorios"), r).toBe(front.can(r, "viewReports"));
   });
   it("rotas antigas: mesmo acesso para admin, vendedor e técnico", () => {
     const old: Record<string, string[]> = {

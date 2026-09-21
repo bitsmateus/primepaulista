@@ -8,11 +8,20 @@ import { authenticate, requireCapability, type JwtUser } from "../plugins/auth";
 import { ROLES, ROLE_LABELS, can } from "../lib/permissions";
 import { logAudit } from "../services/audit";
 
+// WhatsApp do colaborador (lembretes do planejamento): vazio limpa; senão 10 a 13 dígitos
+const phoneSchema = z
+  .string()
+  .trim()
+  .max(30)
+  .refine((v) => v === "" || /^\d{10,13}$/.test(v.replace(/\D/g, "")), "WhatsApp inválido (DDD + número)")
+  .optional();
+
 const createUserSchema = z.object({
   name: z.string().min(1).max(200),
   email: z.string().email().max(200),
   password: z.string().min(6, "A senha deve ter ao menos 6 caracteres").max(200),
   role: z.enum(ROLES),
+  phone: phoneSchema,
 });
 
 const updateUserSchema = z.object({
@@ -20,6 +29,7 @@ const updateUserSchema = z.object({
   role: z.enum(ROLES).optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).max(200).optional(),
+  phone: phoneSchema,
 });
 
 // Todas as rotas exigem login + capacidade manageUsers (só admin)
@@ -36,6 +46,7 @@ export async function userRoutes(app: FastifyInstance) {
           email: profiles.email,
           role: profiles.role,
           active: profiles.active,
+          phone: profiles.phone,
           createdAt: profiles.createdAt,
         })
         .from(profiles);
@@ -72,6 +83,7 @@ export async function userRoutes(app: FastifyInstance) {
           email: email.toLowerCase(),
           passwordHash: await hashPassword(password),
           role,
+          phone: parsed.data.phone ? parsed.data.phone.replace(/\D/g, "") : null,
         })
         .returning({
           id: profiles.id,
@@ -117,6 +129,7 @@ export async function userRoutes(app: FastifyInstance) {
       if (parsed.data.name !== undefined) values.name = parsed.data.name;
       if (parsed.data.role !== undefined) values.role = parsed.data.role;
       if (parsed.data.active !== undefined) values.active = parsed.data.active;
+      if (parsed.data.phone !== undefined) values.phone = parsed.data.phone ? parsed.data.phone.replace(/\D/g, "") : null;
       if (parsed.data.password !== undefined) {
         values.passwordHash = await hashPassword(parsed.data.password);
       }
@@ -141,6 +154,7 @@ export async function userRoutes(app: FastifyInstance) {
           email: profiles.email,
           role: profiles.role,
           active: profiles.active,
+          phone: profiles.phone,
         });
       if (!updated) return reply.code(404).send({ error: "Usuário não encontrado" });
 
@@ -168,6 +182,14 @@ export async function userRoutes(app: FastifyInstance) {
           entity: "user",
           entityId: id,
           description: `Redefiniu a senha de ${updated.name}`,
+        });
+      }
+      if (parsed.data.phone !== undefined) {
+        await logAudit(req, {
+          action: "user.phone_change",
+          entity: "user",
+          entityId: id,
+          description: `Alterou o WhatsApp de ${updated.name}`,
         });
       }
       if (parsed.data.name !== undefined && parsed.data.name !== before.name) {

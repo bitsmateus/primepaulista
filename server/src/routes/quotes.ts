@@ -52,7 +52,12 @@ function quoteError(message: string, statusCode: number) {
 // Vendedor e admin usam orçamentos; técnico não.
 export async function quoteRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireCapability("sell"));
+  // Quem vende (sell) usa tudo; quem só vê vendas (financeiro) pode LER os orçamentos (relatórios).
+  app.addHook("preHandler", async (req, reply) => {
+    const readOnly = req.method === "GET";
+    const guard = readOnly ? requireCapability("sell", "viewSales") : requireCapability("sell");
+    return guard(req, reply);
+  });
 
   async function loadWithItems(ids: string[]) {
     if (ids.length === 0) return {} as Record<string, (typeof quoteItems.$inferSelect)[]>;

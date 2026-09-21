@@ -190,6 +190,13 @@
       "when": 1790002016261,
       "tag": "0026_fase4a_fornecedores_cargos",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790017296542,
+      "tag": "0027_fase4b_conferencia_planejamento",
+      "breakpoints": true
     }
   ]
 }

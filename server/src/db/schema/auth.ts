@@ -9,6 +9,7 @@ export const profiles = pgTable("profiles", {
   name: text("name").notNull(),
   role: roleEnum("role").notNull().default("vendedor"),
   active: boolean("active").notNull().default(true),
+  phone: text("phone"), // WhatsApp do colaborador (lembretes do planejamento)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

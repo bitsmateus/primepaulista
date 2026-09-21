@@ -15,7 +15,8 @@ import {
   quotes,
   paymentMethodEnum,
 } from "../db/schema/index";
-import { authenticate, requireCapability, type JwtUser } from "../plugins/auth";
+import { authenticate, currentRole, requireCapability, type JwtUser } from "../plugins/auth";
+import { can } from "../lib/permissions";
 import { brl, logAudit } from "../services/audit";
 
 // Métodos de pagamento aceitos = valores do enum do banco (uma única fonte)
@@ -79,7 +80,8 @@ export async function saleRoutes(app: FastifyInstance) {
   });
 
   // GET /sales/full — vendas com itens, pagamentos, troca e cliente aninhados (para BI)
-  app.get("/sales/full", { preHandler: requireCapability("viewSalesData") }, async () => {
+  app.get("/sales/full", { preHandler: requireCapability("viewSalesData") }, async (req) => {
+    const seesAuditNote = can(currentRole(req), "reconcile");
     const saleRows = await db.select().from(sales).orderBy(desc(sales.createdAt));
     if (saleRows.length === 0) return { sales: [] };
 
@@ -109,7 +111,10 @@ export async function saleRoutes(app: FastifyInstance) {
       ...s,
       customer: s.customerId ? custById[s.customerId] ?? null : null,
       items: itemsBySale[s.id] ?? [],
-      payments: paysBySale[s.id] ?? [],
+      // observação/quem conferiu só para quem faz a conferência (o status todos veem)
+      payments: (paysBySale[s.id] ?? []).map((p) =>
+        seesAuditNote ? p : { ...p, auditNote: "", auditedBy: null, auditedByName: "" }
+      ),
       tradeIn: tradeBySale[s.id]?.[0] ?? null,
     }));
 
@@ -361,15 +366,26 @@ export async function saleRoutes(app: FastifyInstance) {
           await tx.update(sales).set(update).where(eq(sales.id, id));
         }
 
-        // Forma de pagamento: substitui os pagamentos por um único do total
+        // Forma de pagamento: substitui os pagamentos por um único do total.
+        // Se já era exatamente esse pagamento, mantém (preserva a conferência financeira);
+        // se mudou, o novo pagamento volta a "Aguardando" conferência.
         if (p.data.paymentMethod) {
-          await tx.delete(payments).where(eq(payments.saleId, id));
-          await tx.insert(payments).values({
-            saleId: id,
-            method: p.data.paymentMethod,
-            amount: String(total),
-            installments: p.data.installments ?? 1,
-          });
+          const existing = await tx.select().from(payments).where(eq(payments.saleId, id));
+          const newInst = p.data.installments ?? 1;
+          const same =
+            existing.length === 1 &&
+            existing[0].method === p.data.paymentMethod &&
+            Number(existing[0].amount) === total &&
+            (existing[0].installments ?? 1) === newInst;
+          if (!same) {
+            await tx.delete(payments).where(eq(payments.saleId, id));
+            await tx.insert(payments).values({
+              saleId: id,
+              method: p.data.paymentMethod,
+              amount: String(total),
+              installments: newInst,
+            });
+          }
         }
       });
       if (audit) {

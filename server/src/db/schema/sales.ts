@@ -60,8 +60,15 @@ export const payments = pgTable("payments", {
   method: paymentMethodEnum("method").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
   installments: integer("installments").default(1),
+  // Conferência financeira (conciliação): 'Aguardando' | 'Conferido' | 'Divergente'
+  auditStatus: text("audit_status").notNull().default("Aguardando"),
+  auditNote: text("audit_note").notNull().default(""), // NSU, autenticação bancária, cópia do comprovante
+  auditedBy: uuid("audited_by").references(() => profiles.id, { onDelete: "set null" }),
+  auditedByName: text("audited_by_name").notNull().default(""),
+  auditedAt: timestamp("audited_at", { withTimezone: true }),
 }, (t) => ({
   saleIdx: index("payments_sale_id_idx").on(t.saleId),
+  auditStatusIdx: index("payments_audit_status_idx").on(t.auditStatus),
 }));
 
 export const tradeIns = pgTable("trade_ins", {

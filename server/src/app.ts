@@ -26,6 +26,8 @@ import { auditLogRoutes } from "./routes/auditLogs";
 import { customVarRoutes } from "./routes/customVars";
 import { backupRoutes } from "./routes/backup";
 import { notificationRoutes } from "./routes/notifications";
+import { reconciliationRoutes } from "./routes/reconciliation";
+import { planningRoutes } from "./routes/planning";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -79,6 +81,8 @@ export function buildApp() {
   app.register(customVarRoutes);
   app.register(backupRoutes);
   app.register(notificationRoutes);
+  app.register(reconciliationRoutes);
+  app.register(planningRoutes);
 
   return app;
 }

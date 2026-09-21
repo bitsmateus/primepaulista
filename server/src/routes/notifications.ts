@@ -4,6 +4,7 @@ import { db } from "../db/index";
 import { authenticate, currentRole, requireCapability, type JwtUser } from "../plugins/auth";
 import { can } from "../lib/permissions";
 import { getSetting } from "../services/settings";
+import { dayLabel } from "../services/planning";
 
 export interface NotificationCounts {
   osReady: number; // OS "Pronto para Retirada" sem aviso de WhatsApp enviado
@@ -11,6 +12,13 @@ export interface NotificationCounts {
   quotesToday: number; // orçamentos que vencem hoje
   lowStock: number; // acessórios com estoque baixo ou zerado
   staleDevices: number; // aparelhos disponíveis parados há mais de 30 dias
+  taskReminders: number; // lembretes de tarefa do planejamento que VENCERAM e foram entregues agora
+}
+
+export interface TaskReminder {
+  id: string;
+  title: string;
+  dayLabel: string;
 }
 
 const TZ = "America/Sao_Paulo";
@@ -70,6 +78,19 @@ export async function notificationRoutes(app: FastifyInstance) {
       counts.staleDevices = Number((stale.rows[0] as { n: number }).n);
     }
 
-    return { counts };
+    // Lembretes do planejamento: entrega UMA vez (marca reminded_at ao entregar). Vale para qualquer cargo.
+    const due = await db.execute(sql`
+      update weekly_tasks set reminded_at = now()
+      where assignee_id = ${me.sub} and done = false and remind_at is not null
+        and remind_at <= now() and reminded_at is null
+      returning id, title, week_start::text as week_start, weekday`);
+    const reminders: TaskReminder[] = (due.rows as { id: string; title: string; week_start: string; weekday: number }[]).map((r) => ({
+      id: r.id,
+      title: r.title,
+      dayLabel: dayLabel(r.week_start, Number(r.weekday)),
+    }));
+    counts.taskReminders = reminders.length;
+
+    return { counts, reminders };
   });
 }

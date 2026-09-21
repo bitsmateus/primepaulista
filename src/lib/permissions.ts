@@ -44,7 +44,8 @@ export const CAPABILITIES = [
   "editSettings", // loja, logo, termos, mensagens, segurança
   "manageSecrets", // variáveis customizadas e backup
   "viewReports", // relatórios (estoque etc.)
-  "managePlanning", // planejamento (reservado para as próximas fases)
+  "managePlanning", // planejamento semanal: criar, atribuir, editar e excluir tarefas
+  "reconcile", // conferência financeira dos pagamentos (conciliação)
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -76,7 +77,8 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   editSettings: "Configurações da loja (identidade, termos, mensagens)",
   manageSecrets: "Variáveis customizadas e backup",
   viewReports: "Relatórios",
-  managePlanning: "Planejamento",
+  managePlanning: "Planejar a semana (criar e atribuir tarefas)",
+  reconcile: "Conferência financeira dos pagamentos",
 };
 
 const ALL: readonly Capability[] = CAPABILITIES;
@@ -92,6 +94,7 @@ export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
   ],
   financeiro: [
     "viewCost", "viewBI", "manageFinance", "viewSales", "viewSalesData", "viewStock", "viewSuppliers", "viewOS", "viewReports",
+    "reconcile",
   ],
 };
 
@@ -121,6 +124,8 @@ export const ROUTE_CAPABILITY: Record<string, Capability | null> = {
   "/assistencia": "viewOS",
   "/garantias": null,
   "/bi": "viewBI",
+  "/planejamento": null,
+  "/relatorios": "viewReports",
   "/auditoria": "viewAudit",
   "/configuracoes": "editSettings",
   "/usuarios": "manageUsers",

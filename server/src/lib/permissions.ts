@@ -43,7 +43,8 @@ export const CAPABILITIES = [
   "editSettings", // loja, logo, termos, mensagens, segurança
   "manageSecrets", // variáveis customizadas e backup
   "viewReports", // relatórios (estoque etc.)
-  "managePlanning", // planejamento (reservado para as próximas fases)
+  "managePlanning", // planejamento semanal: criar, atribuir, editar e excluir tarefas
+  "reconcile", // conferência financeira dos pagamentos (conciliação)
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -60,6 +61,7 @@ export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
   ],
   financeiro: [
     "viewCost", "viewBI", "manageFinance", "viewSales", "viewSalesData", "viewStock", "viewSuppliers", "viewOS", "viewReports",
+    "reconcile",
   ],
 };
 
