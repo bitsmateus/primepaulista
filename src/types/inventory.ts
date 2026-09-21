@@ -6,6 +6,8 @@ export type DeviceCategory = "iPhone" | "iPad" | "Apple Watch" | "Mac" | "AirPod
 export interface Device {
   id: string;
   category: string;
+  brand: string; // Apple, Samsung, Xiaomi…
+  location: string; // Estoque, Vitrine 1, Vitrine 2, Assistência…
   model: string;
   capacity: string;
   color: string;
@@ -21,6 +23,7 @@ export interface Device {
   status: DeviceStatus;
   entryDate?: Date; // data de entrada no estoque (compra no fornecedor)
   notes?: string; // observações (peça trocada, avarias, etc.)
+  checkedAt?: Date; // última conferência física (balanço de estoque)
   createdAt: Date;
 }
 

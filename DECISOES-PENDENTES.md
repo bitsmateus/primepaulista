@@ -13,7 +13,19 @@ Nada foi enviado ao GitHub nem colocado em produção.
 - Acessórios já tinham os botões −1/+1. O que faltava era só o +5 e o leitor de código.
 
 ## Decisões que tomei sozinho (revise se discordar)
-_(preenchido ao longo das fases)_
+
+### Fase 1 — Estoque
+- **Marca vale para qualquer aparelho** (padrão "Apple"). A categoria continua livre; os modelos sugeridos continuam sendo o catálogo Apple.
+- **Localização é texto livre** com sugestões (Estoque, Vitrine 1, Vitrine 2, Assistência + as já usadas). Não criei uma tabela de locais.
+- **Excluir aparelho**: agora é bloqueado se o aparelho está Vendido **ou já apareceu em alguma venda** (mesmo que a venda tenha sido devolvida). Isso protege o histórico, mas significa que um aparelho devolvido nunca poderá ser excluído, só ficar em estoque. Se preferir liberar o excluir depois de devolução, é uma linha no servidor.
+- **Importação**: linha sem nenhum IMEI/serial recebe um serial interno automático (INT-ano-número) em vez de ser recusada. Duplicidade de IMEI/serial só é checada na importação; o cadastro manual continua aceitando.
+- **Importar com "substituir estoque"** apaga só aparelhos não vendidos e sem histórico de venda, e exige digitar APAGAR.
+- **Excel**: suporto só `.xlsx` (o `.xls` antigo não). A tela avisa para salvar como .xlsx ou CSV.
+- **"Zerar preço de todos"**: remove o preço de venda (fica "—"). **Cuidado:** no PDV, aparelho sem preço de venda é oferecido pelo **preço de custo**. Deixei um aviso na confirmação. Se quiser, posso mudar o PDV para bloquear a venda de aparelho sem preço.
+- **Balanço** usa um carimbo "conferido em" por aparelho (não uma tabela de sessões). "Novo balanço" limpa todos os carimbos.
+- **Ordenação "modelos mais antigos → mais novos"** usa a ordem do catálogo Apple do sistema; modelos fora do catálogo (ex.: Samsung) ficam no fim.
+- **Leitor por câmera**: usei a biblioteca `html5-qrcode`. Testei com uma câmera simulada lendo um código CODE128 de verdade (funcionou). Em celular real pode variar com a luz/foco; o campo manual sempre existe como alternativa.
+- **Peso do app**: as bibliotecas novas (scanner e Excel) entram em blocos separados, só carregados quando usados. O cache do PWA passou de ~2,0 MB para ~2,5 MB.
 
 ## Pendências que dependem de você
 _(preenchido ao longo das fases)_

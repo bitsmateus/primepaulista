@@ -76,10 +76,11 @@ export interface ManagedUser {
 }
 
 // ---- Mapeamento de dados (banco → tipos do front) ----
-type DeviceRow = Omit<Device, "cost" | "salePrice" | "createdAt" | "entryDate"> & {
+type DeviceRow = Omit<Device, "cost" | "salePrice" | "createdAt" | "entryDate" | "checkedAt"> & {
   cost: string;
   salePrice: string | null;
   entryDate: string | null;
+  checkedAt: string | null;
   createdAt: string;
 };
 type AccessoryRow = Omit<Accessory, "cost" | "price" | "createdAt"> & {
@@ -100,7 +101,10 @@ function mapDevice(r: DeviceRow): Device {
     serial: r.serial ?? "",
     internalSerial: r.internalSerial ?? "",
     supplier: r.supplier ?? "",
+    brand: r.brand || "Apple",
+    location: r.location || "Estoque",
     entryDate: r.entryDate ? new Date(r.entryDate) : undefined,
+    checkedAt: r.checkedAt ? new Date(r.checkedAt) : undefined,
     notes: r.notes ?? "",
     createdAt: new Date(r.createdAt),
   };
@@ -212,6 +216,37 @@ function mapAccessory(r: AccessoryRow): Accessory {
   };
 }
 
+export interface DeviceHistory {
+  movements: Array<{
+    id: string;
+    movementType: "entrada" | "saida";
+    quantity: number;
+    reason: string | null;
+    createdAt: Date;
+    userName: string | null;
+  }>;
+  sales: Array<{
+    saleId: string;
+    createdAt: Date;
+    returnedAt: Date | null;
+    sellerName: string | null;
+    price: number;
+    warrantyDays: number;
+    customerName: string | null;
+  }>;
+}
+// Formato cru da API (datas e numeric como string)
+interface DeviceHistoryRaw {
+  movements: Array<Omit<DeviceHistory["movements"][number], "createdAt"> & { createdAt: string }>;
+  sales: Array<
+    Omit<DeviceHistory["sales"][number], "createdAt" | "returnedAt" | "price"> & {
+      createdAt: string;
+      returnedAt: string | null;
+      price: string;
+    }
+  >;
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -252,6 +287,35 @@ export const api = {
     }).then((d) => mapDevice(d.device)),
   deleteDevice: (id: string) =>
     request<{ ok: true }>(`/devices/${id}`, { method: "DELETE" }),
+  importDevices: (devices: Array<Omit<Device, "id" | "createdAt" | "checkedAt">>, replaceStock: boolean) =>
+    request<{ created: number; removed: number; skipped: { index: number; reason: string }[] }>(
+      "/devices/import",
+      { method: "POST", body: JSON.stringify({ devices, replaceStock }) }
+    ),
+  clearDeviceSalePrices: () =>
+    request<{ updated: number }>("/devices/bulk/clear-sale-price", { method: "POST" }),
+  moveDevices: (ids: string[], location: string) =>
+    request<{ updated: number }>("/devices/bulk/move-location", {
+      method: "POST",
+      body: JSON.stringify({ ids, location }),
+    }),
+  stockCheck: (ids: string[]) =>
+    request<{ updated: number }>("/devices/stock-check", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
+  stockCheckReset: () =>
+    request<{ cleared: number }>("/devices/stock-check/reset", { method: "POST" }),
+  deviceHistory: (id: string) =>
+    request<DeviceHistoryRaw>(`/devices/${id}/history`).then((d): DeviceHistory => ({
+      movements: d.movements.map((m) => ({ ...m, createdAt: new Date(m.createdAt) })),
+      sales: d.sales.map((v) => ({
+        ...v,
+        price: Number(v.price),
+        createdAt: new Date(v.createdAt),
+        returnedAt: v.returnedAt ? new Date(v.returnedAt) : null,
+      })),
+    })),
 
   // Fotos do aparelho
   listDevicePhotos: (deviceId: string) =>

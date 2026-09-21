@@ -4,6 +4,27 @@ Documento das alterações recentes do sistema de gestão. Versão atual: **v1.0
 
 ---
 
+## 21/09/2026 — Paridade com o sistema M7 Concept (em andamento)
+
+Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual e a fonte atuais.
+
+### Fase 1 — Estoque de aparelhos
+- **Marca** e **Localização** (Estoque, Vitrine 1, Vitrine 2, Assistência ou qualquer outra) no cadastro, na busca, nos filtros e na exportação CSV.
+- **Mover localização** pela linha do aparelho ou em lote (selecionando vários).
+- **Filtros** por categoria, marca, condição (Lacrado/Seminovo), local e status.
+- **9 ordenações**: modelo A-Z, modelos mais antigos → mais novos (e o inverso), maior/menor preço de venda, maior custo (admin), maior quantidade, maior bateria e entrada mais recente.
+- **4 visões**: Lista, Por modelo (agrupada, com contador), Resumo (uma linha por modelo + capacidade + condição, com faixa de preço e média de bateria) e Grade.
+- **Ficha do aparelho**: dados completos, fotos, vendas em que apareceu (cliente, vendedor, garantia) e histórico de movimentações. Custo e margem só para admin.
+- **Leitor por câmera** (código de barras/QR/IMEI): nos campos IMEI 1, IMEI 2 e Serial, na busca de aparelhos, na busca de acessórios e no código do acessório. Sempre há o campo manual como alternativa (e serve para leitor USB).
+- **Importação CSV e Excel (.xlsx)** com prévia linha a linha, validação de IMEI/serial duplicado (no estoque e no arquivo) e opção de substituir o estoque atual (exige digitar APAGAR; vendidos são sempre mantidos). Modelos de planilha para baixar em Excel e CSV.
+- **Balanço de estoque**: confere aparelho por aparelho (câmera ou leitor), mostra progresso e a lista de faltantes (com download), por local. Admin inicia um novo balanço.
+- **Zerar preço de venda de todos** (admin, exige digitar ZERAR).
+- **Aparelho vendido não pode ser excluído** (fica no histórico permanente).
+- **Acessórios**: botão +5 unidades na lista.
+- **Auditoria**: importação, exclusão, mudança de local em lote, zerar preços e novo balanço ficam registrados (tela de consulta na Fase 4).
+
+---
+
 ## 19/06/2026 — v1.0.0
 
 - **Versão do sistema** exibida no rodapé do menu lateral (`Prime Paulista · v1.0.0`).

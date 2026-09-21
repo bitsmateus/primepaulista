@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
-import { Plus, Trash2, Barcode, Pencil, Search, Minus, Tag } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { Plus, Trash2, Barcode, Pencil, Search, Minus, Tag, ScanLine } from "lucide-react";
+import { BarcodeScannerDialog } from "@/components/devices/BarcodeScannerDialog";
 import { printAccessoryLabel } from "@/utils/labelGenerator";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
@@ -77,6 +78,10 @@ export default function AccessoriesPage() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<Accessory | null>(null);
+  // Leitor de código: "search" filtra a lista; "barcode" preenche o campo do formulário
+  const [scanTarget, setScanTarget] = useState<"search" | "barcode" | null>(null);
+  const lastScanTarget = useRef<"search" | "barcode">("search");
+  if (scanTarget) lastScanTarget.current = scanTarget;
 
   // Form state
   const [name, setName] = useState("");
@@ -215,8 +220,17 @@ export default function AccessoriesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome, modelo, código..."
-              className="pl-9"
+              className="pl-9 pr-10"
             />
+            <button
+              type="button"
+              onClick={() => setScanTarget("search")}
+              title="Escanear para filtrar acessórios"
+              aria-label="Escanear para filtrar acessórios"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <ScanLine className="h-4 w-4" />
+            </button>
           </div>
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Categoria" /></SelectTrigger>
@@ -280,14 +294,18 @@ export default function AccessoriesPage() {
                       )}
                       <TableCell>
                         <div className="flex items-center gap-1.5">
-                          <Button variant="outline" size="icon" className="h-7 w-7"
+                          <Button variant="outline" size="icon" className="h-7 w-7" title="Diminuir 1 un" aria-label="Diminuir 1 un"
                             onClick={() => updateAccessoryQuantity(a.id, Math.max(0, a.quantity - 1))}>
                             <Minus className="h-3 w-3" />
                           </Button>
                           <span className="w-7 text-center text-sm font-medium">{a.quantity}</span>
-                          <Button variant="outline" size="icon" className="h-7 w-7"
+                          <Button variant="outline" size="icon" className="h-7 w-7" title="Aumentar 1 un" aria-label="Aumentar 1 un"
                             onClick={() => updateAccessoryQuantity(a.id, a.quantity + 1)}>
                             <Plus className="h-3 w-3" />
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs" title="Adicionar +5 un" aria-label="Adicionar 5 un"
+                            onClick={() => updateAccessoryQuantity(a.id, a.quantity + 5)}>
+                            +5
                           </Button>
                         </div>
                       </TableCell>
@@ -395,6 +413,9 @@ export default function AccessoriesPage() {
               <Label>Código de Barras</Label>
               <div className="flex gap-2">
                 <Input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Gerado automaticamente" className="flex-1" />
+                <Button variant="outline" type="button" title="Escanear código de barras / SKU com a câmera" aria-label="Escanear código" onClick={() => setScanTarget("barcode")}>
+                  <ScanLine className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" type="button" onClick={() => setBarcode(generateBarcode())}>
                   <Barcode className="mr-2 h-4 w-4" /> Gerar Código
                 </Button>
@@ -410,6 +431,17 @@ export default function AccessoriesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <BarcodeScannerDialog
+        open={scanTarget !== null}
+        onOpenChange={(o) => { if (!o) setScanTarget(null); }}
+        onDetected={(code) => {
+          if (scanTarget === "barcode") setBarcode(code);
+          else { setSearch(code); toast.message("Busca filtrada pelo código lido.", { description: code }); }
+        }}
+        title={lastScanTarget.current === "barcode" ? "Escanear código do acessório" : "Escanear para filtrar acessórios"}
+        description="Aponte a câmera para o código de barras ou etiqueta de SKU."
+      />
 
       {/* Confirmação de exclusão */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
