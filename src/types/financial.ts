@@ -35,6 +35,8 @@ export interface DailyCashEntry {
   dinheiro: number;
   creditCard: number;
   debitCard: number;
+  mercadoPago: number; // Mercado Pago / Link de Pagamento
+  outro: number; // Outro / Verificação Externa
   sangrias: number;
   total: number;
 }

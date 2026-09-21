@@ -218,7 +218,8 @@ export async function quoteRoutes(app: FastifyInstance) {
       .set({ status: parsed.data.status, updatedAt: new Date() })
       .where(eq(quotes.id, id))
       .returning();
-    return { quote: row };
+    const items = await loadWithItems([id]);
+    return { quote: { ...row, items: items[id] ?? [] } };
   });
 
   // DELETE /quotes/:id — admin ou quem criou; convertido não pode ser excluído

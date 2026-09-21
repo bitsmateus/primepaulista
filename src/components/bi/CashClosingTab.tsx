@@ -78,12 +78,14 @@ export function CashClosingTab({ financial }: Props) {
       </div>
 
       {/* Payment breakdown */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { label: "PIX", value: cash.pix, color: "text-success" },
           { label: "Dinheiro", value: cash.dinheiro, color: "text-foreground" },
           { label: "Cartão Crédito", value: cash.creditCard, color: "text-primary" },
           { label: "Cartão Débito", value: cash.debitCard, color: "text-primary" },
+          { label: "Mercado Pago / Link", value: cash.mercadoPago, color: "text-primary" },
+          { label: "Outro / Verificação externa", value: cash.outro, color: "text-foreground" },
         ].map(item => (
           <Card key={item.label} className="border shadow-none">
             <CardContent className="p-6">

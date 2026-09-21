@@ -6,6 +6,7 @@ import { ServiceOrder } from "@/types/serviceOrder";
 import { Device, Accessory } from "@/types/inventory";
 import { api } from "@/lib/api";
 import { salesGrossProfit, buildDeviceMap, buildAccessoryMap } from "@/lib/profit";
+import { isCardMethod } from "@/lib/payments";
 import { format, subDays, differenceInDays, isWithinInterval, startOfDay, endOfDay, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devices: Device[], accessories: Accessory[]) {
@@ -85,7 +86,7 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
 
   const cardTaxesOf = (list: Sale[]) => {
     const cardPayments = list.reduce((s, sale) =>
-      s + sale.payments.filter(p => p.method === "Cartão de Crédito" || p.method === "Cartão de Débito")
+      s + sale.payments.filter(p => isCardMethod(p.method))
         .reduce((sum, p) => sum + p.amount, 0), 0);
     return cardPayments * (cardTaxRate / 100);
   };
@@ -144,12 +145,19 @@ export function useFinancial(sales: Sale[], serviceOrders: ServiceOrder[], devic
   const getDailyCash = (dateStr: string): DailyCashEntry => {
     const daySales = activeSales.filter(s => format(s.createdAt, "yyyy-MM-dd") === dateStr);
     const daySangrias = sangrias.filter(s => format(s.date, "yyyy-MM-dd") === dateStr);
-    const pix = daySales.reduce((s, sale) => s + sale.payments.filter(p => p.method === "PIX").reduce((sum, p) => sum + p.amount, 0), 0);
-    const dinheiro = daySales.reduce((s, sale) => s + sale.payments.filter(p => p.method === "Dinheiro").reduce((sum, p) => sum + p.amount, 0), 0);
-    const creditCard = daySales.reduce((s, sale) => s + sale.payments.filter(p => p.method === "Cartão de Crédito").reduce((sum, p) => sum + p.amount, 0), 0);
-    const debitCard = daySales.reduce((s, sale) => s + sale.payments.filter(p => p.method === "Cartão de Débito").reduce((sum, p) => sum + p.amount, 0), 0);
+    const byMethod = (method: string) =>
+      daySales.reduce((s, sale) => s + sale.payments.filter(p => p.method === method).reduce((sum, p) => sum + p.amount, 0), 0);
+    const pix = byMethod("PIX");
+    const dinheiro = byMethod("Dinheiro");
+    const creditCard = byMethod("Cartão de Crédito");
+    const debitCard = byMethod("Cartão de Débito");
+    const mercadoPago = byMethod("Mercado Pago / Link de Pagamento");
+    const outro = byMethod("Outro / Verificação Externa");
     const sangriaTotal = daySangrias.reduce((s, sg) => s + sg.amount, 0);
-    return { date: dateStr, pix, dinheiro, creditCard, debitCard, sangrias: sangriaTotal, total: pix + dinheiro + creditCard + debitCard - sangriaTotal };
+    return {
+      date: dateStr, pix, dinheiro, creditCard, debitCard, mercadoPago, outro, sangrias: sangriaTotal,
+      total: pix + dinheiro + creditCard + debitCard + mercadoPago + outro - sangriaTotal,
+    };
   };
 
   // Seller performance — vendedores derivados das comissões + vendas (não fixo)

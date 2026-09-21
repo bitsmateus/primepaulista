@@ -49,7 +49,16 @@ export interface Accessory {
 
 // PDV Types
 export type LeadOrigin = "Instagram" | "Indicação" | "Tráfego Pago";
-export type PaymentMethod = "PIX" | "Dinheiro" | "Cartão de Crédito" | "Cartão de Débito";
+export type PaymentMethod =
+  | "PIX"
+  | "Dinheiro"
+  | "Cartão de Crédito"
+  | "Cartão de Débito"
+  | "Mercado Pago / Link de Pagamento"
+  | "Outro / Verificação Externa";
+
+// De onde veio a venda
+export type SaleOrigin = "Balcão" | "Orçamento";
 export type Seller = string; // back armazena seller_name livre; vendedores reais: Gabriel/Matheus/Tassio
 
 export interface Customer {
@@ -109,6 +118,8 @@ export interface Sale {
   giftsCost: number; // custo dos brindes incluídos na venda
   requiresInvoice: boolean; // cliente exigiu emissão de nota fiscal (custo de 0,5% s/ o aparelho)
   notes?: string; // descrição / observação da venda
+  origin?: SaleOrigin; // Balcão (PDV direto) ou Orçamento (convertida)
+  quoteId?: string; // orçamento de origem, quando houver
   createdAt: Date;
   returnedAt?: Date; // preenchido se a venda foi devolvida/estornada
 }

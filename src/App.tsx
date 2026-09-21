@@ -17,6 +17,7 @@ import EstoqueGeralPage from "./pages/EstoqueGeralPage";
 import AccessoriesPage from "./pages/AccessoriesPage";
 import PDVPage from "./pages/PDVPage";
 import VendasPage from "./pages/VendasPage";
+import OrcamentosPage from "./pages/OrcamentosPage";
 import CustomersPage from "./pages/CustomersPage";
 import CRMPage from "./pages/CRMPage";
 import AssistenciaPage from "./pages/AssistenciaPage";
@@ -65,6 +66,7 @@ function AppRoutes() {
         <Route path="/" element={<ProtectedApp><Dashboard /></ProtectedApp>} />
         <Route path="/pdv" element={<ProtectedApp><PDVPage /></ProtectedApp>} />
         <Route path="/vendas" element={<ProtectedApp><VendasPage /></ProtectedApp>} />
+        <Route path="/orcamentos" element={<ProtectedApp><OrcamentosPage /></ProtectedApp>} />
         <Route path="/devices" element={<ProtectedApp><DevicesPage /></ProtectedApp>} />
         <Route path="/estoque" element={<ProtectedApp><EstoqueGeralPage /></ProtectedApp>} />
         <Route path="/accessories" element={<ProtectedApp><AccessoriesPage /></ProtectedApp>} />

@@ -27,8 +27,19 @@ Nada foi enviado ao GitHub nem colocado em produção.
 - **Leitor por câmera**: usei a biblioteca `html5-qrcode`. Testei com uma câmera simulada lendo um código CODE128 de verdade (funcionou). Em celular real pode variar com a luz/foco; o campo manual sempre existe como alternativa.
 - **Peso do app**: as bibliotecas novas (scanner e Excel) entram em blocos separados, só carregados quando usados. O cache do PWA passou de ~2,0 MB para ~2,5 MB.
 
+### Fase 2 — Vendas e orçamentos
+- **Orçamento não reserva o aparelho.** Se outro vendedor vender antes, o PDV avisa e não leva o item ao carrinho. Se quiser reservar (status "Reservado") ao criar/aprovar, dá para fazer.
+- **Orçamento vencido ainda pode ser convertido em venda** (o vendedor decide; a proposta impressa sai com o aviso "ORÇAMENTO VENCIDO"). Posso bloquear se preferir.
+- **WhatsApp do orçamento** abre a conversa (wa.me) com o texto pronto, você toca em enviar. Não usei o Uazapi para enviar sozinho, para o vendedor revisar antes.
+- **Excluir orçamento**: admin ou quem criou. Orçamento já convertido nunca é excluído.
+- **Mercado Pago / Link** e **Outro**: **não aplicam taxa** no cálculo de lucro (só cartão de crédito/débito paga os 2,5%). Se o Mercado Pago cobra taxa, me diga o percentual e eu incluo.
+- **Ticket médio por vendedor**: o BI já definia ticket médio como *lucro por venda*. No comparativo do Dashboard mostro os dois (faturamento/vendas e lucro/vendas) para não haver dúvida.
+- **Vendas antigas** ficam como origem "Balcão".
+- **Lista de vendedores** no orçamento reaproveita a do PDV (Gabriel, Matheus, Tassio + usuário logado).
+
 ## Pendências que dependem de você
 _(preenchido ao longo das fases)_
 
 ## Observações de segurança encontradas
+- O **recibo de venda** (e o recibo de OS) monta HTML com nome/CPF/observação sem escapar caracteres especiais. O orçamento novo já escapa. Vale aplicar o mesmo escape nos recibos antigos (não mexi para não alterar o layout aprovado).
 - `GET /devices` devolve o **custo** de todos os aparelhos para qualquer usuário logado (vendedor/técnico). A tela esconde, mas a API entrega. Não alterei por não ter sido pedido e para não quebrar telas; vale corrigir depois.

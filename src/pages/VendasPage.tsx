@@ -11,6 +11,7 @@ import {
 } from "@/lib/sales";
 import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
+import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const PAYMENT_METHODS: PaymentMethod[] = ["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"];
 const PERIODS = [
   { value: "all", label: "Todo o período" },
   { value: "today", label: "Hoje" },
@@ -53,6 +53,7 @@ export default function VendasPage() {
   const [status, setStatus] = useState("all");
   const [period, setPeriod] = useState("all");
   const [sellerFilter, setSellerFilter] = useState("all");
+  const [originFilter, setOriginFilter] = useState("all");
 
   const [viewSale, setViewSale] = useState<Sale | null>(null);
   const [editSale, setEditSale] = useState<Sale | null>(null);
@@ -81,12 +82,21 @@ export default function VendasPage() {
         if (status === "active" && isReturned(s)) return false;
         if (status === "returned" && !isReturned(s)) return false;
         if (sellerFilter !== "all" && s.seller !== sellerFilter) return false;
+        if (originFilter !== "all" && (s.origin ?? "Balcão") !== originFilter) return false;
         if (!inPeriod(s.createdAt, period, now)) return false;
         return true;
       }),
-    [sales, search, status, sellerFilter, period]
+    [sales, search, status, sellerFilter, originFilter, period]
   );
   const summary = buildSalesSummary(filtered);
+  // Lucro líquido acumulado das vendas filtradas (devolvidas não contam) — só admin
+  const accumulatedProfit = useMemo(
+    () =>
+      filtered
+        .filter((s) => !isReturned(s))
+        .reduce((sum, s) => sum + saleNetProfit(s, devicesById, accessoriesById), 0),
+    [filtered, devicesById, accessoriesById]
+  );
 
   const openEdit = (s: Sale) => {
     setEditSale(s);
@@ -112,7 +122,7 @@ export default function VendasPage() {
         requiresInvoice: eRequiresInvoice,
         notes: eNotes,
         paymentMethod: ePayment,
-        installments: ePayment === "Cartão de Crédito" ? Number(eInstallments) || 1 : 1,
+        installments: allowsInstallments(ePayment) ? Number(eInstallments) || 1 : 1,
       });
       toast.success("Venda atualizada!");
       setEditSale(null);
@@ -131,16 +141,17 @@ export default function VendasPage() {
     <AppLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Vendas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Histórico de vendas, recibos e edição</p>
+          <h1 className="text-2xl font-semibold text-foreground">Vendas realizadas</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Histórico de vendas e comprovantes: 2ª via do recibo, notas fiscais anexas e edição</p>
         </div>
 
         {/* Resumo */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={`grid grid-cols-2 gap-4 ${isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           {[
             { label: "Vendas", value: summary.count },
             { label: "Faturamento líquido", value: fmt(summary.net) },
             { label: "Faturamento bruto", value: fmt(summary.gross) },
+            ...(isAdmin ? [{ label: "Lucro líquido acumulado", value: fmt(accumulatedProfit) }] : []),
             { label: "Devolvidas", value: summary.returned },
           ].map((c) => (
             <Card key={c.label} className="border shadow-none">
@@ -169,6 +180,14 @@ export default function VendasPage() {
               {sellers.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={originFilter} onValueChange={setOriginFilter}>
+            <SelectTrigger className="w-36" aria-label="Origem"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toda origem</SelectItem>
+              <SelectItem value="Balcão">Venda de balcão</SelectItem>
+              <SelectItem value="Orçamento">De orçamento</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -190,6 +209,7 @@ export default function VendasPage() {
                     <TableHead>Data</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Vendedor</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Itens</TableHead>
                     <TableHead>Pagamento</TableHead>
                     <TableHead>Total</TableHead>
@@ -206,6 +226,11 @@ export default function VendasPage() {
                       </TableCell>
                       <TableCell className="font-medium">{s.customer?.name || "—"}</TableCell>
                       <TableCell>{s.seller || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={s.origin === "Orçamento" ? "reserved" : "secondary"} className="whitespace-nowrap font-normal">
+                          {s.origin === "Orçamento" ? "Orçamento" : "Balcão"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground" title={saleItemsSummary(s)}>
                         {saleItemsSummary(s)}
                       </TableCell>
@@ -243,7 +268,7 @@ export default function VendasPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 9 : 8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={isAdmin ? 10 : 9} className="py-8 text-center text-muted-foreground">
                         {salesLoading ? "Carregando vendas…" : "Nenhuma venda encontrada."}
                       </TableCell>
                     </TableRow>
@@ -365,7 +390,7 @@ export default function VendasPage() {
                   </Select>
                 </div>
               </div>
-              {ePayment === "Cartão de Crédito" && (
+              {allowsInstallments(ePayment) && (
                 <div>
                   <Label>Parcelas</Label>
                   <Input type="number" min={1} value={eInstallments} onChange={(e) => setEInstallments(e.target.value)} />

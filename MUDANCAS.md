@@ -23,6 +23,15 @@ Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual
 - **Acessórios**: botão +5 unidades na lista.
 - **Auditoria**: importação, exclusão, mudança de local em lote, zerar preços e novo balanço ficam registrados (tela de consulta na Fase 4).
 
+### Fase 2 — Vendas e orçamentos
+- **Orçamentos** (novo menu, para admin e vendedor): monta a proposta com aparelhos e acessórios do estoque (preço editável, item avulso, desconto, validade de 7 dias, condições de pagamento), com número sequencial.
+  - Lista com filtros (status, período, vendedor, busca por nº/cliente/telefone/produto) e resumo (em aberto, valor em aberto, convertidos, taxa de conversão).
+  - Ações: editar, duplicar, imprimir/PDF, enviar por WhatsApp (abre a conversa com a proposta pronta e marca como Enviado), mudar status (Aberto, Enviado, Aprovado, Recusado; "Expirado" é automático pela validade) e excluir (admin ou quem criou).
+  - **Converter em venda**: abre o PDV com cliente, itens, preço negociado, desconto e vendedor já preenchidos; itens que saíram do estoque ou ficaram sem saldo são avisados e não entram. Ao finalizar, o orçamento vira "Convertido" na mesma operação (não dá para converter duas vezes).
+- **Novas formas de pagamento**: "Mercado Pago / Link de Pagamento" e "Outro / Verificação Externa" no PDV, na edição da venda, no fechamento de caixa e nos gráficos.
+- **Vendas realizadas**: coluna e filtro de **origem** (Venda de balcão / De orçamento) e card **Lucro líquido acumulado** (admin) do período filtrado.
+- **Dashboard**: **comparativo por vendedor** no período (qtd de vendas, faturamento, ticket médio e, para admin, lucro total e lucro por venda).
+
 ---
 
 ## 19/06/2026 — v1.0.0

@@ -2,6 +2,7 @@ import { Device, Accessory, Customer, Sale, CartItem, PaymentEntry, PaymentMetho
 import { ServiceOrder } from "@/types/serviceOrder";
 import { Lead, FunnelColumn, MessageLog, LeadTask } from "@/types/crm";
 import { Expense, Sangria, SellerCommissionConfig } from "@/types/financial";
+import { Quote, QuoteInput, QuoteItem, QuoteStatus } from "@/types/quote";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
 const TOKEN_KEY = "pp_token";
@@ -372,6 +373,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ customers: rows }),
     }),
+
+  // Orçamentos
+  listQuotes: () => request<{ quotes: QuoteRow[] }>("/quotes").then((d) => d.quotes.map(mapQuote)),
+  getQuote: (id: string) => request<{ quote: QuoteRow }>(`/quotes/${id}`).then((d) => mapQuote(d.quote)),
+  createQuote: (input: QuoteInput) =>
+    request<{ quote: QuoteRow }>("/quotes", { method: "POST", body: JSON.stringify(quoteToWire(input)) }).then((d) => mapQuote(d.quote)),
+  updateQuote: (id: string, input: QuoteInput) =>
+    request<{ quote: QuoteRow }>(`/quotes/${id}`, { method: "PATCH", body: JSON.stringify(quoteToWire(input)) }).then((d) => mapQuote(d.quote)),
+  setQuoteStatus: (id: string, status: Exclude<QuoteStatus, "Convertido">) =>
+    request<{ quote: QuoteRow }>(`/quotes/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }).then((d) => mapQuote(d.quote)),
+  deleteQuote: (id: string) => request<{ ok: true }>(`/quotes/${id}`, { method: "DELETE" }),
 
   // Sales
   createSale: (input: SalePayload) =>
@@ -770,6 +782,81 @@ export interface DevicePhoto {
   createdAt: string;
 }
 
+// ----- Orçamentos: banco (numeric/datas como string) → tipos do front -----
+interface QuoteRow {
+  id: string;
+  number: number;
+  customerId: string | null;
+  customerName: string;
+  customerPhone: string;
+  sellerId: string | null;
+  sellerName: string;
+  status: QuoteStatus;
+  validUntil: string | null;
+  subtotal: string;
+  discount: string;
+  total: string;
+  paymentTerms: string;
+  notes: string;
+  convertedSaleId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number }[];
+}
+
+function mapQuote(r: QuoteRow): Quote {
+  const items: QuoteItem[] = (r.items ?? []).map((i) => ({
+    id: i.id,
+    type: i.productType,
+    productId: i.productId ?? undefined,
+    name: i.name,
+    serial: i.serial ?? undefined,
+    price: Number(i.price),
+    quantity: i.quantity,
+  }));
+  return {
+    id: r.id,
+    number: r.number,
+    customerId: r.customerId ?? undefined,
+    customerName: r.customerName,
+    customerPhone: r.customerPhone,
+    sellerId: r.sellerId ?? undefined,
+    sellerName: r.sellerName,
+    status: r.status,
+    validUntil: r.validUntil ? new Date(r.validUntil) : undefined,
+    subtotal: Number(r.subtotal),
+    discount: Number(r.discount),
+    total: Number(r.total),
+    paymentTerms: r.paymentTerms,
+    notes: r.notes,
+    convertedSaleId: r.convertedSaleId ?? undefined,
+    createdAt: new Date(r.createdAt),
+    updatedAt: new Date(r.updatedAt),
+    items,
+  };
+}
+
+function quoteToWire(q: QuoteInput) {
+  return {
+    customerId: q.customerId ?? null,
+    customerName: q.customerName,
+    customerPhone: q.customerPhone,
+    sellerName: q.sellerName,
+    validUntil: q.validUntil?.toISOString(),
+    discount: q.discount,
+    paymentTerms: q.paymentTerms,
+    notes: q.notes,
+    items: q.items.map((i) => ({
+      productType: i.type,
+      productId: i.productId ?? null,
+      name: i.name,
+      serial: i.serial ?? null,
+      price: i.price,
+      quantity: i.quantity,
+    })),
+  };
+}
+
 // Payload enviado ao finalizar uma venda
 export interface SalePayload {
   customerId: string;
@@ -781,6 +868,7 @@ export interface SalePayload {
   giftsCost: number;
   requiresInvoice: boolean;
   notes?: string;
+  quoteId?: string; // venda gerada a partir de um orçamento
   items: {
     productType: "device" | "accessory";
     productId: string;
@@ -818,7 +906,7 @@ export interface SaleUpdate {
   giftsCost?: number;
   requiresInvoice?: boolean;
   notes?: string;
-  paymentMethod?: "PIX" | "Dinheiro" | "Cartão de Crédito" | "Cartão de Débito";
+  paymentMethod?: PaymentMethod;
   installments?: number;
 }
 
@@ -835,6 +923,8 @@ interface SaleFullRow {
   giftsCost: string;
   requiresInvoice: boolean;
   notes: string | null;
+  origin?: string | null;
+  quoteId?: string | null;
   createdAt: string;
   returnedAt: string | null;
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
@@ -888,6 +978,8 @@ function mapSaleFull(r: SaleFullRow): Sale {
     giftsCost: Number(r.giftsCost),
     requiresInvoice: r.requiresInvoice,
     notes: r.notes ?? "",
+    origin: r.origin === "Orçamento" ? "Orçamento" : "Balcão",
+    quoteId: r.quoteId ?? undefined,
     createdAt: new Date(r.createdAt),
     returnedAt: r.returnedAt ? new Date(r.returnedAt) : undefined,
   };

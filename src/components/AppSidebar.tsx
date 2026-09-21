@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare,
-  Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2, RefreshCw,
+  Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2, RefreshCw, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import logo from "@/assets/logo-prime-paulista.png";
@@ -20,6 +20,7 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/pdv", label: "Frente de Caixa", icon: ShoppingCart },
   { to: "/vendas", label: "Vendas", icon: Receipt },
+  { to: "/orcamentos", label: "Orçamentos", icon: FileText },
   { to: "/devices", label: "Aparelhos", icon: Smartphone },
   { to: "/estoque", label: "Estoque Geral", icon: Table2 },
   { to: "/accessories", label: "Acessórios", icon: Package },

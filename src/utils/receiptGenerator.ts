@@ -2,8 +2,8 @@ import { Sale, Device } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
 import logo from "@/assets/logo-prime-paulista.png";
 
-// Dados da loja (cabeçalho do recibo)
-const STORE = {
+// Dados da loja (cabeçalho do recibo e do orçamento)
+export const STORE = {
   name: "Prime Paulista",
   slogan: "Sua loja no ❤️ de SP",
   whatsapp: "11 97038-3539",
