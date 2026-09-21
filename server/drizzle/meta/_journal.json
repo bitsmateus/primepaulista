@@ -197,6 +197,13 @@
       "when": 1790017296542,
       "tag": "0027_fase4b_conferencia_planejamento",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790025256251,
+      "tag": "0028_fase5a_crm",
+      "breakpoints": true
     }
   ]
 }

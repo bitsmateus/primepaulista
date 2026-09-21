@@ -38,6 +38,9 @@ const BUSINESS_TABLES = {
   messageLogs: schema.messageLogs,
   campaigns: schema.campaigns,
   automations: schema.automations,
+  quickReplies: schema.quickReplies,
+  keywordRules: schema.keywordRules,
+  keywordRuleHits: schema.keywordRuleHits,
   appSettings: schema.appSettings,
   auditLogs: schema.auditLogs,
 } as const;

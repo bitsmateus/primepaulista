@@ -13,6 +13,7 @@ export interface NotificationCounts {
   lowStock: number; // acessórios com estoque baixo ou zerado
   staleDevices: number; // aparelhos disponíveis parados há mais de 30 dias
   taskReminders: number; // lembretes de tarefa do planejamento que VENCERAM e foram entregues agora
+  newMessages: number; // mensagens de WhatsApp recebidas (webhook) que ninguém abriu ainda (CRM)
 }
 
 export interface TaskReminder {
@@ -56,6 +57,9 @@ export async function notificationRoutes(app: FastifyInstance) {
           and l.owner_id = ${me.sub}
           and (t.due_date AT TIME ZONE ${TZ})::date <= ${today}`);
       counts.tasksDue = Number((r.rows[0] as { n: number }).n);
+      const inbox = await db.execute(sql`
+        select count(*)::int as n from message_logs where direction = 'in' and read_at is null`);
+      counts.newMessages = Number((inbox.rows[0] as { n: number }).n);
     }
 
     if (can(role, "sell")) {

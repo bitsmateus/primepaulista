@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "../db/index";
 import { appSettings } from "../db/schema/index";
 import { DEFAULT_OS_MESSAGES, type OsMessagesSettings } from "./osMessages";
+import { DEFAULT_BUSINESS_HOURS, timeToMinutes, type BusinessHours } from "../lib/keywordRules";
 import {
   DEFAULT_SECURITY, DEFAULT_STORE, DEFAULT_WARRANTY_TERMS,
   type SecuritySettings, type StoreSettings, type WarrantyTerms,
@@ -84,6 +85,38 @@ const warrantyTermsSchema = z
 
 const securitySchema = z.object({ autoLockMinutes: z.number().int().min(0).max(1440) }).strict();
 
+// Fase 5A: horário comercial (respostas automáticas). Cada faixa é um dia (0 = domingo ... 6 = sábado) + de/até.
+const hhmm = z.string().refine((v) => timeToMinutes(v) !== null, "Horário inválido (use HH:MM)");
+const businessHoursSchema = z
+  .object({
+    ranges: z
+      .array(
+        z
+          .object({ day: z.number().int().min(0).max(6), from: hhmm, to: hhmm })
+          .strict()
+          .refine((r) => r.from !== r.to, "O início e o fim da faixa não podem ser iguais")
+      )
+      .max(28),
+  })
+  .strict();
+
+// Fase 5A: agenda de follow-up (dias para cada sugestão automática)
+export interface CrmAgendaSettings {
+  purchaseDays: number; // cliente com compra há >= N dias e sem contato
+  quoteDays: number; // orçamento enviado sem resposta há >= N dias
+  warrantyDays: number; // garantia vencendo nos próximos N dias
+  purchaseMaxDays: number; // não sugerir contato para compras mais antigas que isso
+}
+export const DEFAULT_CRM_AGENDA: CrmAgendaSettings = { purchaseDays: 30, quoteDays: 3, warrantyDays: 15, purchaseMaxDays: 365 };
+const crmAgendaSchema = z
+  .object({
+    purchaseDays: z.number().int().min(1).max(3650),
+    quoteDays: z.number().int().min(1).max(365),
+    warrantyDays: z.number().int().min(1).max(365),
+    purchaseMaxDays: z.number().int().min(1).max(3650),
+  })
+  .strict();
+
 export const SETTINGS = {
   os_messages: {
     schema: osMessagesSchema,
@@ -93,6 +126,8 @@ export const SETTINGS = {
   logo: { schema: logoSchema, defaults: { dataUrl: "" } } satisfies SettingDef<{ dataUrl: string }>,
   warranty_terms: { schema: warrantyTermsSchema, defaults: DEFAULT_WARRANTY_TERMS } satisfies SettingDef<WarrantyTerms>,
   security: { schema: securitySchema, defaults: DEFAULT_SECURITY } satisfies SettingDef<SecuritySettings>,
+  business_hours: { schema: businessHoursSchema, defaults: DEFAULT_BUSINESS_HOURS } satisfies SettingDef<BusinessHours>,
+  crm_agenda: { schema: crmAgendaSchema, defaults: DEFAULT_CRM_AGENDA } satisfies SettingDef<CrmAgendaSettings>,
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { eq, isNull } from "drizzle-orm";
 import { db } from "../db/index";
 import { whatsappConfig, whatsappInstances } from "../db/schema/index";
 
@@ -100,6 +101,37 @@ export async function sendWhatsappMedia(
   } catch {
     return false;
   }
+}
+
+// === Webhook de entrada (Fase 5A) ===
+
+// Segredo aleatório (192 bits) da URL do webhook de um número
+export const newWebhookSecret = () => randomBytes(24).toString("hex");
+
+// Garante que todo número tenha segredo (os criados antes da Fase 5A recebem um na migration;
+// este reforço cobre números criados por outros caminhos)
+export async function ensureWebhookSecrets() {
+  const missing = await db.select({ id: whatsappInstances.id }).from(whatsappInstances).where(isNull(whatsappInstances.webhookSecret));
+  for (const m of missing) {
+    await db
+      .update(whatsappInstances)
+      .set({ webhookSecret: newWebhookSecret() })
+      .where(eq(whatsappInstances.id, m.id));
+  }
+}
+
+const sha = (s: string) => createHash("sha256").update(s).digest();
+
+// Acha o número dono do segredo comparando em TEMPO CONSTANTE (hash de mesmo tamanho, sem parar no primeiro)
+export async function findInstanceBySecret(secret: string) {
+  const probe = sha(secret);
+  const rows = await db.select().from(whatsappInstances);
+  let found: (typeof rows)[number] | null = null;
+  for (const r of rows) {
+    if (!r.webhookSecret) continue;
+    if (timingSafeEqual(probe, sha(r.webhookSecret)) && !found) found = r;
+  }
+  return found;
 }
 
 // === Compat: automação ainda chama estes nomes ===

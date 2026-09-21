@@ -18,6 +18,7 @@ import {
 import { authenticate, currentRole, requireCapability, type JwtUser } from "../plugins/auth";
 import { can } from "../lib/permissions";
 import { brl, logAudit } from "../services/audit";
+import { STAGE, advanceLeadStage } from "../services/leadFunnel";
 
 // Métodos de pagamento aceitos = valores do enum do banco (uma única fonte)
 const paymentMethod = z.enum(paymentMethodEnum.enumValues);
@@ -296,7 +297,9 @@ export async function saleRoutes(app: FastifyInstance) {
         return sale.id;
       });
 
-      const [cust] = await db.select({ name: customers.name }).from(customers).where(eq(customers.id, s.customerId)).limit(1);
+      const [cust] = await db.select({ name: customers.name, whatsapp: customers.whatsapp }).from(customers).where(eq(customers.id, s.customerId)).limit(1);
+      // CRM: se o cliente é um lead (mesmo telefone), ele vai para "Venda Concluída" (só se a etapa existir)
+      await advanceLeadStage(cust?.whatsapp, STAGE.saleDone);
       await logAudit(req, {
         action: "sale.create",
         entity: "sale",

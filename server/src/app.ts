@@ -28,6 +28,9 @@ import { backupRoutes } from "./routes/backup";
 import { notificationRoutes } from "./routes/notifications";
 import { reconciliationRoutes } from "./routes/reconciliation";
 import { planningRoutes } from "./routes/planning";
+import { quickReplyRoutes } from "./routes/quickReplies";
+import { keywordRuleRoutes } from "./routes/keywordRules";
+import { whatsappWebhookRoutes } from "./routes/whatsappWebhook";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -83,6 +86,9 @@ export function buildApp() {
   app.register(notificationRoutes);
   app.register(reconciliationRoutes);
   app.register(planningRoutes);
+  app.register(quickReplyRoutes);
+  app.register(keywordRuleRoutes);
+  app.register(whatsappWebhookRoutes); // público (segredo na URL): mantém o próprio parser de corpo
 
   return app;
 }

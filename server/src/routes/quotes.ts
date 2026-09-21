@@ -6,6 +6,7 @@ import { customers, quoteItems, quotes } from "../db/schema/index";
 import { authenticate, requireCapability, currentRole, type JwtUser } from "../plugins/auth";
 import { can } from "../lib/permissions";
 import { logAudit } from "../services/audit";
+import { STAGE, advanceLeadStage } from "../services/leadFunnel";
 
 const VALIDITY_DAYS = 7;
 
@@ -138,6 +139,8 @@ export async function quoteRoutes(app: FastifyInstance) {
         .returning();
       return { ...q, items };
     });
+    // CRM: se o cliente do orçamento é um lead (mesmo telefone), ele vai para "Orçamento Enviado"
+    await advanceLeadStage(customerPhone, STAGE.quoteSent);
     return reply.code(201).send({ quote: created });
   });
 
@@ -224,6 +227,7 @@ export async function quoteRoutes(app: FastifyInstance) {
       .set({ status: parsed.data.status, updatedAt: new Date() })
       .where(eq(quotes.id, id))
       .returning();
+    if (parsed.data.status === "Enviado") await advanceLeadStage(row.customerPhone, STAGE.quoteSent);
     const items = await loadWithItems([id]);
     return { quote: { ...row, items: items[id] ?? [] } };
   });

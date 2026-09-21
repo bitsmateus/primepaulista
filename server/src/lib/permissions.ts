@@ -35,7 +35,7 @@ export const CAPABILITIES = [
   "manageSuppliers", // cadastrar/editar/inativar fornecedores
   "editCustomers", // cadastrar/editar clientes
   "useCRM", // CRM e WhatsApp
-  "manageAutomations", // automações do CRM
+  "manageAutomations", // automações do CRM, respostas rápidas e respostas automáticas (editar)
   "manageWhatsapp", // gerenciar números de WhatsApp de qualquer dono
   "viewOS", // ver ordens de serviço
   "editOS", // criar/editar OS
