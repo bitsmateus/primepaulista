@@ -20,6 +20,9 @@ export const devices = pgTable("devices", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Categoria do dispositivo: iPhone, iPad, Apple Watch, Mac, AirPods, Outro
   category: text("category").notNull().default("iPhone"),
+  brand: text("brand").notNull().default("Apple"),
+  // Onde o aparelho está fisicamente: Estoque, Vitrine 1, Vitrine 2, Assistência…
+  location: text("location").notNull().default("Estoque"),
   model: text("model").notNull(),
   capacity: text("capacity").notNull().default(""),
   color: text("color").notNull(),
@@ -36,6 +39,8 @@ export const devices = pgTable("devices", {
   // Data de entrada no estoque (dia da compra no fornecedor) — pode diferir do cadastro
   entryDate: timestamp("entry_date", { withTimezone: true }),
   notes: text("notes"), // observações (peça trocada, avarias, etc.)
+  // Última conferência física (balanço de estoque); null = ainda não conferido
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

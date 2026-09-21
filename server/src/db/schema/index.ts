@@ -9,3 +9,4 @@ export * from "./crm";
 export * from "./finance";
 export * from "./whatsapp";
 export * from "./automations";
+export * from "./audit";

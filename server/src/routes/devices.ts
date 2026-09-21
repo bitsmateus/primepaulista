@@ -1,12 +1,15 @@
 import type { FastifyInstance } from "fastify";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
-import { devices, stockMovements } from "../db/schema/index";
+import { customers, devices, profiles, saleItems, sales, stockMovements } from "../db/schema/index";
 import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
+import { logAudit } from "../services/audit";
 
 const deviceInput = z.object({
   category: z.string().max(50).optional().default("iPhone"),
+  brand: z.string().trim().max(60).optional().default("Apple"),
+  location: z.string().trim().max(60).optional().default("Estoque"),
   model: z.string().min(1).max(100),
   capacity: z.string().max(50).optional().default(""),
   color: z.string().max(60).optional().default(""),
@@ -25,6 +28,34 @@ const deviceInput = z.object({
     .enum(["Disponível", "Vendido", "Em Manutenção", "Reservado"])
     .default("Disponível"),
 });
+
+// Status em que o aparelho ainda está "vivo" no estoque (não vendido)
+const ACTIVE_STATUSES = ["Disponível", "Reservado", "Em Manutenção"] as const;
+
+// Identificadores viram texto limpo (sem espaços internos, comuns ao colar do Excel)
+const cleanId = (v: string | undefined) => (v ?? "").replace(/\s+/g, "").trim();
+
+const importInput = z.object({
+  devices: z.array(deviceInput).min(1).max(2000),
+  // Apaga antes o estoque atual (não vendido e sem histórico de venda)
+  replaceStock: z.boolean().optional().default(false),
+});
+
+const uuidList = z.array(z.string().uuid()).min(1).max(2000);
+
+// ids de aparelhos que já aparecem em alguma venda (histórico que não pode sumir)
+async function idsWithSaleHistory(ids?: string[]): Promise<Set<string>> {
+  const rows = await db
+    .selectDistinct({ productId: saleItems.productId })
+    .from(saleItems)
+    .where(
+      and(
+        eq(saleItems.productType, "device"),
+        ids ? inArray(saleItems.productId, ids) : isNotNull(saleItems.productId)
+      )
+    );
+  return new Set(rows.map((r) => r.productId!).filter(Boolean));
+}
 
 export async function deviceRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
@@ -66,6 +97,210 @@ export async function deviceRoutes(app: FastifyInstance) {
     return reply.code(201).send({ device: row });
   });
 
+  // POST /devices/import — importação em lote (CSV/Excel já lido no navegador). Só admin.
+  // Valida duplicidade de IMEI/serial contra o estoque ativo e dentro do próprio arquivo.
+  app.post("/devices/import", { preHandler: requireRole("admin") }, async (req, reply) => {
+    const parsed = importInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: "Dados inválidos", details: parsed.error.flatten().fieldErrors });
+    }
+    const { devices: items, replaceStock } = parsed.data;
+    const userId = (req.user as JwtUser).sub;
+
+    const result = await db.transaction(async (tx) => {
+      let removed = 0;
+      if (replaceStock) {
+        const history = [...(await idsWithSaleHistory())];
+        const removable = await tx
+          .delete(devices)
+          .where(
+            and(
+              inArray(devices.status, [...ACTIVE_STATUSES]),
+              history.length ? notInArray(devices.id, history) : undefined
+            )
+          )
+          .returning({ id: devices.id });
+        removed = removable.length;
+      }
+
+      // identificadores já presentes no estoque ativo (após a limpeza, se houve)
+      const active = await tx
+        .select({ serialImei: devices.serialImei, imei2: devices.imei2, serial: devices.serial })
+        .from(devices)
+        .where(ne(devices.status, "Vendido"));
+      const taken = new Set<string>();
+      for (const a of active) {
+        for (const v of [a.serialImei, a.imei2, a.serial]) if (v) taken.add(v.toLowerCase());
+      }
+
+      const skipped: { index: number; reason: string }[] = [];
+      let created = 0;
+      for (let i = 0; i < items.length; i++) {
+        const d = items[i];
+        const imei1 = cleanId(d.serialImei);
+        const imei2 = cleanId(d.imei2);
+        const serial = cleanId(d.serial);
+        const ids = [imei1, imei2, serial].filter(Boolean).map((v) => v.toLowerCase());
+        const dup = ids.find((v) => taken.has(v));
+        if (dup) {
+          skipped.push({ index: i, reason: "IMEI/serial já consta no estoque ativo" });
+          continue;
+        }
+        ids.forEach((v) => taken.add(v));
+
+        const internalSerial =
+          d.internalSerial ||
+          (ids.length === 0
+            ? `INT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0")}`
+            : "");
+
+        const [row] = await tx
+          .insert(devices)
+          .values({
+            ...d,
+            serialImei: imei1,
+            imei2,
+            serial,
+            internalSerial,
+            status: "Disponível",
+            cost: String(d.cost),
+            salePrice: d.salePrice !== undefined ? String(d.salePrice) : null,
+          })
+          .returning({ id: devices.id });
+        await tx.insert(stockMovements).values({
+          productType: "device",
+          productId: row.id,
+          movementType: "entrada",
+          quantity: 1,
+          reason: "Importação",
+          userId,
+        });
+        created++;
+      }
+      return { created, skipped, removed };
+    });
+
+    await logAudit(req, {
+      action: "device.import",
+      entity: "device",
+      description: `Importou ${result.created} aparelho(s)${
+        result.removed ? ` (apagou ${result.removed} do estoque antes)` : ""
+      }`,
+      details: { created: result.created, skipped: result.skipped.length, removed: result.removed },
+    });
+    return reply.code(201).send(result);
+  });
+
+  // POST /devices/bulk/clear-sale-price — zera o preço de venda de todo o estoque ativo (admin)
+  app.post(
+    "/devices/bulk/clear-sale-price",
+    { preHandler: requireRole("admin") },
+    async (req) => {
+      const rows = await db
+        .update(devices)
+        .set({ salePrice: null })
+        .where(ne(devices.status, "Vendido"))
+        .returning({ id: devices.id });
+      await logAudit(req, {
+        action: "device.bulk_clear_price",
+        entity: "device",
+        description: `Zerou o preço de venda de ${rows.length} aparelho(s) do estoque`,
+        details: { count: rows.length },
+      });
+      return { updated: rows.length };
+    }
+  );
+
+  // POST /devices/bulk/move-location — muda a localização de vários aparelhos
+  app.post("/devices/bulk/move-location", async (req, reply) => {
+    const parsed = z
+      .object({ ids: uuidList, location: z.string().trim().min(1).max(60) })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const { ids, location } = parsed.data;
+    const rows = await db
+      .update(devices)
+      .set({ location })
+      .where(and(inArray(devices.id, ids), ne(devices.status, "Vendido")))
+      .returning({ id: devices.id });
+    await logAudit(req, {
+      action: "device.move_location",
+      entity: "device",
+      description: `Moveu ${rows.length} aparelho(s) para "${location}"`,
+      details: { count: rows.length, location },
+    });
+    return { updated: rows.length };
+  });
+
+  // POST /devices/stock-check — marca aparelhos como conferidos fisicamente (balanço)
+  app.post("/devices/stock-check", async (req, reply) => {
+    const parsed = z.object({ ids: uuidList }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const rows = await db
+      .update(devices)
+      .set({ checkedAt: new Date() })
+      .where(and(inArray(devices.id, parsed.data.ids), ne(devices.status, "Vendido")))
+      .returning({ id: devices.id });
+    return { updated: rows.length };
+  });
+
+  // POST /devices/stock-check/reset — começa um novo balanço (limpa as conferências). Só admin.
+  app.post("/devices/stock-check/reset", { preHandler: requireRole("admin") }, async (req) => {
+    const rows = await db
+      .update(devices)
+      .set({ checkedAt: null })
+      .where(isNotNull(devices.checkedAt))
+      .returning({ id: devices.id });
+    await logAudit(req, {
+      action: "device.stock_check_reset",
+      entity: "device",
+      description: "Iniciou um novo balanço de estoque",
+      details: { cleared: rows.length },
+    });
+    return { cleared: rows.length };
+  });
+
+  // GET /devices/:id/history — movimentações + vendas em que o aparelho apareceu (ficha)
+  app.get("/devices/:id/history", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) {
+      return reply.code(400).send({ error: "Identificador inválido" });
+    }
+    const movements = await db
+      .select({
+        id: stockMovements.id,
+        movementType: stockMovements.movementType,
+        quantity: stockMovements.quantity,
+        reason: stockMovements.reason,
+        createdAt: stockMovements.createdAt,
+        userName: profiles.name,
+      })
+      .from(stockMovements)
+      .leftJoin(profiles, eq(stockMovements.userId, profiles.id))
+      .where(and(eq(stockMovements.productType, "device"), eq(stockMovements.productId, id)))
+      .orderBy(desc(stockMovements.createdAt));
+
+    const saleRows = await db
+      .select({
+        saleId: sales.id,
+        createdAt: sales.createdAt,
+        returnedAt: sales.returnedAt,
+        sellerName: sales.sellerName,
+        price: saleItems.price,
+        warrantyDays: saleItems.warrantyDays,
+        customerName: customers.name,
+      })
+      .from(saleItems)
+      .innerJoin(sales, eq(saleItems.saleId, sales.id))
+      .leftJoin(customers, eq(sales.customerId, customers.id))
+      .where(and(eq(saleItems.productType, "device"), eq(saleItems.productId, id)))
+      .orderBy(desc(sales.createdAt));
+
+    return { movements, sales: saleRows };
+  });
+
   // PATCH /devices/:id  (status e/ou outros campos)
   app.patch("/devices/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -86,10 +321,26 @@ export async function deviceRoutes(app: FastifyInstance) {
     return { device: row };
   });
 
-  // DELETE /devices/:id (somente admin)
-  app.delete("/devices/:id", { preHandler: requireRole("admin") }, async (req) => {
+  // DELETE /devices/:id (somente admin). Aparelho vendido — ou que já apareceu
+  // em alguma venda — fica no histórico permanente e não pode ser excluído.
+  app.delete("/devices/:id", { preHandler: requireRole("admin") }, async (req, reply) => {
     const { id } = req.params as { id: string };
+    const [device] = await db.select().from(devices).where(eq(devices.id, id)).limit(1);
+    if (!device) return reply.code(404).send({ error: "Aparelho não encontrado" });
+
+    if (device.status === "Vendido" || (await idsWithSaleHistory([id])).has(id)) {
+      return reply.code(409).send({
+        error: "Não é permitido excluir um aparelho vendido. Ele deve ser mantido no histórico permanente.",
+      });
+    }
     await db.delete(devices).where(eq(devices.id, id));
+    await logAudit(req, {
+      action: "device.delete",
+      entity: "device",
+      entityId: id,
+      description: `Excluiu o aparelho ${device.model} ${device.capacity} ${device.color}`.trim(),
+      details: { serialImei: device.serialImei, serial: device.serial, internalSerial: device.internalSerial },
+    });
     return { ok: true };
   });
 }
