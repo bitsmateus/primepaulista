@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, KeyRound, UserCheck, UserX, Loader2 } from "lucide-react";
+import { Plus, KeyRound, UserCheck, UserX, Loader2, Check } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { api, ApiError, ManagedUser, UserRole } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { CAPABILITIES, CAPABILITY_LABELS, ROLES, ROLE_LABELS, can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,17 +37,52 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Administrador",
-  vendedor: "Vendedor",
-  tecnico: "Técnico",
-};
-
 const ROLE_HINT: Record<UserRole, string> = {
   admin: "Acesso total (financeiro, BI, configurações, usuários).",
+  gerente: "Tudo do administrador, exceto usuários, variáveis/backup. Vê custo, BI e auditoria.",
   vendedor: "PDV, estoque, clientes e CRM. Sem financeiro/BI.",
   tecnico: "Assistência técnica e estoque. Sem financeiro/BI.",
+  estoquista: "Estoque completo, fornecedores e importação. Vê custo. Sem PDV, CRM e BI.",
+  financeiro: "BI, contas, despesas e relatórios. Vê custo e lucro. Estoque só leitura.",
 };
+
+// Tabela "O que cada cargo pode" (vem da mesma matriz que a API usa)
+function PermissionMatrix() {
+  return (
+    <Card className="border shadow-none" data-testid="permission-matrix">
+      <CardContent className="space-y-3 pt-6">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">O que cada cargo pode</h2>
+          <p className="text-sm text-muted-foreground">Esta é a matriz de permissões em vigor (a API recusa o que não está marcado).</p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Permissão</TableHead>
+                {ROLES.map((r) => (
+                  <TableHead key={r} className="text-center">{ROLE_LABELS[r]}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CAPABILITIES.map((c) => (
+                <TableRow key={c}>
+                  <TableCell className="text-sm">{CAPABILITY_LABELS[c]}</TableCell>
+                  {ROLES.map((r) => (
+                    <TableCell key={r} className="text-center" data-cap={`${r}:${c}`}>
+                      {can(r, c) ? <Check className="mx-auto h-4 w-4 text-success" aria-label="Sim" /> : <span className="text-muted-foreground" aria-label="Não">—</span>}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function UsersPage() {
   const qc = useQueryClient();
@@ -132,11 +168,9 @@ export default function UsersPage() {
                 <div>
                   <Label>Cargo / Permissão</Label>
                   <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Cargo do novo usuário"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="vendedor">Vendedor</SelectItem>
-                      <SelectItem value="tecnico">Técnico</SelectItem>
+                      {ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <p className="mt-1 text-xs text-muted-foreground">{ROLE_HINT[role]}</p>
@@ -187,11 +221,9 @@ export default function UsersPage() {
                             onValueChange={(v) => updateMut.mutate({ id: u.id, patch: { role: v as UserRole } })}
                             disabled={isSelf}
                           >
-                            <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 w-40" aria-label={`Cargo de ${u.name}`}><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="admin">Administrador</SelectItem>
-                              <SelectItem value="vendedor">Vendedor</SelectItem>
-                              <SelectItem value="tecnico">Técnico</SelectItem>
+                              {ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </TableCell>
@@ -240,6 +272,8 @@ export default function UsersPage() {
             )}
           </CardContent>
         </Card>
+
+        <PermissionMatrix />
       </div>
     </AppLayout>
   );

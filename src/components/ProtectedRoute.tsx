@@ -4,13 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessRoute } from "@/lib/permissions";
 
-export function ProtectedRoute({
-  children,
-  requireAdmin = false,
-}: {
-  children: ReactNode;
-  requireAdmin?: boolean;
-}) {
+export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -24,11 +18,6 @@ export function ProtectedRoute({
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  }
-
-  // Área restrita a administradores
-  if (requireAdmin && user.role !== "admin") {
-    return <Navigate to="/" replace />;
   }
 
   // Gating por cargo conforme o mapa de permissões da rota atual

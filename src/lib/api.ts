@@ -4,6 +4,7 @@ import type { OsMessagesSettings } from "@/lib/osMessages";
 import { Lead, FunnelColumn, MessageLog, LeadTask } from "@/types/crm";
 import { Expense, Sangria, SellerCommissionConfig } from "@/types/financial";
 import { Quote, QuoteInput, QuoteItem, QuoteStatus } from "@/types/quote";
+import type { Role } from "@/lib/permissions";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
 const TOKEN_KEY = "pp_token";
@@ -59,7 +60,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 // ---- Tipos de usuário ----
-export type UserRole = "admin" | "vendedor" | "tecnico";
+export type UserRole = Role;
 
 export interface AuthUser {
   id: string;
@@ -297,6 +298,63 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<{ user: AuthUser }>("/auth/me"),
+  getBranding: () => request<{ name: string; slogan: string; logoDataUrl: string }>("/auth/branding"),
+  // Conta: trocar a própria senha / conferir a senha (desbloqueio de tela)
+  changePassword: (input: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+    request<{ ok: true }>("/auth/change-password", { method: "POST", body: JSON.stringify(input) }),
+  verifyPassword: (password: string) =>
+    request<{ ok: true }>("/auth/verify-password", { method: "POST", body: JSON.stringify({ password }) }),
+
+  // Notificações (contadores de eventos acionáveis; conteúdo por cargo)
+  notificationsSummary: () =>
+    request<{ counts: Partial<NotificationCounts> }>("/notifications/summary").then((d) => d.counts),
+
+  // Fornecedores
+  listSuppliers: (params: { q?: string; active?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.active !== undefined) qs.set("active", String(params.active));
+    const q = qs.toString();
+    return request<{ suppliers: Supplier[] }>(`/suppliers${q ? `?${q}` : ""}`).then((d) => d.suppliers);
+  },
+  getSupplier: (id: string) => request<SupplierDetailRaw>(`/suppliers/${id}`),
+  createSupplier: (input: SupplierInput) =>
+    request<{ supplier: Supplier }>("/suppliers", { method: "POST", body: JSON.stringify(input) }).then((d) => d.supplier),
+  updateSupplier: (id: string, patch: Partial<SupplierInput>) =>
+    request<{ supplier: Supplier }>(`/suppliers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.supplier),
+  deleteSupplier: (id: string) => request<{ ok: true }>(`/suppliers/${id}`, { method: "DELETE" }),
+
+  // Auditoria (somente leitura)
+  listAuditLogs: (f: AuditFilters) =>
+    request<{ logs: AuditLogRow[]; total: number; limit: number; offset: number }>(`/audit-logs?${auditQuery(f)}`),
+  auditFilters: () => request<{ users: { id: string; name: string }[]; actions: string[]; entities: string[] }>("/audit-logs/filters"),
+  exportAuditCsv: async (f: AuditFilters): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/audit-logs/export?${auditQuery({ ...f, limit: undefined, offset: undefined })}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new ApiError(res.status, "Não foi possível exportar.");
+    return res.blob();
+  },
+
+  // Variáveis customizadas (admin) e backup
+  listCustomVars: () => request<{ variables: CustomVarRow[] }>("/custom-vars").then((d) => d.variables),
+  saveCustomVar: (name: string, value: string) =>
+    request<{ ok: true }>(`/custom-vars/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ value }) }),
+  deleteCustomVar: (name: string) => request<{ ok: true }>(`/custom-vars/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  revealCustomVar: (name: string) =>
+    request<{ name: string; value: string }>(`/custom-vars/${encodeURIComponent(name)}/reveal`, { method: "POST" }).then((d) => d.value),
+  exportBackup: async (): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/backup/export`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "Não foi possível exportar o backup.");
+    return res.blob();
+  },
+  restoreSettings: (settings: Record<string, unknown>) =>
+    request<{ restored: string[]; ignored: string[]; invalid: { key: string; error: string }[] }>("/backup/restore-settings", {
+      method: "POST",
+      body: JSON.stringify({ settings }),
+    }),
 
   // Usuários (admin)
   listUsers: () => request<{ users: ManagedUser[] }>("/users").then((d) => d.users),
@@ -330,7 +388,7 @@ export const api = {
   deleteDevice: (id: string) =>
     request<{ ok: true }>(`/devices/${id}`, { method: "DELETE" }),
   importDevices: (devices: Array<Omit<Device, "id" | "createdAt" | "checkedAt">>, replaceStock: boolean) =>
-    request<{ created: number; removed: number; skipped: { index: number; reason: string }[] }>(
+    request<{ created: number; removed: number; suppliersCreated: number; skipped: { index: number; reason: string }[] }>(
       "/devices/import",
       { method: "POST", body: JSON.stringify({ devices, replaceStock }) }
     ),
@@ -491,6 +549,13 @@ export const api = {
       body: JSON.stringify(event ? { event } : {}),
     }),
   // Configurações da loja (genérico): só chaves registradas no servidor
+  getSettingsBundle: () =>
+    request<{
+      store: import("@/lib/storeSettings").StoreSettings;
+      logo: { dataUrl: string };
+      warranty_terms: import("@/lib/warrantyTerms").WarrantyTerms;
+      security: { autoLockMinutes: number };
+    }>("/settings-bundle"),
   getSetting: <T>(key: string) => request<{ key: string; value: T }>(`/settings/${key}`).then((d) => d.value),
   saveSetting: <T>(key: string, value: T) =>
     request<{ key: string; value: T }>(`/settings/${key}`, { method: "PUT", body: JSON.stringify(value) }).then((d) => d.value),
@@ -678,7 +743,7 @@ export const api = {
 
   listPayables: () =>
     request<{ payables: PayableRow[] }>("/payables").then((d) => d.payables.map(mapPayable)),
-  createPayable: (input: { description: string; category?: string; amount: number; dueDate?: string; recurring?: boolean }) =>
+  createPayable: (input: { description: string; category?: string; amount: number; dueDate?: string; recurring?: boolean; supplierId?: string | null }) =>
     request<{ payable: PayableRow }>("/payables", {
       method: "POST",
       body: JSON.stringify(input),
@@ -743,6 +808,8 @@ export interface Payable {
   status: "pendente" | "pago" | "atrasado";
   paidAt: Date | null;
   recurring: boolean;
+  supplierId: string | null;
+  supplierName: string | null;
   createdAt: Date;
 }
 interface PayableRow {
@@ -754,11 +821,15 @@ interface PayableRow {
   status: "pendente" | "pago" | "atrasado";
   paidAt: string | null;
   recurring: boolean;
+  supplierId?: string | null;
+  supplierName?: string | null;
   createdAt: string;
 }
 function mapPayable(r: PayableRow): Payable {
   return {
     ...r,
+    supplierId: r.supplierId ?? null,
+    supplierName: r.supplierName ?? null,
     amount: Number(r.amount),
     dueDate: r.dueDate ? new Date(r.dueDate) : null,
     paidAt: r.paidAt ? new Date(r.paidAt) : null,
@@ -1054,4 +1125,84 @@ function mapSaleFull(r: SaleFullRow): Sale {
     createdAt: new Date(r.createdAt),
     returnedAt: r.returnedAt ? new Date(r.returnedAt) : undefined,
   };
+}
+
+// ----- Notificações -----
+export interface NotificationCounts {
+  osReady: number;
+  tasksDue: number;
+  quotesToday: number;
+  lowStock: number;
+  staleDevices: number;
+}
+
+// ----- Fornecedores -----
+export interface Supplier {
+  id: string;
+  name: string;
+  document: string;
+  phone: string;
+  email: string;
+  address: string;
+  notes: string;
+  active: boolean;
+  createdAt: string;
+  deviceCount?: number;
+  payableCount?: number;
+}
+export interface SupplierInput {
+  name: string;
+  document?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  active?: boolean;
+}
+export interface SupplierDetailRaw {
+  supplier: Supplier;
+  devices: Array<{
+    id: string; model: string; capacity: string; color: string; condition: string; status: string;
+    serialImei: string | null; entryDate: string | null; createdAt: string; cost?: string;
+  }>;
+  payables: Array<{ id: string; description: string; category: string; amount: string; dueDate: string | null; status: string }>;
+  deviceCount: number;
+  totalPurchased?: number; // só quem pode ver custo
+  payablesOpen?: number; // só quem gerencia o financeiro
+}
+
+// ----- Auditoria -----
+export interface AuditLogRow {
+  id: string;
+  userId: string | null;
+  userName: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  description: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+export interface AuditFilters {
+  from?: string;
+  to?: string;
+  userId?: string;
+  action?: string;
+  entity?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+function auditQuery(f: AuditFilters): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== "" && v !== null) qs.set(k, String(v));
+  return qs.toString();
+}
+
+// ----- Variáveis customizadas -----
+export interface CustomVarRow {
+  name: string;
+  masked: string;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -2,6 +2,7 @@ import { ServiceOrder } from "@/types/serviceOrder";
 import { WARRANTY_DAYS, WARRANTY_TEXT } from "@/lib/warranty";
 import { escapeHtml as esc } from "@/utils/html";
 import { receiptValueLine } from "@/lib/serviceOrders";
+import { getStoreSettings } from "@/lib/storeSettings";
 
 // Garantia padrão do reparo (dias). Política centralizada em src/lib/warranty.ts.
 export const OS_WARRANTY_DAYS = WARRANTY_DAYS.servico;
@@ -33,6 +34,7 @@ export function generateOSReceiptHTML(order: ServiceOrder): string {
 
   const valueLine = receiptValueLine(order, formatCurrency);
   const fromStock = order.origin === "Estoque da loja";
+  const store = getStoreSettings();
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -60,8 +62,8 @@ export function generateOSReceiptHTML(order: ServiceOrder): string {
 </head>
 <body>
   <div class="header">
-    <h1>Prime Paulista</h1>
-    <p>Sua Loja no ❤️ de SP</p>
+    <h1>${esc(store.name)}</h1>
+    <p>${esc(store.slogan)}</p>
     <p style="margin-top:8px;font-size:12px;">RECIBO DE ORDEM DE SERVIÇO</p>
   </div>
 
@@ -122,7 +124,7 @@ export function generateOSReceiptHTML(order: ServiceOrder): string {
   </div>
 
   <div class="footer">
-    <p>Prime Paulista – Obrigado pela preferência!</p>
+    <p>${esc(store.name)} – Obrigado pela preferência!</p>
     <p style="margin-top:4px;">Apresente este recibo para acionar a garantia.</p>
   </div>
 </body>

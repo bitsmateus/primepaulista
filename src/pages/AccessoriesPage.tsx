@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { AccessoryCategory, AccessorySubcategory, Accessory } from "@/types/inventory";
 import { MODELS_BY_CATEGORY } from "@/data/appleCatalog";
 import {
@@ -69,7 +70,9 @@ export default function AccessoriesPage() {
     generateBarcode,
   } = useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canCost = can(user?.role, "viewCost");
+  const canEdit = can(user?.role, "editStock");
+  const canDelete = can(user?.role, "deleteRecords");
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -185,7 +188,7 @@ export default function AccessoriesPage() {
             <h1 className="text-2xl font-semibold text-foreground">Acessórios</h1>
             <p className="mt-1 text-sm text-muted-foreground">Periféricos e acessórios por modelo</p>
           </div>
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} disabled={!canEdit}>
             <Plus className="mr-2 h-4 w-4" /> Novo Acessório
           </Button>
         </div>
@@ -195,7 +198,7 @@ export default function AccessoriesPage() {
           {[
             { label: "Itens distintos", value: report.distinct },
             { label: "Unidades em estoque", value: report.totalUnits },
-            ...(isAdmin
+            ...(canCost
               ? [
                   { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
                   { label: "Margem potencial", value: fmt(report.potentialMargin) },
@@ -264,9 +267,9 @@ export default function AccessoriesPage() {
                     <TableHead>Categoria</TableHead>
                     <TableHead>Modelo</TableHead>
                     <TableHead>Código</TableHead>
-                    {isAdmin && <TableHead>Custo</TableHead>}
+                    {canCost && <TableHead>Custo</TableHead>}
                     <TableHead>Preço</TableHead>
-                    {isAdmin && <TableHead>Margem</TableHead>}
+                    {canCost && <TableHead>Margem</TableHead>}
                     <TableHead>Qtd</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-20"></TableHead>
@@ -279,9 +282,9 @@ export default function AccessoriesPage() {
                       <TableCell className="text-muted-foreground">{a.category} · {a.subcategory}</TableCell>
                       <TableCell>{a.compatibleModel}</TableCell>
                       <TableCell className="font-mono text-xs">{a.barcode}</TableCell>
-                      {isAdmin && <TableCell>{fmt(a.cost)}</TableCell>}
+                      {canCost && <TableCell>{fmt(a.cost)}</TableCell>}
                       <TableCell>{a.price != null ? fmt(a.price) : "—"}</TableCell>
-                      {isAdmin && (
+                      {canCost && (
                         <TableCell>
                           {(() => {
                             const m = accessoryMargin(a);
@@ -316,10 +319,10 @@ export default function AccessoriesPage() {
                             onClick={() => printAccessoryLabel({ name: a.name, price: a.price ?? 0, barcode: a.barcode })}>
                             <Tag className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(a)} title="Editar">
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(a)} disabled={!canEdit} title="Editar">
                             <Pencil className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                          {isAdmin && (
+                          {canDelete && (
                             <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(a)} title="Excluir">
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -330,7 +333,7 @@ export default function AccessoriesPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 10 : 8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={canCost ? 10 : 8} className="py-8 text-center text-muted-foreground">
                         {accessoriesLoading ? "Carregando acessórios…" : "Nenhum acessório encontrado."}
                       </TableCell>
                     </TableRow>
@@ -387,7 +390,7 @@ export default function AccessoriesPage() {
               </datalist>
             </div>
 
-            {isAdmin && (
+            {canCost && (
               <div className="space-y-2">
                 <Label>Custo Unitário (R$)</Label>
                 <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />

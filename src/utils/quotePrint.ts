@@ -1,14 +1,14 @@
 import { Quote } from "@/types/quote";
-import { STORE } from "@/utils/receiptGenerator";
+import { getLogoPrintUrl, getStoreSettings } from "@/lib/storeSettings";
 import { escapeHtml as h } from "@/utils/html";
 import { quoteDisplayStatus } from "@/lib/quotes";
-import logo from "@/assets/logo-prime-paulista.png";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtDate = (d?: Date) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
 
 export function generateQuoteHTML(q: Quote): string {
-  const logoUrl = `${window.location.origin}${logo}`;
+  const STORE = getStoreSettings();
+  const logoUrl = getLogoPrintUrl();
   const expired = quoteDisplayStatus(q) === "Expirado";
   const rows = q.items
     .map(

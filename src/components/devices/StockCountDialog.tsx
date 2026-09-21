@@ -27,14 +27,14 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   devices: Device[];
-  isAdmin: boolean;
+  showCost: boolean;
 }
 
 type Feedback = { kind: "ok" | "warn" | "error"; text: string } | null;
 
 const MISSING_LIMIT = 100;
 
-export function StockCountDialog({ open, onOpenChange, devices, isAdmin }: Props) {
+export function StockCountDialog({ open, onOpenChange, devices, showCost }: Props) {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [location, setLocation] = useState("all");
@@ -166,7 +166,7 @@ export function StockCountDialog({ open, onOpenChange, devices, isAdmin }: Props
                 <Button variant="outline" size="sm" className="gap-2" onClick={exportMissing} disabled={progress.missing.length === 0}>
                   <Download className="h-4 w-4" /> Baixar faltantes
                 </Button>
-                {isAdmin && (
+                {showCost && (
                   <Button variant="outline" size="sm" className="gap-2" onClick={() => setConfirmReset(true)}>
                     <RotateCcw className="h-4 w-4" /> Novo balanço
                   </Button>

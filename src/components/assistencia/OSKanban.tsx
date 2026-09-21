@@ -3,6 +3,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import { GripVertical, Clock, Eye, Trash2, Send, Printer, Plus, Search, Pencil, Download, Store, BellRing, MessageCircle } from "lucide-react";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { OSStatus, OSPriority, ServiceOrder, CostResponsibility } from "@/types/serviceOrder";
 import {
   osProfit, daysInLab, OS_PRIORITIES, OS_ORIGINS, COST_RESPONSIBILITIES, FINALIZED,
@@ -44,7 +45,7 @@ const money = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curr
 export default function OSKanban() {
   const { orders, ordersLoading, moveOrderInKanban, updateOrder, deleteOrder, updateOrderStatus } = useServiceOrderContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canDelete = can(user?.role, "deleteRecords");
   const { settings: msgSettings } = useOsMessages();
   const notifyMut = useNotifyOrder();
 
@@ -265,7 +266,7 @@ export default function OSKanban() {
                                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Editar" onClick={() => openEdit(order)}>
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
-                                    {isAdmin && (
+                                    {canDelete && (
                                       <Button size="icon" variant="ghost" className="h-7 w-7" title="Excluir" onClick={() => setDeleteTarget(order)}>
                                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                       </Button>

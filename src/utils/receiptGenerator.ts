@@ -1,18 +1,8 @@
 import { Sale, Device } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
-import logo from "@/assets/logo-prime-paulista.png";
-
-// Dados da loja (cabeçalho do recibo e do orçamento)
-export const STORE = {
-  name: "Prime Paulista",
-  slogan: "Sua loja no ❤️ de SP",
-  whatsapp: "11 97038-3539",
-  facebook: "Prime Paulista",
-  instagram: "@primeavpaulista",
-  email: "primeavpaulista@gmail.com",
-  address: "Av. Paulista, 2064 - Ed. Paulista - 14º Andar",
-  cnpj: "35.646.573/0001-71",
-};
+import { escapeHtml as esc } from "@/utils/html";
+import { getLogoPrintUrl, getStoreSettings } from "@/lib/storeSettings";
+import { warrantyFooterHTML, warrantyTermHTML } from "@/lib/warrantyTerms";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -20,7 +10,8 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   const formatDate = (d: Date) =>
     new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-  const logoUrl = `${window.location.origin}${logo}`;
+  const store = getStoreSettings();
+  const logoUrl = getLogoPrintUrl();
   const c = sale.customer;
 
   // Linhas de Modelo / IMEI a partir dos aparelhos da venda
@@ -58,7 +49,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Recibo de Venda – Prime Paulista</title>
+<title>Recibo de Venda – ${esc(store.name)}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 12px; }
@@ -113,16 +104,16 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
 <!-- ===== RECIBO + TERMO DE GARANTIA, em 1 única folha ===== -->
 <div class="page">
   <div class="head">
-    <img src="${logoUrl}" alt="Prime Paulista" />
+    <img src="${logoUrl}" alt="${esc(store.name)}" />
     <div class="contacts">
-      <div>📱 ${STORE.whatsapp}</div>
-      <div>📘 ${STORE.facebook}</div>
-      <div>📷 ${STORE.instagram}</div>
-      <div>✉️ ${STORE.email}</div>
+      <div>📱 ${esc(store.whatsapp)}</div>
+      <div>📘 ${esc(store.facebook)}</div>
+      <div>📷 ${esc(store.instagram)}</div>
+      <div>✉️ ${esc(store.email)}</div>
     </div>
   </div>
-  <div class="addr">${STORE.address}</div>
-  <div class="cnpj">CNPJ: ${STORE.cnpj}</div>
+  <div class="addr">${esc(store.address)}</div>
+  <div class="cnpj">CNPJ: ${esc(store.cnpj)}</div>
 
   <div class="fields">
     ${fieldRow("Data", formatDate(sale.createdAt))}
@@ -169,31 +160,12 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   </table>
 
   <div class="warranty-foot">
-    APARELHO LACRADO 1 ANO DE GARANTIA PELO FABRICANTE<br/>
-    APARELHO SEMI NOVOS GARANTIA VIDE TERMO ABAIXO
+    ${warrantyFooterHTML()}
   </div>
 
   <!-- ===== TERMO DE GARANTIA (mesma folha) ===== -->
   <div class="term">
-  <h1>TERMO DE GARANTIA</h1>
-  <p class="lead">A garantia do aparelho é de 6 MESES ou 180 (CENTO E OITENTA) dias, a partir da data de compra; sendo:</p>
-  <ul>
-    <li>A garantia sobre o aparelho é de 6 meses contra eventuais defeitos de fabricação, defeitos esses não provocados por mau uso do mesmo.</li>
-    <li>A GARANTIA DA BATERIA É DE 90 (NOVENTA) dias e está de acordo com o artigo 26, inciso II, do Código de Defesa do Consumidor.</li>
-    <li>Funcionamento, instalação e atualização de aplicativos, bem como o sistema operacional do aparelho, NÃO FAZEM parte desta garantia.</li>
-    <li>Limpeza e conservação do aparelho NÃO FAZEM parte desta garantia.</li>
-    <li>A não apresentação deste documento (recibo/termo de garantia) que comprove a compra INVALIDA a garantia.</li>
-    <li>Qualquer mau funcionamento APÓS ATUALIZAÇÕES do sistema operacional ou aplicativos NÃO FAZ PARTE DESSA GARANTIA.</li>
-    <li>A GARANTIA é válida somente para o item descrito no recibo.</li>
-  </ul>
-  <p class="sec">NÃO ESTÃO INCLUSOS NESTA GARANTIA ACESSÓRIOS E TODAS AS PARTES EXTERNAS DO CELULAR, TAIS COMO:</p>
-  <p>Lentes, carcaças, capas, cases, botões laterais, tampas, películas protetoras, fones de ouvido e partes que se desgastam com o uso.</p>
-  <p class="sec">A GARANTIA É CANCELADA NOS SEGUINTES CASOS:</p>
-  <p>Em ocasião de quedas, esmagamentos, sobrecarga elétrica; exposição do aparelho a altas temperaturas, umidade ou líquidos; exposição do aparelho a poeira, pó e/ou limalha de metais; ou ainda quando constatado mau uso do aparelho, instalações, modificações ou atualizações no seu sistema operacional; rompimento do lacre/selo colocado pela Prime Paulista; e abertura do equipamento ou tentativa de conserto deste por terceiros que não sejam os técnicos da Prime Paulista, mesmo que para realização de outros serviços.</p>
-  <div class="sign">
-    <p class="agree">Li e concordo com os termos descritos acima.</p>
-    <div class="line">ASSINATURA DO CLIENTE</div>
-  </div>
+  ${warrantyTermHTML()}
   </div>
 </div>
 

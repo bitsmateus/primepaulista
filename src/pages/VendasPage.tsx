@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { Sale, PaymentMethod } from "@/types/inventory";
 import { printReceipt } from "@/utils/receiptGenerator";
 import {
@@ -44,7 +45,9 @@ function inPeriod(date: Date, period: string, now: Date): boolean {
 export default function VendasPage() {
   const { sales, salesLoading, devices, accessories, customers, returnSale, updateSale } = useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canCost = can(user?.role, "viewCost");
+  const canEditSale = can(user?.role, "editSales");
+  const canReturnSale = can(user?.role, "returnSales");
 
   const devicesById = useMemo(() => buildDeviceMap(devices), [devices]);
   const accessoriesById = useMemo(() => buildAccessoryMap(accessories), [accessories]);
@@ -146,12 +149,12 @@ export default function VendasPage() {
         </div>
 
         {/* Resumo */}
-        <div className={`grid grid-cols-2 gap-4 ${isAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
+        <div className={`grid grid-cols-2 gap-4 ${canCost ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           {[
             { label: "Vendas", value: summary.count },
             { label: "Faturamento líquido", value: fmt(summary.net) },
             { label: "Faturamento bruto", value: fmt(summary.gross) },
-            ...(isAdmin ? [{ label: "Lucro líquido acumulado", value: fmt(accumulatedProfit) }] : []),
+            ...(canCost ? [{ label: "Lucro líquido acumulado", value: fmt(accumulatedProfit) }] : []),
             { label: "Devolvidas", value: summary.returned },
           ].map((c) => (
             <Card key={c.label} className="border shadow-none">
@@ -213,7 +216,7 @@ export default function VendasPage() {
                     <TableHead>Itens</TableHead>
                     <TableHead>Pagamento</TableHead>
                     <TableHead>Total</TableHead>
-                    {isAdmin && <TableHead>Lucro líquido</TableHead>}
+                    {canCost && <TableHead>Lucro líquido</TableHead>}
                     <TableHead>Status</TableHead>
                     <TableHead className="w-32"></TableHead>
                   </TableRow>
@@ -236,7 +239,7 @@ export default function VendasPage() {
                       </TableCell>
                       <TableCell className="text-xs">{salePaymentLabel(s)}</TableCell>
                       <TableCell className="font-semibold">{fmt(saleFullValue(s))}</TableCell>
-                      {isAdmin && (
+                      {canCost && (
                         <TableCell className="font-semibold text-success">
                           {fmt(saleNetProfit(s, devicesById, accessoriesById))}
                         </TableCell>
@@ -252,12 +255,12 @@ export default function VendasPage() {
                           <Button variant="ghost" size="icon" title="2ª via do recibo" onClick={() => printReceipt(s, devices)}>
                             <Printer className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                          {isAdmin && !isReturned(s) && (
+                          {canEditSale && !isReturned(s) && (
                             <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(s)}>
                               <Pencil className="h-4 w-4 text-muted-foreground" />
                             </Button>
                           )}
-                          {canReturn(s, isAdmin) && (
+                          {canReturn(s, canReturnSale) && (
                             <Button variant="ghost" size="icon" title="Devolver/Estornar" onClick={() => { setReturnTarget(s); setReturnReason(""); }}>
                               <Undo2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -268,7 +271,7 @@ export default function VendasPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 10 : 9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={canCost ? 10 : 9} className="py-8 text-center text-muted-foreground">
                         {salesLoading ? "Carregando vendas…" : "Nenhuma venda encontrada."}
                       </TableCell>
                     </TableRow>
@@ -310,7 +313,7 @@ export default function VendasPage() {
                   <div className="flex justify-between text-muted-foreground"><span>Total pago (após troca)</span><span>{fmt(viewSale.total)}</span></div>
                 )}
               </div>
-              {isAdmin && (
+              {canCost && (
                 <div className="space-y-1 rounded-lg border p-3">
                   {viewSale.giftsCost > 0 && (
                     <div className="flex justify-between text-muted-foreground"><span>Custo dos brindes</span><span>− {fmt(viewSale.giftsCost)}</span></div>

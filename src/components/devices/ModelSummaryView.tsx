@@ -11,7 +11,7 @@ const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curren
 
 interface Props {
   groups: ModelSummary[];
-  isAdmin: boolean;
+  showCost: boolean;
   loading?: boolean;
   onSelectDevice: (d: Device) => void;
 }
@@ -19,7 +19,7 @@ interface Props {
 // "Categorização do estoque por modelo e condição": uma linha por
 // modelo + capacidade + condição, com quantidade e faixa de preço.
 // Clicar na linha mostra as unidades individuais.
-export function ModelSummaryView({ groups, isAdmin, loading, onSelectDevice }: Props) {
+export function ModelSummaryView({ groups, showCost, loading, onSelectDevice }: Props) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
     setOpen((prev) => {
@@ -29,7 +29,7 @@ export function ModelSummaryView({ groups, isAdmin, loading, onSelectDevice }: P
     });
 
   const totalUnits = groups.reduce((s, g) => s + g.qty, 0);
-  const cols = isAdmin ? 8 : 7;
+  const cols = showCost ? 8 : 7;
 
   return (
     <Card className="border shadow-none">
@@ -51,7 +51,7 @@ export function ModelSummaryView({ groups, isAdmin, loading, onSelectDevice }: P
                 <TableHead className="text-right">Qtd</TableHead>
                 <TableHead>Preço de venda</TableHead>
                 <TableHead>Bateria (média)</TableHead>
-                {isAdmin && <TableHead className="text-right">Custo total</TableHead>}
+                {showCost && <TableHead className="text-right">Custo total</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -80,7 +80,7 @@ export function ModelSummaryView({ groups, isAdmin, loading, onSelectDevice }: P
                             : `${fmt(g.minPrice)} – ${fmt(g.maxPrice!)}`}
                       </TableCell>
                       <TableCell>{g.avgBattery}%</TableCell>
-                      {isAdmin && <TableCell className="text-right">{fmt(g.totalCost)}</TableCell>}
+                      {showCost && <TableCell className="text-right">{fmt(g.totalCost)}</TableCell>}
                     </TableRow>
                     {isOpen && (
                       <TableRow className="hover:bg-transparent">

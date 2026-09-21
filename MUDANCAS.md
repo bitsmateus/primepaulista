@@ -50,6 +50,28 @@ Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual
 - **Base para as próximas fases**: armazenamento genérico de configurações da loja (`/settings/:chave`, só o administrador grava), já usado pelas mensagens.
 - O aviso "pronto para retirada" que antes saía do navegador (só quando o CRM estava aberto e conectado) agora sai pelo servidor, com o texto editável.
 
+### Fase 4A — Gestão: fornecedores, cargos, auditoria, configurações, conta e segurança
+- **Fornecedores** (novo menu): cadastro com nome, CPF/CNPJ, telefone, e-mail, endereço e observações; busca; ativo/inativo; **ficha** com os aparelhos comprados, contas a pagar e **total comprado** (o total e os custos só aparecem para quem pode ver custo).
+  - Fornecedor com aparelhos ou contas ligados **não é excluído**: o sistema avisa e oferece **inativar** (some das listas de escolha, o histórico continua).
+  - No cadastro do aparelho, o campo Fornecedor virou **seleção com busca** e o botão **"Cadastrar novo fornecedor"** na hora. Quem não gerencia fornecedores (ex.: vendedor) ainda pode digitar um nome livre.
+  - **Importação CSV/Excel** casa o fornecedor pelo nome (sem diferenciar maiúsculas) e cadastra sozinha os que faltam (a prévia avisa quais). **Contas a pagar** (BI) têm campo de fornecedor opcional.
+  - Os fornecedores que você já tinha digitado nos aparelhos foram **convertidos em cadastros automaticamente** (uma vez só, sem duplicar).
+- **Novos cargos**: **Gerente**, **Estoquista** e **Financeiro** (além de Administrador, Vendedor e Técnico). Na tela de Usuários há a tabela **"O que cada cargo pode"**.
+  - **Gerente**: tudo do administrador, menos usuários/cargos e variáveis/backup. **Estoquista**: estoque completo, fornecedores e importação, vê custo; sem PDV/CRM/BI. **Financeiro**: BI, contas, despesas e relatórios, vê custo e lucro; estoque só para consulta.
+  - A regra é a mesma no site e na API: o que o cargo não pode é **recusado pelo servidor** (não só escondido no menu). Trocar o cargo ou desativar alguém vale **na hora**, mesmo com a pessoa logada.
+  - Administrador, vendedor e técnico continuam com o que já podiam. Única mudança: o **técnico** deixou de conseguir, pela API, criar venda e mexer no CRM/WhatsApp (as telas dele nunca mostraram isso).
+- **Auditoria** (novo menu, para administrador e gerente; só leitura): quem fez o quê e quando, com filtros (período, usuário, ação, entidade, busca), paginação, detalhes em JSON e **exportar CSV**. Passaram a ser registrados: criar/editar/devolver venda, exclusões (aparelho, acessório, cliente, OS, orçamento, anexo, fornecedor), **mudança de custo/preço com antes → depois**, usuários (criar, cargo, ativar/desativar, redefinir senha), configurações, despesas/sangrias/comissões/contas, login (com sucesso e sem sucesso — **nunca a senha**) e troca da própria senha.
+- **Configurações** (novo menu; administrador e gerente):
+  - **Loja**: nome, slogan, WhatsApp, Facebook, Instagram, e-mail, endereço, CNPJ e chave PIX. Valem no recibo de venda, recibo de OS, orçamento, vitrine, catálogo e relatório de estoque. As mensagens de WhatsApp da assistência usam o nome e o PIX da loja quando os campos delas estiverem vazios.
+  - **Logo**: envie PNG/JPG/WEBP (até 2 MB); o navegador reduz para até 512 px. Aparece no menu, no login e nos documentos impressos. Tem "Restaurar logo padrão".
+  - **Termos de garantia**: prazos (lacrado, seminovo, bateria, serviço) e o texto do termo do recibo em blocos editáveis. Com os textos padrão o recibo sai **idêntico** ao de antes.
+  - **Segurança**: bloqueio automático da tela por inatividade (minutos; 0 = desligado).
+  - **Variáveis** (só administrador): chaves de integração (ex.: GEMINI_API_KEY) guardadas **cifradas** e **mascaradas**; "Mostrar valor" e "Copiar" ficam registrados na auditoria.
+  - **Backup** (só administrador): exporta todos os dados em JSON (sem senhas e sem valores de variáveis) e restaura **apenas as configurações**.
+- **Minha conta** (rodapé do menu): alterar a própria senha (senha atual, nova com 6+ caracteres e confirmação) e preferências de notificação.
+- **Bloquear tela** (rodapé do menu ou atalho **Alt+L**): cobre o sistema até a pessoa digitar a própria senha; continua bloqueada mesmo recarregando a página; "Sair" funciona na tela bloqueada. Também bloqueia sozinha por inatividade, se configurado.
+- **Notificações e alerta sonoro**: a cada 60 segundos (e ao voltar para a aba) o sistema confere OS prontas sem aviso, tarefas de leads vencidas/para hoje, orçamentos que vencem hoje, acessórios com estoque baixo e aparelhos parados há mais de 30 dias. **Só avisa quando algum número aumenta** (aviso na tela, notificação do navegador e um bipe curto), nunca na primeira carga nem repetindo o mesmo total. Cada usuário liga/desliga avisos e som em **Minha conta**.
+
 ---
 
 ## 19/06/2026 — v1.0.0

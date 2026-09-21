@@ -28,7 +28,7 @@ interface Props {
   device: Device | null;
   onClose: () => void;
   onEdit: (d: Device) => void;
-  isAdmin: boolean;
+  showCost: boolean;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -40,7 +40,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function DeviceDetailDialog({ device, onClose, onEdit, isAdmin }: Props) {
+export function DeviceDetailDialog({ device, onClose, onEdit, showCost }: Props) {
   const { data: history, isLoading } = useQuery({
     queryKey: ["device-history", device?.id],
     queryFn: () => api.deviceHistory(device!.id),
@@ -79,8 +79,8 @@ export function DeviceDetailDialog({ device, onClose, onEdit, isAdmin }: Props) 
             {device.status === "Vendido" ? "—" : `${daysInStock(device.entryDate ?? device.createdAt)} dias`}
           </Field>
           <Field label="Preço de venda">{device.salePrice != null ? fmt(device.salePrice) : "—"}</Field>
-          {isAdmin && <Field label="Custo">{fmt(device.cost)}</Field>}
-          {isAdmin && (
+          {showCost && <Field label="Custo">{fmt(device.cost)}</Field>}
+          {showCost && (
             <Field label="Margem">
               {margin != null ? `${fmt(margin)} (${(pct ?? 0).toFixed(0)}%)` : "—"}
             </Field>

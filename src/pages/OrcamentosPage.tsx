@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { QuoteFormDialog } from "@/components/quotes/QuoteFormDialog";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { useQuotes } from "@/hooks/useQuotes";
 import { Quote, QuoteDisplayStatus, QuoteStatus } from "@/types/quote";
 import {
@@ -13,7 +14,7 @@ import {
   quoteWhatsappText, whatsappLink,
 } from "@/lib/quotes";
 import { printQuote } from "@/utils/quotePrint";
-import { STORE } from "@/utils/receiptGenerator";
+import { getStoreSettings } from "@/lib/storeSettings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -69,7 +70,7 @@ export default function OrcamentosPage() {
   const { devices, accessories, customers } = useInventoryContext();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const isAdmin = user?.role === "admin";
+  const canDeleteAny = can(user?.role, "deleteRecords");
   const { quotes, isLoading, createQuote, updateQuote, setStatus, deleteQuote } = useQuotes();
 
   const [search, setSearch] = useState("");
@@ -114,7 +115,7 @@ export default function OrcamentosPage() {
       toast.error("Este orçamento não tem WhatsApp do cliente. Edite e informe o telefone.");
       return;
     }
-    window.open(whatsappLink(q.customerPhone, quoteWhatsappText(q, STORE.name)), "_blank", "noopener");
+    window.open(whatsappLink(q.customerPhone, quoteWhatsappText(q, getStoreSettings().name)), "_blank", "noopener");
     if (q.status === "Aberto") {
       try { await setStatus(q.id, "Enviado"); } catch { /* o hook já avisa */ }
     }
@@ -127,7 +128,7 @@ export default function OrcamentosPage() {
     } catch { /* o hook já avisa */ }
   };
 
-  const canDelete = (q: Quote) => q.status !== "Convertido" && (isAdmin || (!!q.sellerId && q.sellerId === user?.id));
+  const canDelete = (q: Quote) => q.status !== "Convertido" && (canDeleteAny || (!!q.sellerId && q.sellerId === user?.id));
 
   return (
     <AppLayout>

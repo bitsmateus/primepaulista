@@ -2,6 +2,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Megaphone, Wifi, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import LeadsTab from "@/components/crm/LeadsTab";
 import CampaignsTab from "@/components/crm/CampaignsTab";
 import WhatsAppTab from "@/components/crm/WhatsAppTab";
@@ -9,7 +10,8 @@ import AutomationsTab from "@/components/crm/AutomationsTab";
 
 export default function CRMPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canAutomations = can(user?.role, "manageAutomations");
+  const canWhatsapp = can(user?.role, "manageWhatsapp");
 
   return (
     <AppLayout>
@@ -20,7 +22,7 @@ export default function CRMPage() {
         </div>
 
         <Tabs defaultValue="leads" className="space-y-4">
-          <TabsList className={`grid w-full ${isAdmin ? "grid-cols-4" : "grid-cols-2"}`}>
+          <TabsList className={`grid w-full ${canAutomations && canWhatsapp ? "grid-cols-4" : canAutomations || canWhatsapp ? "grid-cols-3" : "grid-cols-2"}`}>
             <TabsTrigger value="leads" className="gap-2">
               <Users className="h-4 w-4" />
               Gestão de Leads
@@ -29,13 +31,13 @@ export default function CRMPage() {
               <Megaphone className="h-4 w-4" />
               Campanhas
             </TabsTrigger>
-            {isAdmin && (
+            {canAutomations && (
               <TabsTrigger value="automatico" className="gap-2">
                 <Bot className="h-4 w-4" />
                 Automático
               </TabsTrigger>
             )}
-            {isAdmin && (
+            {canWhatsapp && (
               <TabsTrigger value="whatsapp" className="gap-2">
                 <Wifi className="h-4 w-4" />
                 Conectar WhatsApp
@@ -49,12 +51,12 @@ export default function CRMPage() {
           <TabsContent value="campaigns">
             <CampaignsTab />
           </TabsContent>
-          {isAdmin && (
+          {canAutomations && (
             <TabsContent value="automatico">
               <AutomationsTab />
             </TabsContent>
           )}
-          {isAdmin && (
+          {canWhatsapp && (
             <TabsContent value="whatsapp">
               <WhatsAppTab />
             </TabsContent>

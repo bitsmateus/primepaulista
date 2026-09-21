@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Device } from "@/types/inventory";
@@ -9,6 +9,7 @@ import {
   parseDevicesCsv, parseDevicesSheet, validateImport,
 } from "@/lib/deviceCsv";
 import { downloadCsv } from "@/lib/download";
+import { newSupplierNames } from "@/lib/suppliers";
 import { downloadXlsx, readXlsxRows } from "@/lib/excel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,12 @@ export function DeviceImportDialog({ open, onOpenChange, devices }: Props) {
     [parsed, devices, replaceStock]
   );
   const valid = rows.filter((r) => r.valid);
+  // Fornecedores do arquivo que ainda não existem no cadastro: serão criados automaticamente
+  const { data: knownSuppliers = [] } = useQuery({ queryKey: ["suppliers", "", "all"], queryFn: () => api.listSuppliers(), enabled: open });
+  const newSuppliers = useMemo(
+    () => newSupplierNames(valid.map((r) => r.device.supplier ?? ""), knownSuppliers),
+    [valid, knownSuppliers]
+  );
   const invalid = rows.filter((r) => !r.valid);
   const withWarnings = valid.filter((r) => r.warnings.length > 0);
   // Aparelhos que seriam apagados: estoque ativo (não vendido)
@@ -87,7 +94,9 @@ export function DeviceImportDialog({ open, onOpenChange, devices }: Props) {
     try {
       const res = await api.importDevices(valid.map((r) => r.device), replaceStock);
       await qc.invalidateQueries({ queryKey: ["devices"] });
+      await qc.invalidateQueries({ queryKey: ["suppliers"] });
       const parts = [`${res.created} aparelho(s) importado(s)`];
+      if (res.suppliersCreated) parts.push(`${res.suppliersCreated} fornecedor(es) novo(s) cadastrado(s)`);
       if (res.removed) parts.push(`${res.removed} do estoque anterior apagado(s)`);
       if (res.skipped.length) parts.push(`${res.skipped.length} ignorado(s) por duplicidade`);
       toast.success(parts.join(" · "));
@@ -118,6 +127,11 @@ export function DeviceImportDialog({ open, onOpenChange, devices }: Props) {
         </DialogHeader>
 
         <div className="space-y-3">
+          {parsed && newSuppliers.length > 0 && (
+            <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm" data-testid="import-new-suppliers">
+              {newSuppliers.length} fornecedor(es) do arquivo ainda não existe(m) e será(ão) cadastrado(s) automaticamente: {newSuppliers.slice(0, 8).join(", ")}{newSuppliers.length > 8 ? "…" : ""}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={templateXlsx} className="gap-2">
               <FileSpreadsheet className="h-4 w-4" /> Baixar modelo Excel

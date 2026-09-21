@@ -11,10 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { useOsMessages, useOsNotifications, useNotifyOrder } from "@/hooks/useOsMessages";
 import {
-  DEFAULT_OS_MESSAGES, OS_EVENTS, OS_EVENT_LABELS, OS_VARIABLES, OsMessagesSettings, renderOsMessage, OsForMessage,
+  DEFAULT_OS_MESSAGES, OS_EVENTS, OS_EVENT_LABELS, OS_VARIABLES, OsMessagesSettings, renderOsMessage, OsForMessage, withStoreFallback,
 } from "@/lib/osMessages";
+import { useStoreSnapshot } from "@/hooks/useAppSettings";
 import { COST_RESPONSIBILITIES } from "@/lib/serviceOrders";
 import { NotificationStatusBadge } from "@/components/assistencia/NotificationStatusBadge";
 import { NotificationStatus, OSEvent, CostResponsibility } from "@/types/serviceOrder";
@@ -32,8 +34,9 @@ const SAMPLE: OsForMessage = {
 
 export default function OSMessages() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canEditMessages = can(user?.role, "editSettings");
   const { settings, loaded, save } = useOsMessages();
+  const store = useStoreSnapshot();
   const [draft, setDraft] = useState<OsMessagesSettings>(settings);
   const [dirty, setDirty] = useState(false);
   const [simResp, setSimResp] = useState<CostResponsibility>("Cliente");
@@ -72,7 +75,7 @@ export default function OSMessages() {
     chargedAmount: simResp === "Garantia da Loja" || simResp === "Cortesia / Loja" ? 0 : simResp === "Dividido / Co-participação" ? 200 : 450,
   };
 
-  const invalid = OS_EVENTS.some((ev) => !draft.templates[ev].trim()) || !draft.storeName.trim();
+  const invalid = OS_EVENTS.some((ev) => !draft.templates[ev].trim()) ;
   const handleSave = () => save.mutate(draft, { onSuccess: () => setDirty(false) });
   const handleReset = () => {
     setDraft({ ...DEFAULT_OS_MESSAGES, pixKey: draft.pixKey, includePixKey: draft.includePixKey, storeName: draft.storeName });
@@ -81,7 +84,7 @@ export default function OSMessages() {
 
   return (
     <div className="space-y-6">
-      {isAdmin ? (
+      {canEditMessages ? (
         <Card className="border shadow-none">
           <CardContent className="space-y-6 p-6">
             <div>
@@ -111,11 +114,11 @@ export default function OSMessages() {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1">
                 <Label htmlFor="store-name">Nome da loja ({"{loja}"})</Label>
-                <Input id="store-name" value={draft.storeName} maxLength={80} onChange={(e) => edit({ storeName: e.target.value })} />
+                <Input id="store-name" value={draft.storeName} maxLength={80} placeholder={`Vazio = ${store.name}`} onChange={(e) => edit({ storeName: e.target.value })} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="pix-key">Chave PIX ({"{chave_pix}"})</Label>
-                <Input id="pix-key" value={draft.pixKey} maxLength={200} onChange={(e) => edit({ pixKey: e.target.value })} placeholder="CPF, e-mail, telefone ou chave aleatória" />
+                <Input id="pix-key" value={draft.pixKey} maxLength={200} onChange={(e) => edit({ pixKey: e.target.value })} placeholder={store.pixKey ? "Vazio = chave PIX da loja (Configurações)" : "CPF, e-mail, telefone ou chave aleatória"} />
               </div>
               <div className="flex items-end gap-2 pb-2">
                 <Switch id="include-pix" checked={draft.includePixKey} onCheckedChange={(v) => edit({ includePixKey: v })} aria-label="Incluir chave PIX nas mensagens" />
@@ -168,7 +171,7 @@ export default function OSMessages() {
                       className="whitespace-pre-line rounded-lg bg-muted p-3 text-sm"
                       data-testid={`preview-${ev}`}
                     >
-                      {renderOsMessage(draft.templates[ev], sample, draft) || "—"}
+                      {renderOsMessage(draft.templates[ev], sample, withStoreFallback(draft, store)) || "—"}
                     </div>
                     {!draft.enabled[ev] && <Badge variant="secondary">Envio automático desligado (só manual)</Badge>}
                   </div>

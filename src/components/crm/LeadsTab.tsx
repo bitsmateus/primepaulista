@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import { useCRMContext } from "@/contexts/CRMContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { ApiError } from "@/lib/api";
 import { formatPhoneInput, leadMatchesSearch, buildFunnelSummary, leadHasPurchased, buildFunnelMetrics, pendingTasksToday } from "@/lib/crm";
 import { Lead } from "@/types/crm";
@@ -38,7 +39,7 @@ export default function LeadsTab() {
   } = useCRMContext();
   const { devices, sales } = useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const seesAllOwners = can(user?.role, "manageAutomations");
 
   const [search, setSearch] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all"); // "all" | "mine" | nome do vendedor
@@ -194,7 +195,7 @@ export default function LeadsTab() {
           <SelectContent>
             <SelectItem value="all">Todos os leads</SelectItem>
             <SelectItem value="mine">Meus leads</SelectItem>
-            {isAdmin && owners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+            {seesAllOwners && owners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
           </SelectContent>
         </Select>
         <Button variant="outline" onClick={() => setShowMetrics(true)}>

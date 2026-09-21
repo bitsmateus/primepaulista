@@ -1,20 +1,18 @@
+import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare,
   Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2, RefreshCw, FileText,
+  Truck, ScrollText, Settings, UserCircle, Lock,
 } from "lucide-react";
 import { toast } from "sonner";
-import logo from "@/assets/logo-prime-paulista.png";
 import { useAuth } from "@/contexts/AuthContext";
-import { canAccessRoute } from "@/lib/permissions";
+import { canAccessRoute, ROLE_LABELS } from "@/lib/permissions";
+import { useLogoSrc, useStoreSnapshot } from "@/hooks/useAppSettings";
+import { useLock } from "@/contexts/LockContext";
+import { AccountDialog } from "@/components/AccountDialog";
 import { clearAppCache } from "@/lib/cache";
 import { APP_VERSION } from "@/version";
-
-const roleLabels: Record<string, string> = {
-  admin: "Administrador",
-  vendedor: "Vendedor",
-  tecnico: "Técnico",
-};
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -24,12 +22,15 @@ const navItems = [
   { to: "/devices", label: "Aparelhos", icon: Smartphone },
   { to: "/estoque", label: "Estoque Geral", icon: Table2 },
   { to: "/accessories", label: "Acessórios", icon: Package },
+  { to: "/fornecedores", label: "Fornecedores", icon: Truck },
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/crm", label: "CRM", icon: MessageSquare },
   { to: "/assistencia", label: "Assistência", icon: Wrench },
   { to: "/garantias", label: "Garantias", icon: BadgeCheck },
   { to: "/bi", label: "BI Financeiro", icon: BarChart3 },
   { to: "/usuarios", label: "Usuários", icon: ShieldCheck },
+  { to: "/auditoria", label: "Auditoria", icon: ScrollText },
+  { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -43,6 +44,10 @@ export function SidebarContent({ collapsed = false, onToggle, onNavigate }: Side
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { lock } = useLock();
+  const logo = useLogoSrc();
+  const store = useStoreSnapshot();
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const handleLogout = () => {
     onNavigate?.();
@@ -58,8 +63,8 @@ export function SidebarContent({ collapsed = false, onToggle, onNavigate }: Side
   return (
     <div className="flex h-full flex-col bg-sidebar">
       <div className={`flex h-16 items-center border-b ${collapsed ? "justify-center gap-1 px-1" : "gap-2.5 px-4"}`}>
-        <img src={logo} alt="Prime Paulista" className={`shrink-0 rounded-full object-cover ${collapsed ? "h-8 w-8" : "h-9 w-9"}`} />
-        {!collapsed && <span className="flex-1 truncate text-base font-semibold text-foreground">Prime Paulista</span>}
+        <img src={logo} alt={store.name} className={`shrink-0 rounded-full object-cover ${collapsed ? "h-8 w-8" : "h-9 w-9"}`} />
+        {!collapsed && <span className="flex-1 truncate text-base font-semibold text-foreground">{store.name}</span>}
         {onToggle && (
           <button
             onClick={onToggle}
@@ -101,9 +106,34 @@ export function SidebarContent({ collapsed = false, onToggle, onNavigate }: Side
         {user && !collapsed && (
           <div className="mb-2 px-3">
             <p className="truncate text-sm font-medium text-foreground">{user.name}</p>
-            <p className="text-xs text-muted-foreground">{roleLabels[user.role] ?? user.role}</p>
+            <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.role] ?? user.role}</p>
           </div>
         )}
+        <button
+          onClick={() => setAccountOpen(true)}
+          title={collapsed ? "Minha conta" : undefined}
+          aria-label="Minha conta"
+          className={`flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${
+            collapsed ? "justify-center px-2" : "gap-3 px-3"
+          }`}
+        >
+          <UserCircle className="h-4 w-4 shrink-0" />
+          {!collapsed && "Minha conta"}
+        </button>
+        <button
+          onClick={() => {
+            onNavigate?.();
+            lock();
+          }}
+          title={collapsed ? "Bloquear tela (Alt+L)" : "Bloquear tela (Alt+L)"}
+          aria-label="Bloquear tela"
+          className={`flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${
+            collapsed ? "justify-center px-2" : "gap-3 px-3"
+          }`}
+        >
+          <Lock className="h-4 w-4 shrink-0" />
+          {!collapsed && "Bloquear tela"}
+        </button>
         <button
           onClick={handleClearCache}
           title={collapsed ? "Limpar cache" : undefined}
@@ -126,10 +156,11 @@ export function SidebarContent({ collapsed = false, onToggle, onNavigate }: Side
         </button>
         {!collapsed && (
           <p className="mt-2 px-3 text-center text-[11px] text-muted-foreground">
-            Prime Paulista · v{APP_VERSION}
+            {store.name} · v{APP_VERSION}
           </p>
         )}
       </div>
+      <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
     </div>
   );
 }

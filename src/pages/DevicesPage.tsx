@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { SupplierSelect } from "@/components/devices/SupplierSelect";
+import { can } from "@/lib/permissions";
 import { DeviceStatus, DeviceCategory, DeviceCondition, Device } from "@/types/inventory";
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { formatCapacity } from "@/lib/utils";
@@ -75,7 +77,12 @@ export default function DevicesPage() {
   } = useInventoryContext();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const isAdmin = user?.role === "admin";
+  const canCost = can(user?.role, "viewCost");
+  const canEdit = can(user?.role, "editStock");
+  const canImport = can(user?.role, "importStock");
+  const canBulk = can(user?.role, "bulkStockActions");
+  const canReports = can(user?.role, "viewReports");
+  const canDelete = can(user?.role, "deleteRecords");
   const [deleteTarget, setDeleteTarget] = useState<Device | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const detailDevice = useMemo(() => devices.find((d) => d.id === detailId) ?? null, [devices, detailId]);
@@ -113,6 +120,7 @@ export default function DevicesPage() {
   const [condition, setCondition] = useState<DeviceCondition>("Lacrado");
   const [batteryHealth, setBatteryHealth] = useState("100");
   const [supplier, setSupplier] = useState("");
+  const [supplierId, setSupplierId] = useState<string | null>(null);
   const [cost, setCost] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [serialImei, setSerialImei] = useState(""); // IMEI 1
@@ -160,6 +168,7 @@ export default function DevicesPage() {
     setCondition(d.condition);
     setBatteryHealth(String(d.batteryHealth ?? 100));
     setSupplier(d.supplier || "");
+    setSupplierId(d.supplierId ?? null);
     setCost(String(d.cost ?? ""));
     setSalePrice(d.salePrice != null ? String(d.salePrice) : "");
     setSerialImei(d.serialImei || ""); setImei2(d.imei2 || ""); setSerial(d.serial || "");
@@ -195,6 +204,7 @@ export default function DevicesPage() {
       condition,
       batteryHealth: Number(batteryHealth),
       supplier,
+      supplierId,
       cost: Number(cost) || 0,
       salePrice: salePrice ? Number(salePrice) : undefined,
       serialImei,
@@ -362,13 +372,13 @@ export default function DevicesPage() {
     const headers = [
       "Categoria", "Marca", "Modelo", "Capacidade", "Cor", "Condição", "Bateria %",
       "IMEI 1", "IMEI 2", "Serial", "Local", "Fornecedor",
-      ...(isAdmin ? ["Custo", "Margem"] : []), "Preço de venda",
+      ...(canCost ? ["Custo", "Margem"] : []), "Preço de venda",
       "Status", "Dias em estoque", "Data de entrada", "Cadastro",
     ];
     const rows = sortedFilteredDevices.map((d) => [
       d.category || "iPhone", d.brand, d.model, d.capacity, d.color, d.condition, d.batteryHealth,
       d.serialImei || "", d.imei2 || "", d.serial || d.internalSerial, d.location, d.supplier || "",
-      ...(isAdmin ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
+      ...(canCost ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
       d.salePrice != null ? d.salePrice.toFixed(2) : "",
       d.status, daysInStock(d.entryDate ?? d.createdAt),
       new Date(d.entryDate ?? d.createdAt).toLocaleDateString("pt-BR"),
@@ -384,7 +394,7 @@ export default function DevicesPage() {
     });
 
   // checkbox + 12 colunas fixas (+ custo e margem para admin)
-  const colCount = 13 + (isAdmin ? 2 : 0);
+  const colCount = 13 + (canCost ? 2 : 0);
 
   // Local do aparelho: clicar abre um menu para movê-lo
   const renderLocation = (d: Device) =>
@@ -420,7 +430,7 @@ export default function DevicesPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {isAdmin && (
+            {canImport && (
               <Button variant="outline" onClick={() => setShowImport(true)} className="gap-2">
                 <Upload className="h-4 w-4" /> Importar CSV / Excel
               </Button>
@@ -428,7 +438,7 @@ export default function DevicesPage() {
             <Button variant="outline" onClick={() => setShowCount(true)} className="gap-2">
               <ClipboardCheck className="h-4 w-4" /> Balanço
             </Button>
-            {isAdmin && (
+            {canBulk && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon" title="Mais ações" aria-label="Mais ações">
@@ -442,10 +452,12 @@ export default function DevicesPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Aparelho
-            </Button>
+            {canEdit && (
+              <Button onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Aparelho
+              </Button>
+            )}
           </div>
         </div>
 
@@ -458,7 +470,7 @@ export default function DevicesPage() {
             { label: "Seminovos (em estoque)", value: seminovos },
             { label: "Vendidos", value: report.sold },
             { label: "Em manutenção", value: report.maintenance },
-            ...(isAdmin
+            ...(canCost
               ? [
                   { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
                   { label: "Margem potencial", value: fmt(report.potentialMargin) },
@@ -520,10 +532,10 @@ export default function DevicesPage() {
           <Button variant="outline" onClick={() => printDeviceShowcase(reportDevices)} className="gap-2 shrink-0" title="Vitrine só com aparelhos disponíveis, para enviar ao cliente">
             <Store className="h-4 w-4" /> Vitrine (cliente)
           </Button>
-          <Button variant="outline" onClick={() => printDeviceCatalog(reportDevices, isAdmin)} className="gap-2 shrink-0" title="Catálogo só com aparelhos disponíveis (vendidos não entram)">
+          <Button variant="outline" onClick={() => printDeviceCatalog(reportDevices, canCost)} className="gap-2 shrink-0" title="Catálogo só com aparelhos disponíveis (vendidos não entram)">
             <Printer className="h-4 w-4" /> Catálogo (A4)
           </Button>
-          {isAdmin && (
+          {canReports && (
             <Button
               variant="outline"
               onClick={() => printDeviceStockReport(reportDevices)}
@@ -594,7 +606,7 @@ export default function DevicesPage() {
             <Select value={sortKey} onValueChange={(v) => setSortKey(v as DeviceSortKey)}>
               <SelectTrigger className="w-72" aria-label="Ordem do estoque"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {DEVICE_SORT_OPTIONS.filter((o) => !o.adminOnly || isAdmin).map((o) => (
+                {DEVICE_SORT_OPTIONS.filter((o) => !o.adminOnly || canCost).map((o) => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -649,7 +661,7 @@ export default function DevicesPage() {
         {viewMode === "summary" ? (
           <ModelSummaryView
             groups={summaryGroups}
-            isAdmin={isAdmin}
+            showCost={canCost}
             loading={devicesLoading}
             onSelectDevice={(d) => setDetailId(d.id)}
           />
@@ -664,7 +676,7 @@ export default function DevicesPage() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {list.map((d) => {
                     const days = daysInStock(d.entryDate ?? d.createdAt);
-                    const m = isAdmin ? deviceMargin(d) : null;
+                    const m = canCost ? deviceMargin(d) : null;
                     return (
                       <Card key={d.id} className="border shadow-none">
                         <CardContent className="p-4">
@@ -698,10 +710,10 @@ export default function DevicesPage() {
                               <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir etiqueta" onClick={() => printLabel(d)}>
                                 <Tag className="h-4 w-4 text-muted-foreground" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar" onClick={() => openEdit(d)}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar" disabled={!canEdit} onClick={() => openEdit(d)}>
                                 <Pencil className="h-4 w-4 text-muted-foreground" />
                               </Button>
-                              {isAdmin && d.status !== "Vendido" && (
+                              {canDelete && d.status !== "Vendido" && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8" title="Excluir" onClick={() => setDeleteTarget(d)}>
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
@@ -743,9 +755,9 @@ export default function DevicesPage() {
                       <TableHead>Bateria</TableHead>
                       <TableHead>Serial</TableHead>
                       <TableHead>Local</TableHead>
-                      {isAdmin && <TableHead>Custo</TableHead>}
+                      {canCost && <TableHead>Custo</TableHead>}
                       <TableHead>Preço</TableHead>
-                      {isAdmin && <TableHead>Margem</TableHead>}
+                      {canCost && <TableHead>Margem</TableHead>}
                       <TableHead>Dias</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-28"></TableHead>
@@ -793,9 +805,9 @@ export default function DevicesPage() {
                               {d.serial || d.internalSerial}
                             </TableCell>
                             <TableCell>{renderLocation(d)}</TableCell>
-                            {isAdmin && <TableCell>{fmt(d.cost)}</TableCell>}
+                            {canCost && <TableCell>{fmt(d.cost)}</TableCell>}
                             <TableCell>{d.salePrice != null ? fmt(d.salePrice) : "—"}</TableCell>
-                            {isAdmin && (
+                            {canCost && (
                               <TableCell>
                                 {(() => {
                                   const m = deviceMargin(d);
@@ -837,10 +849,10 @@ export default function DevicesPage() {
                                 <Button variant="ghost" size="icon" title="Imprimir etiqueta" onClick={() => printLabel(d)}>
                                   <Tag className="h-4 w-4 text-muted-foreground" />
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={() => openEdit(d)} title="Editar">
+                                <Button variant="ghost" size="icon" onClick={() => openEdit(d)} disabled={!canEdit} title="Editar">
                                   <Pencil className="h-4 w-4 text-muted-foreground" />
                                 </Button>
-                                {isAdmin && d.status !== "Vendido" && (
+                                {canDelete && d.status !== "Vendido" && (
                                   <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(d)} title="Excluir">
                                     <Trash2 className="h-4 w-4 text-destructive" />
                                   </Button>
@@ -999,7 +1011,12 @@ export default function DevicesPage() {
 
             <div className="space-y-2">
               <Label>Fornecedor</Label>
-              <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Nome do fornecedor" />
+              <SupplierSelect
+                value={{ supplierId, name: supplier }}
+                onChange={(v) => { setSupplier(v.name); setSupplierId(v.supplierId); }}
+                canCreate={can(user?.role, "manageSuppliers")}
+                ariaLabel="Fornecedor"
+              />
             </div>
 
             <div className="space-y-2">
@@ -1008,7 +1025,7 @@ export default function DevicesPage() {
               <p className="text-xs text-muted-foreground">Dia da compra no fornecedor.</p>
             </div>
 
-            {isAdmin && (
+            {canCost && (
               <div className="space-y-2">
                 <Label>Custo (R$)</Label>
                 <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
@@ -1100,12 +1117,12 @@ export default function DevicesPage() {
       </Dialog>
 
       <DeviceImportDialog open={showImport} onOpenChange={setShowImport} devices={devices} />
-      <StockCountDialog open={showCount} onOpenChange={setShowCount} devices={devices} isAdmin={isAdmin} />
+      <StockCountDialog open={showCount} onOpenChange={setShowCount} devices={devices} showCost={canCost} />
       <DeviceDetailDialog
         device={detailDevice}
         onClose={() => setDetailId(null)}
         onEdit={openEdit}
-        isAdmin={isAdmin}
+        showCost={canCost}
       />
       <BarcodeScannerDialog
         open={scanTarget !== null}

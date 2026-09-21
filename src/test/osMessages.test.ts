@@ -199,3 +199,26 @@ describe("cópias front e servidor não divergem", () => {
     expect(front.formatBRL(NaN)).toBe("R$ 0,00");
   });
 });
+
+// Fase 4A: nome e PIX próprios vazios usam os da loja (Configurações > Loja) — nas duas cópias
+describe("withStoreFallback (front = servidor)", () => {
+  const store = { name: "Loja Nova", pixKey: "pix@loja.com" };
+  for (const [nome, mod] of [["front", front], ["servidor", server]] as const) {
+    it(`${nome}: campos próprios vazios usam os da loja`, () => {
+      const s = mod.withStoreFallback({ ...mod.DEFAULT_OS_MESSAGES, storeName: "  ", pixKey: "" }, store);
+      expect(s.storeName).toBe("Loja Nova");
+      expect(s.pixKey).toBe("pix@loja.com");
+    });
+    it(`${nome}: campos próprios preenchidos têm prioridade`, () => {
+      const s = mod.withStoreFallback({ ...mod.DEFAULT_OS_MESSAGES, storeName: "Assistência X", pixKey: "meu@pix" }, store);
+      expect(s.storeName).toBe("Assistência X");
+      expect(s.pixKey).toBe("meu@pix");
+    });
+    it(`${nome}: padrão do nome é vazio (usa a loja) e a mensagem sai com o nome da loja`, () => {
+      expect(mod.DEFAULT_OS_MESSAGES.storeName).toBe("");
+      const s = mod.withStoreFallback({ ...mod.DEFAULT_OS_MESSAGES, includePixKey: true }, store);
+      const msg = mod.renderOsMessage("Olá! {loja} — PIX: {chave_pix}", os(), s);
+      expect(msg).toBe("Olá! Loja Nova — PIX: pix@loja.com");
+    });
+  }
+});

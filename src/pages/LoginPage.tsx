@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ApiError } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import logo from "@/assets/logo-prime-paulista.png";
+import defaultLogo from "@/assets/logo-prime-paulista.png";
+import { DEFAULT_STORE } from "@/lib/storeSettings";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -19,6 +21,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Nome e logo da loja (endpoint público); sem resposta, valem os padrões
+  const { data: branding } = useQuery({ queryKey: ["branding"], queryFn: api.getBranding, staleTime: 300_000, retry: false });
+  const logo = branding?.logoDataUrl || defaultLogo;
+  const storeName = branding?.name || DEFAULT_STORE.name;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +46,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center space-y-3">
-          <img src={logo} alt="Prime Paulista" className="h-14 mx-auto object-contain" />
+          <img src={logo} alt={storeName} className="h-14 mx-auto object-contain" />
           <CardTitle className="text-xl">Acesso ao Sistema</CardTitle>
         </CardHeader>
         <CardContent>

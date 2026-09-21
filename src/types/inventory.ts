@@ -13,7 +13,8 @@ export interface Device {
   color: string;
   condition: DeviceCondition;
   batteryHealth: number;
-  supplier: string;
+  supplier: string; // nome exibido
+  supplierId?: string | null; // fornecedor cadastrado (Fornecedores)
   cost: number;
   salePrice?: number;
   serialImei: string; // IMEI 1

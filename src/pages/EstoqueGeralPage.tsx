@@ -3,6 +3,7 @@ import { Search, Smartphone, Package, Download } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { DeviceStatus } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
 import { daysInStock, deviceMargin, deviceMarginPct } from "@/lib/devices";
@@ -36,7 +37,7 @@ const stickyHead = "sticky top-0 z-10 bg-muted/95 backdrop-blur";
 export default function EstoqueGeralPage() {
   const { devices, accessories, devicesLoading, accessoriesLoading } = useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canCost = can(user?.role, "viewCost");
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("devices");
 
@@ -63,7 +64,7 @@ export default function EstoqueGeralPage() {
   }, [accessories, q]);
 
   const available = devices.filter((d) => d.status === "Disponível").length;
-  const stockValue = isAdmin
+  const stockValue = canCost
     ? devices.reduce((s, d) => s + (d.cost || 0), 0) +
       accessories.reduce((s, a) => s + (a.cost || 0) * a.quantity, 0)
     : 0;
@@ -74,7 +75,7 @@ export default function EstoqueGeralPage() {
     { label: "Disponíveis", value: available },
     { label: "Acessórios (itens)", value: accessories.length },
     { label: "Acessórios (unidades)", value: accessoryUnits },
-    ...(isAdmin ? [{ label: "Valor em estoque (custo)", value: fmt(stockValue) }] : []),
+    ...(canCost ? [{ label: "Valor em estoque (custo)", value: fmt(stockValue) }] : []),
   ];
 
   // ----- Exportar CSV da aba ativa -----
@@ -94,13 +95,13 @@ export default function EstoqueGeralPage() {
     const headers = [
       "Categoria", "Modelo", "Capacidade", "Cor", "Condição", "Bateria %",
       "Serial", "IMEI 1", "IMEI 2", "Fornecedor",
-      ...(isAdmin ? ["Custo", "Margem"] : []), "Preço de venda",
+      ...(canCost ? ["Custo", "Margem"] : []), "Preço de venda",
       "Status", "Dias em estoque",
     ];
     const rows = filteredDevices.map((d) => [
       d.category || "iPhone", d.model, d.capacity, d.color, d.condition, d.batteryHealth,
       d.serial || d.internalSerial, d.serialImei || "", d.imei2 || "", d.supplier || "",
-      ...(isAdmin ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
+      ...(canCost ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
       d.salePrice != null ? d.salePrice.toFixed(2) : "",
       d.status, d.status === "Vendido" ? "" : daysInStock(d.entryDate ?? d.createdAt),
     ]);
@@ -110,11 +111,11 @@ export default function EstoqueGeralPage() {
   const exportAccessories = () => {
     const headers = [
       "Nome", "Categoria", "Subcategoria", "Modelo compatível", "Código",
-      ...(isAdmin ? ["Custo", "Margem"] : []), "Preço", "Quantidade", "Status",
+      ...(canCost ? ["Custo", "Margem"] : []), "Preço", "Quantidade", "Status",
     ];
     const rows = filteredAccessories.map((a) => [
       a.name, a.category, a.subcategory, a.compatibleModel || "", a.barcode || "",
-      ...(isAdmin ? [a.cost.toFixed(2), accessoryMargin(a) != null ? accessoryMargin(a)!.toFixed(2) : ""] : []),
+      ...(canCost ? [a.cost.toFixed(2), accessoryMargin(a) != null ? accessoryMargin(a)!.toFixed(2) : ""] : []),
       a.price != null ? a.price.toFixed(2) : "",
       a.quantity, accessoryStockStatus(a),
     ]);
@@ -189,9 +190,9 @@ export default function EstoqueGeralPage() {
                         <TableHead className={stickyHead}>Serial</TableHead>
                         <TableHead className={stickyHead}>IMEI 1</TableHead>
                         <TableHead className={stickyHead}>Fornecedor</TableHead>
-                        {isAdmin && <TableHead className={stickyHead}>Custo</TableHead>}
+                        {canCost && <TableHead className={stickyHead}>Custo</TableHead>}
                         <TableHead className={stickyHead}>Preço</TableHead>
-                        {isAdmin && <TableHead className={stickyHead}>Margem</TableHead>}
+                        {canCost && <TableHead className={stickyHead}>Margem</TableHead>}
                         <TableHead className={stickyHead}>Dias</TableHead>
                         <TableHead className={stickyHead}>Status</TableHead>
                       </TableRow>
@@ -208,9 +209,9 @@ export default function EstoqueGeralPage() {
                           <TableCell className="font-mono text-xs">{d.serial || d.internalSerial}</TableCell>
                           <TableCell className="font-mono text-xs">{d.serialImei || "—"}</TableCell>
                           <TableCell className="text-muted-foreground">{d.supplier || "—"}</TableCell>
-                          {isAdmin && <TableCell>{fmt(d.cost)}</TableCell>}
+                          {canCost && <TableCell>{fmt(d.cost)}</TableCell>}
                           <TableCell>{d.salePrice != null ? fmt(d.salePrice) : "—"}</TableCell>
-                          {isAdmin && (
+                          {canCost && (
                             <TableCell>
                               {(() => {
                                 const m = deviceMargin(d);
@@ -235,7 +236,7 @@ export default function EstoqueGeralPage() {
                       ))}
                       {filteredDevices.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={isAdmin ? 14 : 12} className="py-8 text-center text-muted-foreground">
+                          <TableCell colSpan={canCost ? 14 : 12} className="py-8 text-center text-muted-foreground">
                             {devicesLoading ? "Carregando aparelhos…" : "Nenhum aparelho encontrado."}
                           </TableCell>
                         </TableRow>
@@ -259,9 +260,9 @@ export default function EstoqueGeralPage() {
                         <TableHead className={stickyHead}>Categoria</TableHead>
                         <TableHead className={stickyHead}>Modelo</TableHead>
                         <TableHead className={stickyHead}>Código</TableHead>
-                        {isAdmin && <TableHead className={stickyHead}>Custo</TableHead>}
+                        {canCost && <TableHead className={stickyHead}>Custo</TableHead>}
                         <TableHead className={stickyHead}>Preço</TableHead>
-                        {isAdmin && <TableHead className={stickyHead}>Margem</TableHead>}
+                        {canCost && <TableHead className={stickyHead}>Margem</TableHead>}
                         <TableHead className={stickyHead}>Qtd</TableHead>
                         <TableHead className={stickyHead}>Status</TableHead>
                       </TableRow>
@@ -276,9 +277,9 @@ export default function EstoqueGeralPage() {
                             <TableCell className="text-muted-foreground">{a.category} · {a.subcategory}</TableCell>
                             <TableCell>{a.compatibleModel || "—"}</TableCell>
                             <TableCell className="font-mono text-xs">{a.barcode || "—"}</TableCell>
-                            {isAdmin && <TableCell>{fmt(a.cost)}</TableCell>}
+                            {canCost && <TableCell>{fmt(a.cost)}</TableCell>}
                             <TableCell>{a.price != null ? fmt(a.price) : "—"}</TableCell>
-                            {isAdmin && (
+                            {canCost && (
                               <TableCell>
                                 {(() => {
                                   const m = accessoryMargin(a);
@@ -302,7 +303,7 @@ export default function EstoqueGeralPage() {
                       })}
                       {filteredAccessories.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={isAdmin ? 9 : 7} className="py-8 text-center text-muted-foreground">
+                          <TableCell colSpan={canCost ? 9 : 7} className="py-8 text-center text-muted-foreground">
                             {accessoriesLoading ? "Carregando acessórios…" : "Nenhum acessório encontrado."}
                           </TableCell>
                         </TableRow>

@@ -42,8 +42,16 @@ export const DEFAULT_OS_MESSAGES: OsMessagesSettings = {
   enabled: { aguardando_aprovacao: true, pronto_retirada: true, entregue: true },
   includePixKey: false,
   pixKey: "",
-  storeName: "Prime Paulista",
+  storeName: "", // vazio = usa o nome da loja (Configurações > Loja)
 };
+
+// Campos próprios vazios usam o nome e a chave PIX cadastrados em Configurações > Loja
+export function withStoreFallback(
+  s: OsMessagesSettings,
+  store: { name: string; pixKey: string }
+): OsMessagesSettings {
+  return { ...s, storeName: s.storeName.trim() || store.name.trim(), pixKey: s.pixKey.trim() || store.pixKey.trim() };
+}
 
 export const OS_VARIABLES: { key: string; description: string }[] = [
   { key: "cliente", description: "Nome completo do cliente" },

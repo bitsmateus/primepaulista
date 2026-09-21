@@ -3,19 +3,42 @@ import { onlyDigits } from "@/lib/customers";
 
 const DAY = 1000 * 60 * 60 * 24;
 
-// === Política de garantia (centralizada — AJUSTE AQUI se mudar) ===
+// === Política de garantia (centralizada) ===
 // Conforme o Termo de Garantia da loja: lacrado 1 ano (fabricante),
 // semi-novo 6 meses / 180 dias (bateria 90 dias), serviço de OS 90 dias.
+// Os prazos são editáveis em Configurações > Termos de garantia: este objeto é atualizado
+// no carregamento do app (setWarrantyDays) e continua sendo lido de forma síncrona.
 export const WARRANTY_DAYS = {
   lacrado: 365, // aparelho lacrado (garantia do fabricante)
   seminovo: 180, // aparelho semi-novo (6 meses)
+  bateria: 90, // bateria
   servico: 90, // serviço de assistência (OS)
 };
 
+export function setWarrantyDays(days: Partial<typeof WARRANTY_DAYS>) {
+  for (const k of Object.keys(WARRANTY_DAYS) as (keyof typeof WARRANTY_DAYS)[]) {
+    const v = days[k];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) WARRANTY_DAYS[k] = Math.round(v);
+  }
+}
+
+// Prazo em texto: 365 -> "1 ano"; 180 -> "6 meses (180 dias)"; 45 -> "45 dias"
+export function periodText(days: number): string {
+  if (days >= 365 && days % 365 === 0) return days === 365 ? "1 ano" : `${days / 365} anos`;
+  if (days >= 30 && days % 30 === 0) return `${days / 30} ${days === 30 ? "mês" : "meses"} (${days} dias)`;
+  return `${days} ${days === 1 ? "dia" : "dias"}`;
+}
+
 export const WARRANTY_TEXT = {
-  lacrado: "Garantia de 1 ano pelo fabricante",
-  seminovo: "Garantia de 6 meses (180 dias) — vide termo de garantia",
-  servicoTitulo: "Garantia de 90 dias para o serviço realizado",
+  get lacrado() {
+    return `Garantia de ${periodText(WARRANTY_DAYS.lacrado)} pelo fabricante`;
+  },
+  get seminovo() {
+    return `Garantia de ${periodText(WARRANTY_DAYS.seminovo)} — vide termo de garantia`;
+  },
+  get servicoTitulo() {
+    return `Garantia de ${WARRANTY_DAYS.servico} dias para o serviço realizado`;
+  },
   servicoDescricao:
     "Cobre exclusivamente defeitos relacionados ao reparo/peça executados nesta OS. Não cobre danos por mau uso, quedas, contato com líquidos ou violação do lacre técnico.",
 };

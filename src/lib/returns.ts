@@ -5,9 +5,9 @@ export function isReturned(sale: Pick<Sale, "returnedAt">): boolean {
   return !!sale.returnedAt;
 }
 
-// Só admin pode estornar, e apenas vendas ainda ativas.
-export function canReturn(sale: Pick<Sale, "returnedAt">, isAdmin: boolean): boolean {
-  return isAdmin && !isReturned(sale);
+// Só quem tem permissão (devolver vendas) pode estornar, e apenas vendas ainda ativas.
+export function canReturn(sale: Pick<Sale, "returnedAt">, allowed: boolean): boolean {
+  return allowed && !isReturned(sale);
 }
 
 // Total líquido de vendas (exclui as devolvidas).

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Recibo OS – abcdef12</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, sans-serif; color: #1c1c1e; padding: 32px; max-width: 380px; margin: auto; font-size: 13px; }
+    .header { text-align: center; border-bottom: 2px solid #1c1c1e; padding-bottom: 16px; margin-bottom: 16px; }
+    .header h1 { font-size: 18px; font-weight: 700; }
+    .header p { font-size: 11px; color: #6e6e73; margin-top: 2px; }
+    .section { margin-bottom: 16px; }
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #6e6e73; margin-bottom: 8px; font-weight: 600; }
+    .row { display: flex; justify-content: space-between; padding: 4px 0; gap: 12px; }
+    .row span:last-child { text-align: right; }
+    .row.total { font-weight: 700; font-size: 16px; border-top: 2px solid #1c1c1e; padding-top: 8px; margin-top: 8px; }
+    .box { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-top: 8px; }
+    .text { font-size: 12px; line-height: 1.5; }
+    .footer { text-align: center; margin-top: 24px; font-size: 10px; color: #6e6e73; border-top: 1px dashed #ccc; padding-top: 12px; }
+    .sign { margin-top: 28px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .sign .line { width: 80%; border-top: 1px solid #1c1c1e; }
+    @media print { body { padding: 8px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Prime Paulista</h1>
+    <p>Sua loja no ❤️ de SP</p>
+    <p style="margin-top:8px;font-size:12px;">RECIBO DE ORDEM DE SERVIÇO</p>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Dados da OS</div>
+    <div class="row"><span>Nº</span><span>ABCDEF12</span></div>
+    <div class="row"><span>Abertura</span><span>10/03/2026, 12:00</span></div>
+    <div class="row"><span>Status</span><span>Pronto para Retirada</span></div>
+    
+  </div>
+
+  <div class="section">
+    <div class="section-title">Cliente</div>
+    <div class="row"><span>Nome</span><span>Ana</span></div>
+    
+    <div class="row"><span>WhatsApp</span><span>11911112222</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Aparelho</div>
+    <div class="row"><span>Modelo</span><span>iPhone 11 – Branco</span></div>
+    <div class="row"><span>IMEI 1</span><span>1234</span></div>
+    
+    
+    
+    <div class="row"><span>Acessórios na entrada</span><span>Capa, Carregador</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Serviço</div>
+    <p class="text"><strong>Defeito relatado:</strong> Tela quebrada</p>
+    <p class="text" style="margin-top:4px;"><strong>Peça/Serviço:</strong> Tela</p>
+    
+  </div>
+
+  <div class="section">
+    <div class="section-title">Valores</div>
+    <div class="row total"><span>Total do serviço</span><span>R$ 100,00</span></div>
+    
+  </div>
+
+  <div class="section">
+    <div class="section-title">Certificado de Garantia</div>
+    <div class="box">
+      <p style="font-weight:600;color:#30d158;margin-bottom:6px;">
+        Garantia de 90 dias para o serviço realizado
+      </p>
+      <p class="text">
+        Cobre exclusivamente defeitos relacionados ao reparo/peça executados nesta OS. Não cobre danos por mau uso, quedas, contato com líquidos ou violação do lacre técnico.
+      </p>
+      <p class="text" style="margin-top:6px;"><strong>Válida até:</strong> 10/06/2026</p>
+    </div>
+  </div>
+
+  <div class="sign">
+    <div class="line"></div>
+    <span style="font-size:11px;color:#6e6e73;">Assinatura do cliente (retirada)</span>
+  </div>
+
+  <div class="footer">
+    <p>Prime Paulista – Obrigado pela preferência!</p>
+    <p style="margin-top:4px;">Apresente este recibo para acionar a garantia.</p>
+  </div>
+</body>
+</html>
