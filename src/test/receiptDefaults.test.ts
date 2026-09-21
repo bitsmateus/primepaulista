@@ -13,9 +13,7 @@ import type { ServiceOrder } from "@/types/serviceOrder";
 // (Fase 4A). Com os padrões, a saída precisa ser exatamente igual (byte a byte).
 const FIX = path.resolve(__dirname, "fixtures");
 // (no Windows o git pode converter as quebras de linha dos arquivos de referência: normaliza)
-const read = (f: string) => fs.readFileSync(path.join(FIX, f), "utf8").replace(/
-/g, "
-");
+const read = (f: string) => fs.readFileSync(path.join(FIX, f), "utf8").split("\r\n").join("\n");
 const UPDATE = process.env.UPDATE_FIXTURES === "1";
 function compare(file: string, html: string) {
   if (UPDATE) {
