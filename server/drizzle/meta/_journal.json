@@ -169,6 +169,13 @@
       "when": 1789992130261,
       "tag": "0023_fase1_marca_local_auditoria",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789994093266,
+      "tag": "0024_fase2_orcamentos_pagamentos",
+      "breakpoints": true
     }
   ]
 }

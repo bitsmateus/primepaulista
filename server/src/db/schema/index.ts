@@ -10,3 +10,4 @@ export * from "./finance";
 export * from "./whatsapp";
 export * from "./automations";
 export * from "./audit";
+export * from "./quotes";

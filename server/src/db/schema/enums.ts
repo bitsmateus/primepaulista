@@ -34,6 +34,17 @@ export const paymentMethodEnum = pgEnum("payment_method", [
   "Dinheiro",
   "Cartão de Crédito",
   "Cartão de Débito",
+  "Mercado Pago / Link de Pagamento",
+  "Outro / Verificação Externa",
+]);
+
+// Orçamentos ("Expirado" não é gravado: é calculado pela validade)
+export const quoteStatusEnum = pgEnum("quote_status", [
+  "Aberto",
+  "Enviado",
+  "Aprovado",
+  "Recusado",
+  "Convertido",
 ]);
 
 // Assistência técnica

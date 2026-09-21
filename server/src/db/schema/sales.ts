@@ -26,6 +26,9 @@ export const sales = pgTable("sales", {
   giftsCost: numeric("gifts_cost", { precision: 12, scale: 2 }).notNull().default("0"), // custo dos brindes incluídos na venda
   requiresInvoice: boolean("requires_invoice").notNull().default(false), // cliente exigiu emissão de nota fiscal
   notes: text("notes"), // descrição / observação da venda
+  // De onde veio a venda: "Balcão" (PDV direto) ou "Orçamento" (convertida de um orçamento)
+  origin: text("origin").notNull().default("Balcão"),
+  quoteId: uuid("quote_id"), // orçamento de origem (sem FK: evita dependência circular)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   returnedAt: timestamp("returned_at", { withTimezone: true }), // data da devolução/estorno (se houver)
 }, (t) => ({

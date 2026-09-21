@@ -12,11 +12,17 @@ import {
   accessories,
   stockMovements,
   customers,
+  quotes,
+  paymentMethodEnum,
 } from "../db/schema/index";
 import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
 
+// Métodos de pagamento aceitos = valores do enum do banco (uma única fonte)
+const paymentMethod = z.enum(paymentMethodEnum.enumValues);
+
 const saleInput = z.object({
   customerId: z.string().uuid(),
+  quoteId: z.string().uuid().optional(), // venda gerada a partir de um orçamento
   sellerName: z.string().optional().default(""),
   subtotal: z.coerce.number().min(0),
   tradeInDiscount: z.coerce.number().min(0).default(0),
@@ -41,7 +47,7 @@ const saleInput = z.object({
   payments: z
     .array(
       z.object({
-        method: z.enum(["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"]),
+        method: paymentMethod,
         amount: z.coerce.number().min(0),
         installments: z.coerce.number().int().min(1).optional(),
       })
@@ -153,6 +159,19 @@ export async function saleRoutes(app: FastifyInstance) {
           }
         }
 
+        // 0b) Orçamento de origem: trava e confere que ainda não virou venda
+        if (s.quoteId) {
+          const [q] = await tx
+            .select({ status: quotes.status, number: quotes.number })
+            .from(quotes)
+            .where(eq(quotes.id, s.quoteId))
+            .for("update")
+            .limit(1);
+          if (!q) throw saleError("Orçamento de origem não encontrado.");
+          if (q.status === "Convertido")
+            throw saleError(`O orçamento nº ${q.number} já foi convertido em venda.`);
+        }
+
         // 1) Cabeçalho da venda
         const [sale] = await tx
           .insert(sales)
@@ -167,8 +186,17 @@ export async function saleRoutes(app: FastifyInstance) {
             giftsCost: String(s.giftsCost),
             requiresInvoice: s.requiresInvoice,
             notes: s.notes,
+            origin: s.quoteId ? "Orçamento" : "Balcão",
+            quoteId: s.quoteId ?? null,
           })
           .returning({ id: sales.id });
+
+        if (s.quoteId) {
+          await tx
+            .update(quotes)
+            .set({ status: "Convertido", convertedSaleId: sale.id, updatedAt: new Date() })
+            .where(eq(quotes.id, s.quoteId));
+        }
 
         // 2) Itens
         await tx.insert(saleItems).values(
@@ -284,9 +312,7 @@ export async function saleRoutes(app: FastifyInstance) {
         giftsCost: z.coerce.number().min(0).optional(),
         requiresInvoice: z.coerce.boolean().optional(),
         notes: z.string().max(2000).optional(),
-        paymentMethod: z
-          .enum(["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"])
-          .optional(),
+        paymentMethod: paymentMethod.optional(),
         installments: z.coerce.number().int().min(1).optional(),
       })
       .safeParse(req.body);
