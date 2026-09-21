@@ -1,8 +1,8 @@
-import type { NotificationCounts } from "@/lib/api";
+import type { NotificationCounts, TaskReminderNotice } from "@/lib/api";
 
 // Regras puras das notificações do navegador (o hook só cuida de buscar e exibir).
 
-export type CountKey = keyof NotificationCounts;
+export type CountKey = Exclude<keyof NotificationCounts, "taskReminders">; // lembretes de tarefa chegam a parte
 export const COUNT_KEYS: CountKey[] = ["osReady", "tasksDue", "quotesToday", "lowStock", "staleDevices"];
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -14,6 +14,14 @@ export const NOTIFICATION_TEXT: Record<CountKey, (n: number) => string> = {
   lowStock: (n) => `${plural(n, "acessório", "acessórios")} com estoque baixo`,
   staleDevices: (n) => `${plural(n, "aparelho parado", "aparelhos parados")} há mais de 30 dias`,
 };
+
+// Lembretes de tarefa já vencidos (não fazem parte dos contadores: chegam uma vez só)
+export function reminderMessage(reminders: TaskReminderNotice[]): { title: string; body: string } {
+  return {
+    title: reminders.length === 1 ? "Lembrete de tarefa" : `${reminders.length} lembretes de tarefa`,
+    body: reminders.map((r) => `${r.title} (${r.dayLabel})`).join("\n"),
+  };
+}
 
 export interface CountIncrease {
   key: CountKey;

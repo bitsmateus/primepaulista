@@ -5,6 +5,9 @@ import { Lead, FunnelColumn, MessageLog, LeadTask } from "@/types/crm";
 import { Expense, Sangria, SellerCommissionConfig } from "@/types/financial";
 import { Quote, QuoteInput, QuoteItem, QuoteStatus } from "@/types/quote";
 import type { Role } from "@/lib/permissions";
+import type { AuditStatus, ReconciliationFilters, ReconciliationRow, StatusSummary } from "@/lib/reconciliation";
+import { cleanFilters, filtersToQuery } from "@/lib/reconciliation";
+import type { PlanningTask } from "@/lib/planningView";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
 const TOKEN_KEY = "pp_token";
@@ -75,6 +78,7 @@ export interface ManagedUser {
   email: string;
   role: UserRole;
   active: boolean;
+  phone?: string | null; // WhatsApp (lembretes do planejamento)
   createdAt?: string;
 }
 
@@ -306,8 +310,34 @@ export const api = {
     request<{ ok: true }>("/auth/verify-password", { method: "POST", body: JSON.stringify({ password }) }),
 
   // Notificações (contadores de eventos acionáveis; conteúdo por cargo)
-  notificationsSummary: () =>
-    request<{ counts: Partial<NotificationCounts> }>("/notifications/summary").then((d) => d.counts),
+  notificationsSummary: () => request<NotificationsSummary>("/notifications/summary"),
+
+  // Conferência financeira (conciliação de pagamentos)
+  listReconciliation: (f: ReconciliationFilters, page: { limit: number; offset: number }) =>
+    request<{ payments: ReconciliationRowWire[]; total: number; totalAmount: number; summary: StatusSummary; sellers: string[] }>(
+      `/reconciliation${filtersToQuery(f, page)}`
+    ).then((d) => ({ ...d, payments: d.payments.map(mapReconciliationRow) })),
+  reconciliationSummary: (f: ReconciliationFilters) =>
+    request<{ summary: StatusSummary }>(`/reconciliation/summary${filtersToQuery(f)}`).then((d) => d.summary),
+  exportReconciliation: (f: ReconciliationFilters) =>
+    request<{ payments: ReconciliationRowWire[] }>(`/reconciliation/export${filtersToQuery(f)}`).then((d) => d.payments.map(mapReconciliationRow)),
+  setPaymentAudit: (id: string, patch: { status?: AuditStatus; note?: string }) =>
+    request<{ ok: true; changed: boolean }>(`/reconciliation/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  bulkPaymentAudit: (input: { status: AuditStatus; ids?: string[]; filter?: ReconciliationFilters; note?: string }) =>
+    request<{ ok: true; updated: number; matched: number; unchanged: number }>("/reconciliation/bulk", { method: "POST", body: JSON.stringify({ ...input, ...(input.filter ? { filter: cleanFilters(input.filter) } : {}) }) }),
+
+  // Planejamento semanal
+  listPlanningTasks: (weekStart: string) =>
+    request<{ tasks: PlanningTaskWire[]; canManage: boolean }>(`/planning/tasks?weekStart=${weekStart}`).then((d) => ({ canManage: d.canManage, tasks: d.tasks.map(mapPlanningTask) })),
+  planningAssignees: () =>
+    request<{ assignees: { id: string; name: string; role: UserRole; hasPhone: boolean }[] }>("/planning/assignees").then((d) => d.assignees),
+  createPlanningTask: (input: PlanningTaskInput) =>
+    request<{ task: PlanningTaskWire; whatsapp: WhatsappOutcome | null }>("/planning/tasks", { method: "POST", body: JSON.stringify(input) }).then((d) => ({ task: mapPlanningTask(d.task), whatsapp: d.whatsapp })),
+  updatePlanningTask: (id: string, patch: Partial<PlanningTaskInput> & { done?: boolean }) =>
+    request<{ task: PlanningTaskWire; whatsapp: WhatsappOutcome | null }>(`/planning/tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => ({ task: mapPlanningTask(d.task), whatsapp: d.whatsapp })),
+  remindPlanningTask: (id: string) =>
+    request<{ task: PlanningTaskWire; whatsapp: WhatsappOutcome | null }>(`/planning/tasks/${id}/remind`, { method: "POST", body: JSON.stringify({}) }).then((d) => ({ task: mapPlanningTask(d.task), whatsapp: d.whatsapp })),
+  deletePlanningTask: (id: string) => request<{ ok: true }>(`/planning/tasks/${id}`, { method: "DELETE" }),
 
   // Fornecedores
   listSuppliers: (params: { q?: string; active?: boolean } = {}) => {
@@ -358,14 +388,14 @@ export const api = {
 
   // Usuários (admin)
   listUsers: () => request<{ users: ManagedUser[] }>("/users").then((d) => d.users),
-  createUser: (input: { name: string; email: string; password: string; role: UserRole }) =>
+  createUser: (input: { name: string; email: string; password: string; role: UserRole; phone?: string }) =>
     request<{ user: AuthUser }>("/users", {
       method: "POST",
       body: JSON.stringify(input),
     }).then((d) => d.user),
   updateUser: (
     id: string,
-    patch: { name?: string; role?: UserRole; active?: boolean; password?: string }
+    patch: { name?: string; role?: UserRole; active?: boolean; password?: string; phone?: string }
   ) =>
     request<{ user: ManagedUser }>(`/users/${id}`, {
       method: "PATCH",
@@ -1071,7 +1101,7 @@ interface SaleFullRow {
   returnedAt: string | null;
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
   items: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number; warrantyDays?: number }[];
-  payments: { id: string; method: string; amount: string; installments: number | null }[];
+  payments: { id: string; method: string; amount: string; installments: number | null; auditStatus?: AuditStatus; auditNote?: string; auditedByName?: string; auditedAt?: string | null }[];
   tradeIn: { imei: string | null; model: string | null; healthDescription: string | null; value: string } | null;
 }
 
@@ -1097,6 +1127,10 @@ function mapSaleFull(r: SaleFullRow): Sale {
     method: p.method as PaymentMethod,
     amount: Number(p.amount),
     installments: p.installments ?? undefined,
+    auditStatus: p.auditStatus ?? "Aguardando",
+    auditNote: p.auditNote ?? "",
+    auditedByName: p.auditedByName ?? "",
+    auditedAt: p.auditedAt ? new Date(p.auditedAt) : undefined,
   }));
 
   return {
@@ -1134,6 +1168,53 @@ export interface NotificationCounts {
   quotesToday: number;
   lowStock: number;
   staleDevices: number;
+  taskReminders: number; // lembretes de tarefa entregues NESTA consulta (uma vez só)
+}
+
+export interface TaskReminderNotice {
+  id: string;
+  title: string;
+  dayLabel: string;
+}
+
+export interface NotificationsSummary {
+  counts: Partial<NotificationCounts>;
+  reminders?: TaskReminderNotice[];
+}
+
+// ----- Conferência financeira -----
+interface ReconciliationRowWire extends Omit<ReconciliationRow, "createdAt" | "auditedAt"> {
+  createdAt: string;
+  auditedAt: string | null;
+}
+function mapReconciliationRow(r: ReconciliationRowWire): ReconciliationRow {
+  return { ...r, createdAt: new Date(r.createdAt), auditedAt: r.auditedAt ? new Date(r.auditedAt) : null };
+}
+
+// ----- Planejamento -----
+type PlanningTaskWire = Omit<PlanningTask, "doneAt" | "remindAt" | "remindedAt" | "whatsappAt" | "createdAt"> & {
+  doneAt: string | null;
+  remindAt: string | null;
+  remindedAt: string | null;
+  whatsappAt: string | null;
+  createdAt: string;
+};
+export interface PlanningTaskInput {
+  weekStart: string;
+  weekday: number;
+  title: string;
+  description?: string;
+  assigneeId?: string | null;
+  remindAt?: string | null; // ISO
+  reminderMessage?: string;
+}
+export interface WhatsappOutcome {
+  status: "sent" | "failed" | "no_phone" | "no_instance";
+  error: string | null;
+}
+const optDate = (v: string | null) => (v ? new Date(v) : null);
+function mapPlanningTask(t: PlanningTaskWire): PlanningTask {
+  return { ...t, doneAt: optDate(t.doneAt), remindAt: optDate(t.remindAt), remindedAt: optDate(t.remindedAt), whatsappAt: optDate(t.whatsappAt), createdAt: new Date(t.createdAt) };
 }
 
 // ----- Fornecedores -----

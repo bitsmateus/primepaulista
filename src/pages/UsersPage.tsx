@@ -84,6 +84,24 @@ function PermissionMatrix() {
   );
 }
 
+// WhatsApp do colaborador: edita direto na tabela e salva ao sair do campo
+function PhoneCell({ user, onSave }: { user: ManagedUser; onSave: (phone: string) => void }) {
+  const initial = user.phone ?? "";
+  const [v, setV] = useState(initial);
+  return (
+    <Input
+      className="h-8 w-40"
+      aria-label={`WhatsApp de ${user.name}`}
+      placeholder="Sem WhatsApp"
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => {
+        if (v.replace(/\D/g, "") !== initial.replace(/\D/g, "")) onSave(v.trim());
+      }}
+    />
+  );
+}
+
 export default function UsersPage() {
   const qc = useQueryClient();
   const { user: me } = useAuth();
@@ -100,13 +118,14 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("vendedor");
+  const [phone, setPhone] = useState("");
 
   const createMut = useMutation({
-    mutationFn: () => api.createUser({ name, email, password, role }),
+    mutationFn: () => api.createUser({ name, email, password, role, ...(phone.trim() ? { phone } : {}) }),
     onSuccess: () => {
       invalidate();
       setOpen(false);
-      setName(""); setEmail(""); setPassword(""); setRole("vendedor");
+      setName(""); setEmail(""); setPassword(""); setRole("vendedor"); setPhone("");
       toast.success("Usuário criado!");
     },
     onError: (err) =>
@@ -166,6 +185,11 @@ export default function UsersPage() {
                   <Input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="mín. 6 caracteres" />
                 </div>
                 <div>
+                  <Label htmlFor="new-user-phone">WhatsApp (opcional)</Label>
+                  <Input id="new-user-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(11) 91234-5678" />
+                  <p className="mt-1 text-xs text-muted-foreground">Usado para lembretes de tarefas do Planejamento.</p>
+                </div>
+                <div>
                   <Label>Cargo / Permissão</Label>
                   <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
                     <SelectTrigger aria-label="Cargo do novo usuário"><SelectValue /></SelectTrigger>
@@ -201,6 +225,7 @@ export default function UsersPage() {
                     <TableHead>Nome</TableHead>
                     <TableHead>E-mail</TableHead>
                     <TableHead>Cargo</TableHead>
+                    <TableHead>WhatsApp</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -226,6 +251,9 @@ export default function UsersPage() {
                               {ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
                             </SelectContent>
                           </Select>
+                        </TableCell>
+                        <TableCell>
+                          <PhoneCell user={u} onSave={(v) => updateMut.mutate({ id: u.id, patch: { phone: v } })} />
                         </TableCell>
                         <TableCell>
                           {u.active ? (

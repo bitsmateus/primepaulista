@@ -90,6 +90,11 @@ export interface PaymentEntry {
   method: PaymentMethod;
   amount: number;
   installments?: number;
+  // Conferência financeira (vem do servidor; observação/conferente só para quem confere)
+  auditStatus?: "Aguardando" | "Conferido" | "Divergente";
+  auditNote?: string;
+  auditedByName?: string;
+  auditedAt?: Date;
 }
 
 export interface TradeIn {

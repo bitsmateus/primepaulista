@@ -72,6 +72,23 @@ Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual
 - **Bloquear tela** (rodapé do menu ou atalho **Alt+L**): cobre o sistema até a pessoa digitar a própria senha; continua bloqueada mesmo recarregando a página; "Sair" funciona na tela bloqueada. Também bloqueia sozinha por inatividade, se configurado.
 - **Notificações e alerta sonoro**: a cada 60 segundos (e ao voltar para a aba) o sistema confere OS prontas sem aviso, tarefas de leads vencidas/para hoje, orçamentos que vencem hoje, acessórios com estoque baixo e aparelhos parados há mais de 30 dias. **Só avisa quando algum número aumenta** (aviso na tela, notificação do navegador e um bipe curto), nunca na primeira carga nem repetindo o mesmo total. Cada usuário liga/desliga avisos e som em **Minha conta**.
 
+### Fase 4B — Conferência financeira, Planejamento semanal e Central de Relatórios
+- **Conferência financeira** (nova aba **Conferência** no BI; para administrador, gerente e financeiro): lista cada pagamento das vendas (data, cliente, venda, vendedor, forma, parcelas, valor, status e observação) com filtros por período, forma de pagamento, status, vendedor e busca (cliente, código da venda, NSU).
+  - Cada pagamento nasce **Aguardando** e pode virar **Conferido** ou **Divergente / Em análise**, ou voltar a Aguardando ("desfazer"). O sistema grava **quem conferiu e quando**. Campo de **observação** para NSU, autenticação bancária ou cópia do comprovante.
+  - **Em lote**: marque vários pagamentos, ou use **"Selecionar todos os N do filtro"** (pede confirmação). Tudo fica na **Auditoria**, com textos como "Conferência realizada em lote pelo responsável financeiro (60 pagamentos …)"; desfazer também gera registro.
+  - Cartões de resumo (total e quantidade/valor por status; clicar no cartão filtra). **Vendas devolvidas ficam de fora** e não podem ser conferidas.
+  - O detalhe da venda (**Vendas realizadas**) mostra "Conferência: <status>" em cada pagamento (o vendedor vê o status, mas não a observação nem quem conferiu). Na aba **Caixa** do BI aparece **"Aguardando conferência (N)"** do dia, com atalho para a Conferência.
+  - **Exportar CSV/Excel** da conferência (todas as linhas do filtro, não só a página).
+  - Se a forma de pagamento de uma venda for editada, o pagamento novo volta a Aguardando; editar outros dados da venda mantém a conferência.
+- **Planejamento semanal** (novo menu **Planejamento**, para todos): quadro com 7 colunas (segunda a domingo), navegação **semana anterior / próxima / Hoje**, resumo da semana (total, concluídas e %), filtro **"Minhas tarefas"**.
+  - **Administrador e gerente** criam, editam, atribuem, excluem e **arrastam** tarefas entre os dias; criação e exclusão ficam na Auditoria. **Os demais** veem só as **próprias** tarefas e marcam como feitas (não editam nada).
+  - **Salvar e Lembrar Colaborador**: com responsável e lembrete (agora ou data/hora), o colaborador é avisado **no sistema** (aviso na tela, notificação e bipe da Fase 4A, uma única vez, quando chega a hora) e **por WhatsApp** (Uazapi) se tiver WhatsApp cadastrado e houver número conectado. O formulário mostra a **"Mensagem que será enviada"** (editável; variáveis {nome} {tarefa} {dia} {loja}) com prévia. Falha de WhatsApp nunca impede de salvar (o cartão mostra "Sem WhatsApp cadastrado", "WhatsApp falhou" etc.). Há também o botão **Lembrar agora**.
+  - Em **Usuários** há o campo **WhatsApp** de cada colaborador (edita direto na tabela) e no cadastro de novo usuário.
+- **Central de Relatórios** (novo menu **Relatórios**; administrador, gerente, financeiro e estoquista — cada um vê só os relatórios dos dados que já pode ver): **Estoque**, **Vendas**, **Financeiro**, **Ordens de Serviço**, **Clientes**, **Orçamentos**, **Garantias** (vencendo em N dias, vigentes ou vencidas) e **Conferência**. Cada um tem filtros, resumo, prévia paginada com linha de totais e exporta em **PDF, Excel e CSV**.
+  - **PDF**: A4 (paisagem quando tem muitas colunas), com logo e nome da loja, título, filtros, "gerado por … em …", tabela, totais e "Página X de Y", com acentos corretos.
+  - **Custo, margem e lucro só saem para quem pode ver custo** — em colunas, totais, resumos e nos três formatos de arquivo.
+  - Orçamentos: o cargo Financeiro passou a poder **ler** (só ler) os orçamentos, para o relatório funcionar.
+
 ---
 
 ## 19/06/2026 — v1.0.0

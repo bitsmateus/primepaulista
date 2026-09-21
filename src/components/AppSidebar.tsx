@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare,
   Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2, RefreshCw, FileText,
-  Truck, ScrollText, Settings, UserCircle, Lock,
+  Truck, ScrollText, Settings, UserCircle, Lock, CalendarDays, FileBarChart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +28,8 @@ const navItems = [
   { to: "/assistencia", label: "Assistência", icon: Wrench },
   { to: "/garantias", label: "Garantias", icon: BadgeCheck },
   { to: "/bi", label: "BI Financeiro", icon: BarChart3 },
+  { to: "/relatorios", label: "Relatórios", icon: FileBarChart },
+  { to: "/planejamento", label: "Planejamento", icon: CalendarDays },
   { to: "/usuarios", label: "Usuários", icon: ShieldCheck },
   { to: "/auditoria", label: "Auditoria", icon: ScrollText },
   { to: "/configuracoes", label: "Configurações", icon: Settings },

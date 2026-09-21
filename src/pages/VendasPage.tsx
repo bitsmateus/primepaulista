@@ -13,6 +13,7 @@ import {
 import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
+import { AUDIT_STATUS_LABEL } from "@/lib/reconciliation";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ export default function VendasPage() {
   const canCost = can(user?.role, "viewCost");
   const canEditSale = can(user?.role, "editSales");
   const canReturnSale = can(user?.role, "returnSales");
+  const canSeeAuditDetail = can(user?.role, "reconcile"); // observação e conferente da conferência financeira
 
   const devicesById = useMemo(() => buildDeviceMap(devices), [devices]);
   const accessoriesById = useMemo(() => buildAccessoryMap(accessories), [accessories]);
@@ -334,7 +336,16 @@ export default function VendasPage() {
                 <Label className="text-xs text-muted-foreground">Pagamento</Label>
                 <div className="mt-1 space-y-1">
                   {viewSale.payments.map((p) => (
-                    <div key={p.id} className="flex justify-between"><span>{p.method}{p.installments && p.installments > 1 ? ` (${p.installments}x)` : ""}</span><span>{fmt(p.amount)}</span></div>
+                    <div key={p.id} data-testid="sale-payment">
+                      <div className="flex justify-between"><span>{p.method}{p.installments && p.installments > 1 ? ` (${p.installments}x)` : ""}</span><span>{fmt(p.amount)}</span></div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant="secondary" data-testid="sale-payment-status" className={p.auditStatus === "Conferido" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : p.auditStatus === "Divergente" ? "bg-red-100 text-red-800 hover:bg-red-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
+                          Conferência: {AUDIT_STATUS_LABEL[p.auditStatus ?? "Aguardando"]}
+                        </Badge>
+                        {canSeeAuditDetail && p.auditedAt && (<span className="text-muted-foreground">{p.auditedByName} · {p.auditedAt.toLocaleString("pt-BR")}</span>)}
+                        {canSeeAuditDetail && p.auditNote && (<span className="text-muted-foreground">Obs.: {p.auditNote}</span>)}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

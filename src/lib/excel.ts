@@ -2,7 +2,14 @@ import { downloadBlob } from "@/lib/download";
 
 // As bibliotecas de Excel são pesadas: só são carregadas quando o usuário usa.
 
-export type ExcelCell = string | number | boolean | Date | null | undefined;
+export type ExcelCell =
+  | string
+  | number
+  | boolean
+  | Date
+  | null
+  | undefined
+  | { value: string | number | boolean | Date | null; format?: string; fontWeight?: "bold" }; // célula com formato numérico/data ou negrito
 
 // Lê a 1ª planilha de um .xlsx e devolve as linhas (células com tipos nativos)
 export async function readXlsxRows(file: File): Promise<unknown[][]> {

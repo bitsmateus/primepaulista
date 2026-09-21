@@ -30,6 +30,8 @@ import UsersPage from "./pages/UsersPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import AuditPage from "./pages/AuditPage";
 import SettingsPage from "./pages/SettingsPage";
+import PlanningPage from "./pages/PlanningPage";
+import ReportsPage from "./pages/ReportsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -77,6 +79,8 @@ function AppRoutes() {
         <Route path="/garantias" element={<ProtectedApp><GarantiasPage /></ProtectedApp>} />
         <Route path="/bi" element={<ProtectedApp><BIDashboardPage /></ProtectedApp>} />
         <Route path="/usuarios" element={<ProtectedApp><UsersPage /></ProtectedApp>} />
+        <Route path="/planejamento" element={<ProtectedApp><PlanningPage /></ProtectedApp>} />
+        <Route path="/relatorios" element={<ProtectedApp><ReportsPage /></ProtectedApp>} />
         <Route path="/auditoria" element={<ProtectedApp><AuditPage /></ProtectedApp>} />
         <Route path="/configuracoes" element={<ProtectedApp><SettingsPage /></ProtectedApp>} />
         <Route path="*" element={<NotFound />} />

@@ -12,11 +12,17 @@ import { InventoryAnalysisTab } from "@/components/bi/InventoryAnalysisTab";
 import { CustomerAnalysisTab } from "@/components/bi/CustomerAnalysisTab";
 import { ReceivablesTab } from "@/components/bi/ReceivablesTab";
 import { PayablesTab } from "@/components/bi/PayablesTab";
+import { ReconciliationTab } from "@/components/bi/ReconciliationTab";
+import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 
 export default function BIDashboardPage() {
   const { devices, accessories, sales } = useInventoryContext();
   const { orders } = useServiceOrderContext();
   const financial = useFinancial(sales, orders, devices, accessories);
+  const { user } = useAuth();
+  const canReconcile = can(user?.role, "reconcile");
+  const [tab, setTab] = useState("overview");
 
   return (
     <AppLayout>
@@ -28,7 +34,7 @@ export default function BIDashboardPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs value={tab} onValueChange={setTab} className="space-y-6">
           <TabsList className="flex w-full justify-start overflow-x-auto bg-muted">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="cash">Caixa</TabsTrigger>
@@ -38,13 +44,14 @@ export default function BIDashboardPage() {
             <TabsTrigger value="customers">Clientes</TabsTrigger>
             <TabsTrigger value="receivables">A Receber</TabsTrigger>
             <TabsTrigger value="payables">A Pagar</TabsTrigger>
+            {canReconcile && <TabsTrigger value="reconciliation">Conferência</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview">
             <OverviewTab financial={financial} />
           </TabsContent>
           <TabsContent value="cash">
-            <CashClosingTab financial={financial} />
+            <CashClosingTab financial={financial} onOpenReconciliation={canReconcile ? () => setTab("reconciliation") : undefined} />
           </TabsContent>
           <TabsContent value="expenses">
             <ExpensesTab financial={financial} />
@@ -64,6 +71,11 @@ export default function BIDashboardPage() {
           <TabsContent value="payables">
             <PayablesTab />
           </TabsContent>
+          {canReconcile && (
+            <TabsContent value="reconciliation">
+              <ReconciliationTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppLayout>
