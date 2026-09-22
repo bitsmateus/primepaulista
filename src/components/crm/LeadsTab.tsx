@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import QuickReplyPicker from "@/components/crm/QuickReplyPicker";
+import AiSuggestPanel from "@/components/ai/AiSuggestPanel";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -42,6 +43,7 @@ export default function LeadsTab() {
   const { devices, sales } = useInventoryContext();
   const { user } = useAuth();
   const seesAllOwners = can(user?.role, "manageAutomations");
+  const canUseAI = can(user?.role, "useAI");
 
   const [search, setSearch] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all"); // "all" | "mine" | nome do vendedor
@@ -125,17 +127,19 @@ export default function LeadsTab() {
     }
   };
 
-  const handleSendMessage = async (leadId: string) => {
+  const handleSendMessage = async (leadId: string, textOverride?: string): Promise<boolean> => {
     const lead = leads.find((l) => l.id === leadId);
-    if (!lead || !msgText.trim()) return;
-    if (connectionStatus !== "connected") { toast.error("WhatsApp não conectado."); return; }
-    const success = await sendMessage(lead.phone, msgText);
+    const body = textOverride ?? msgText;
+    if (!lead || !body.trim()) return false;
+    if (connectionStatus !== "connected") { toast.error("WhatsApp não conectado."); return false; }
+    const success = await sendMessage(lead.phone, body);
     addMessageLog({
       recipientId: lead.id, recipientName: lead.name, recipientPhone: lead.phone,
-      templateType: "Manual", message: msgText, status: success ? "sent" : "failed",
+      templateType: textOverride !== undefined ? "IA (sugestão)" : "Manual", message: body, status: success ? "sent" : "failed",
     });
     toast[success ? "success" : "error"](success ? "Mensagem enviada!" : "Falha ao enviar");
-    setMsgText(""); setShowSendMsg(null);
+    if (success) { setMsgText(""); setShowSendMsg(null); }
+    return success;
   };
 
   const handleDragEnd = (result: DropResult) => {
@@ -496,6 +500,16 @@ export default function LeadsTab() {
               <Label>Mensagem</Label>
               <Textarea className="min-h-[120px]" value={msgText} onChange={(e) => setMsgText(e.target.value)} placeholder="Digite sua mensagem..." />
             </div>
+            {canUseAI && showSendMsg && (
+              <AiSuggestPanel
+                key={showSendMsg}
+                leadId={showSendMsg}
+                lastInbound={getLogsForRecipient(showSendMsg).find((l) => l.direction === "in")?.message ?? ""}
+                canSend={connectionStatus === "connected"}
+                onUse={setMsgText}
+                onSend={(t) => handleSendMessage(showSendMsg, t)}
+              />
+            )}
             <div className="flex gap-2 flex-wrap">
               {(() => {
                 const l = leads.find((x) => x.id === showSendMsg);

@@ -57,23 +57,32 @@ interface DeliveryPlan {
 async function deliver(instanceId: string, plan: DeliveryPlan): Promise<void> {
   let error: string | null = null;
   let text = "";
+  let reviewId: string | null = null; // resposta da IA que foi para a fila de revisão (nada é enviado agora)
+  let afterSend: ((error: string | null) => Promise<void>) | undefined;
   try {
     if (plan.rule.action === "ai") {
       const gen = getAiReplyGenerator();
       if (!gen) {
-        error = "Regra de IA: recurso ainda não disponível (Fase 5B).";
+        error = "Regra de IA: recurso da IA não está ativo neste servidor.";
       } else {
-        const out = await gen({ rule: plan.rule, inboundText: plan.inboundText, phone: plan.phone, lead: plan.lead });
-        if (!out || !out.trim()) error = "A IA não gerou resposta.";
-        else text = out.trim();
+        const out = await gen({ rule: plan.rule, inboundText: plan.inboundText, phone: plan.phone, lead: plan.lead, instanceId });
+        if (out === null || out === undefined || (typeof out === "string" && !out.trim())) error = "A IA não gerou resposta.";
+        else if (typeof out === "string") text = out.trim();
+        else if (out.kind === "error") error = out.message.slice(0, 300);
+        else if (out.kind === "review") reviewId = out.reviewId;
+        else {
+          text = out.text.trim();
+          afterSend = out.done;
+          if (!text) error = "A IA não gerou resposta.";
+        }
       }
     } else {
       text = await renderRuleReply(plan.rule.replyBody, { lead: plan.lead });
       if (!text) error = "Texto da resposta vazio.";
     }
 
-    const inst = error ? null : await getInstance(instanceId);
-    if (!error) {
+    const inst = error || reviewId ? null : await getInstance(instanceId);
+    if (!error && !reviewId) {
       if (!inst || !inst.instanceUrl || !inst.apiKey) error = "Número de WhatsApp não configurado.";
       else if (!inst.active) error = "Número de WhatsApp inativo.";
     }
@@ -104,14 +113,14 @@ async function deliver(instanceId: string, plan: DeliveryPlan): Promise<void> {
   try {
     await db
       .update(keywordRuleHits)
-      .set({ replied: error === null, error })
+      .set(reviewId ? { replied: false, error: null, reviewId } : { replied: error === null, error })
       .where(eq(keywordRuleHits.id, plan.hitId));
-    if (text) {
+    if (text && !reviewId) {
       await db.insert(messageLogs).values({
         recipientId: plan.lead.id,
         recipientName: plan.lead.name,
         recipientPhone: plan.phone,
-        templateType: `Automática: ${plan.rule.name}`.slice(0, 100),
+        templateType: `${plan.rule.action === "ai" ? "IA" : "Automática"}: ${plan.rule.name}`.slice(0, 100),
         message: text,
         status: error === null ? "sent" : "failed",
         direction: "out",
@@ -120,6 +129,13 @@ async function deliver(instanceId: string, plan: DeliveryPlan): Promise<void> {
     }
   } catch (err) {
     console.error("falha ao registrar resposta automática", errText(err));
+  }
+  if (afterSend) {
+    try {
+      await afterSend(error);
+    } catch (err) {
+      console.error("IA: falha ao concluir o envio", errText(err));
+    }
   }
 }
 

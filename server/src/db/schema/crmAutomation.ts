@@ -21,7 +21,8 @@ export const keywordRules = pgTable("keyword_rules", {
   keywords: text("keywords").array().notNull().default(sql`'{}'::text[]`),
   match: text("match").notNull().default("any"), // 'any' | 'all'
   replyBody: text("reply_body").notNull().default(""),
-  action: text("action").notNull().default("reply"), // 'reply' | 'ai' (reservado para a Fase 5B)
+  action: text("action").notNull().default("reply"), // 'reply' | 'ai'
+  aiKind: text("ai_kind").notNull().default("geral"), // Fase 5B: preco | troca | os | geral (usado quando action = 'ai')
   priority: integer("priority").notNull().default(1), // menor número = mais prioritária
   active: boolean("active").notNull().default(true),
   schedule: jsonb("schedule").notNull().default(sql`'{}'::jsonb`), // { mode, days, from, to, startDate, endDate }
@@ -40,6 +41,7 @@ export const keywordRuleHits = pgTable("keyword_rule_hits", {
   matched: text("matched").notNull().default(""), // palavras-chave que casaram (separadas por vírgula)
   replied: boolean("replied").notNull().default(false),
   error: text("error"),
+  reviewId: uuid("review_id"), // Fase 5B: resposta da IA enviada para a fila de revisão
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   ruleIdx: index("keyword_rule_hits_rule_idx").on(t.ruleId, t.createdAt),

@@ -34,6 +34,7 @@ const ruleBase = z.object({
   match: z.enum(["any", "all"]).default("any"),
   replyBody: z.string().trim().max(1000).default(""),
   action: z.enum(["reply", "ai"]).default("reply"),
+  aiKind: z.enum(["preco", "troca", "os", "geral"]).default("geral"), // tipo de atendimento da IA (ação "ai")
   priority: z.number().int().min(1).max(9999).optional(),
   active: z.boolean().default(true),
   schedule: scheduleSchema.default({}),
@@ -147,6 +148,7 @@ export async function keywordRuleRoutes(app: FastifyInstance) {
         matched: keywordRuleHits.matched,
         replied: keywordRuleHits.replied,
         error: keywordRuleHits.error,
+        reviewId: keywordRuleHits.reviewId,
         createdAt: keywordRuleHits.createdAt,
       })
       .from(keywordRuleHits)
@@ -202,6 +204,7 @@ export async function keywordRuleRoutes(app: FastifyInstance) {
         match: d.match,
         replyBody: d.replyBody,
         action: d.action,
+        aiKind: d.aiKind,
         priority,
         active: d.active,
         schedule: scheduleOf(d.schedule),
@@ -214,7 +217,7 @@ export async function keywordRuleRoutes(app: FastifyInstance) {
       entity: "keyword_rule",
       entityId: row.id,
       description: `Criou a resposta automática "${row.name}" (${row.category})`,
-      details: { palavras: row.keywords, modo: row.match, acao: row.action, ativa: row.active },
+      details: { palavras: row.keywords, modo: row.match, acao: row.action, tipoIA: row.action === "ai" ? row.aiKind : undefined, ativa: row.active },
     });
     return reply.code(201).send({ rule: rowToRule(row) });
   });
@@ -237,6 +240,7 @@ export async function keywordRuleRoutes(app: FastifyInstance) {
       match: p.data.match ?? curRule.match,
       replyBody: p.data.replyBody ?? curRule.replyBody,
       action: p.data.action ?? curRule.action,
+      aiKind: p.data.aiKind ?? curRule.aiKind ?? "geral",
       priority: p.data.priority ?? curRule.priority,
       active: p.data.active ?? curRule.active,
       schedule: p.data.schedule ? scheduleSchema.parse({ ...curRule.schedule, ...p.data.schedule }) : curRule.schedule,
@@ -254,6 +258,7 @@ export async function keywordRuleRoutes(app: FastifyInstance) {
         match: merged.match,
         replyBody: merged.replyBody,
         action: merged.action,
+        aiKind: merged.aiKind,
         priority: merged.priority,
         active: merged.active,
         schedule: scheduleOf(merged.schedule),

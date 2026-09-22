@@ -752,6 +752,31 @@ export const api = {
   keywordRuleHits: (limit = 30) =>
     request<{ hits: KeywordHit[] }>(`/keyword-rules/hits?limit=${limit}`).then((d) => d.hits),
 
+  // ===== IA no atendimento (Fase 5B) =====
+  aiStatus: () => request<AiStatus>("/ai/status"),
+  aiConfig: () => request<{ config: AiSettingsView; defaults: AiSettingsView; status: AiStatus }>("/ai/config"),
+  saveAiConfig: (config: AiSettingsView) =>
+    request<{ config: AiSettingsView; status: AiStatus }>("/ai/config", { method: "PUT", body: JSON.stringify(config) }),
+  listAiDocuments: () =>
+    request<{ documents: AiDocumentRow[] }>("/ai/documents").then((d) => d.documents),
+  createAiDocument: (input: AiDocumentInput) =>
+    request<{ document: AiDocumentRow }>("/ai/documents", { method: "POST", body: JSON.stringify(input) }).then((d) => d.document),
+  updateAiDocument: (id: string, patch: Partial<AiDocumentInput>) =>
+    request<{ document: AiDocumentRow }>(`/ai/documents/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.document),
+  deleteAiDocument: (id: string) => request<{ ok: true }>(`/ai/documents/${id}`, { method: "DELETE" }),
+  aiSuggest: (input: { leadId: string; message?: string; kind?: AiKind }) =>
+    request<{ suggestion: AiSuggestion }>("/ai/suggest", { method: "POST", body: JSON.stringify(input) }).then((d) => d.suggestion),
+  aiPlayground: (input: { message: string; kind?: AiKind; phone?: string }) =>
+    request<{ result: AiPlaygroundResult }>("/ai/playground", { method: "POST", body: JSON.stringify(input) }).then((d) => d.result),
+  aiEventOutcome: (id: string, outcome: "usada" | "enviada_humano" | "descartada") =>
+    request<{ ok: true }>(`/ai/events/${id}/outcome`, { method: "POST", body: JSON.stringify({ outcome }) }),
+  listAiReviews: (status: "pendente" | "resolvidas" | "todas" = "pendente", limit = 50) =>
+    request<{ reviews: AiReviewRow[]; pending: number }>(`/ai/reviews?status=${status}&limit=${limit}`),
+  approveAiReview: (id: string, text?: string) =>
+    request<{ ok: true; status: "aprovado" | "editado" }>(`/ai/reviews/${id}/approve`, { method: "POST", body: JSON.stringify(text !== undefined ? { text } : {}) }),
+  discardAiReview: (id: string) => request<{ ok: true }>(`/ai/reviews/${id}/discard`, { method: "POST", body: JSON.stringify({}) }),
+  aiMetrics: (days = 30) => request<AiMetrics>(`/ai/metrics?days=${days}`),
+
   // ===== CRM automático =====
   listAutomations: () =>
     request<{ automations: Automation[] }>("/automations").then((d) => d.automations),
@@ -930,6 +955,102 @@ export interface QuickReply {
 }
 export type QuickReplyInput = { title: string; body: string; category: string; active: boolean };
 
+// ----- IA no atendimento (Fase 5B) -----
+export type AiKind = "preco" | "troca" | "os" | "geral";
+export interface AiStatus {
+  enabled: boolean;
+  configured: boolean; // existe a chave GEMINI_API_KEY (variável ou ambiente)
+  keySource: "variavel" | "ambiente" | null;
+  autoSend: boolean;
+  model: string;
+  confidenceThreshold: number;
+  pendingReviews?: number;
+}
+export interface AiSettingsView {
+  enabled: boolean;
+  model: string;
+  temperature: number;
+  maxOutputTokens: number;
+  confidenceThreshold: number;
+  autoSend: boolean;
+  maxAutoPerHour: number;
+  historyMessages: number;
+  tone: string;
+  guardrails: string[];
+}
+export interface AiDocumentRow {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+  tags: string[];
+  active: boolean;
+  fileName: string | null;
+  tokenEstimate: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AiDocumentInput {
+  title: string;
+  category: string;
+  content: string;
+  tags: string[];
+  active: boolean;
+  fileName?: string | null;
+}
+export interface AiSource {
+  docId: string;
+  title: string;
+}
+export interface AiSuggestion {
+  eventId: string;
+  kind: AiKind;
+  reply: string;
+  confidence: number;
+  needsHuman: boolean;
+  reason: string;
+  sources: AiSource[];
+  usedContext: { stock: number; os: boolean; knowledge: number };
+  tokens: number | null;
+  latencyMs: number;
+  model: string;
+  lowConfidence: boolean;
+}
+export interface AiPlaygroundResult extends Omit<AiSuggestion, "lowConfidence"> {
+  prompt: { system: string; contents: { role: string; parts: { text: string }[] }[] };
+  question: string;
+  decision: { action: "auto" | "review"; reason: string };
+}
+export interface AiReviewRow {
+  id: string;
+  eventId: string | null;
+  phone: string;
+  leadId: string | null;
+  leadName: string | null;
+  kind: AiKind;
+  question: string;
+  suggestedReply: string;
+  confidence: number | null;
+  reason: string;
+  sources: AiSource[];
+  status: "pendente" | "aprovado" | "editado" | "descartado";
+  finalReply: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  sent: boolean;
+  sendError: string | null;
+  createdAt: string;
+}
+export interface AiMetrics {
+  days: number;
+  totals: { questions: number; auto: number; reviewed: number; agent: number; discarded: number; inReview: number; errors: number; pendingReviews: number; tokens: number };
+  rates: { auto: number; reviewed: number; discarded: number; errors: number };
+  avgConfidence: number | null;
+  avgLatencyMs: number | null;
+  daily: { date: string; total: number; auto: number; reviewed: number; discarded: number; errors: number }[];
+  byKind: { kind: AiKind; total: number }[];
+}
+
 export interface KeywordRuleView extends KeywordRule {
   createdAt: string;
   stats: { total: number; replied: number; lastAt: string | null; rate: number };
@@ -965,6 +1086,7 @@ export interface KeywordHit {
   matched: string;
   replied: boolean;
   error: string | null;
+  reviewId?: string | null; // resposta da IA que foi para a fila de revisão
   createdAt: string;
 }
 
@@ -1269,6 +1391,7 @@ export interface NotificationCounts {
   staleDevices: number;
   taskReminders: number; // lembretes de tarefa entregues NESTA consulta (uma vez só)
   newMessages: number; // mensagens de WhatsApp recebidas que ninguém abriu ainda
+  aiReviews: number; // respostas da IA aguardando revisão (Fase 5B)
 }
 
 export interface TaskReminderNotice {

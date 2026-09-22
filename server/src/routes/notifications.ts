@@ -14,6 +14,7 @@ export interface NotificationCounts {
   staleDevices: number; // aparelhos disponíveis parados há mais de 30 dias
   taskReminders: number; // lembretes de tarefa do planejamento que VENCERAM e foram entregues agora
   newMessages: number; // mensagens de WhatsApp recebidas (webhook) que ninguém abriu ainda (CRM)
+  aiReviews: number; // respostas da IA aguardando revisão (Fase 5B)
 }
 
 export interface TaskReminder {
@@ -60,6 +61,11 @@ export async function notificationRoutes(app: FastifyInstance) {
       const inbox = await db.execute(sql`
         select count(*)::int as n from message_logs where direction = 'in' and read_at is null`);
       counts.newMessages = Number((inbox.rows[0] as { n: number }).n);
+    }
+
+    if (can(role, "useAI")) {
+      const rv = await db.execute(sql`select count(*)::int as n from ai_reviews where status = 'pendente'`);
+      counts.aiReviews = Number((rv.rows[0] as { n: number }).n);
     }
 
     if (can(role, "sell")) {

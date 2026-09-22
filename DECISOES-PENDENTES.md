@@ -4,6 +4,41 @@ Anotações feitas durante a implementação da paridade com o sistema M7 Concep
 (branch `feat/paridade-m7`). Tudo aqui é para você revisar quando voltar.
 Nada foi enviado ao GitHub nem colocado em produção.
 
+## LEIA PRIMEIRO — o que você precisa decidir/fazer antes de usar em produção
+
+Esta é a última fase (5B). O trabalho está pronto e testado (contra ambientes locais/falsos), mas
+NADA foi testado contra os serviços externos reais (Uazapi e Gemini) nem em produção. Antes de ligar
+para valer:
+
+1. **IA (Gemini) — ative com cuidado, nesta ordem:**
+   - Cadastre a chave real em **Configurações › Variáveis › `GEMINI_API_KEY`** (ou defina a variável de
+     ambiente `GEMINI_API_KEY` no servidor). Sem isso a IA fica bloqueada em toda parte, com aviso claro.
+   - Abra **IA Atendimento › Base de conhecimento** e cadastre pelo menos: política de garantia, formas de
+     pagamento, endereço/horário e (se quiser que a IA cote troca) uma política de troca com faixas de valor.
+   - Revise os **guardrails** (regras que a IA sempre segue) e o **tom de voz** em IA Atendimento › Configuração.
+   - Teste bastante no **Simulador** (não envia nada) com perguntas reais do seu dia a dia antes de ligar
+     qualquer coisa.
+   - Ligue o interruptor **"IA ligada"** primeiro com **envio automático DESLIGADO** (é o padrão): toda
+     resposta cai na fila **Revisão da IA** (aba do CRM) para você aprovar/editar/descartar. Só depois de
+     confiar no que ela responde, considere ligar o **envio automático** (a tela pede confirmação e mostra
+     um aviso; o interruptor geral desliga tudo na hora, a qualquer momento).
+   - **A API real do Gemini não foi testada nenhuma vez** (não existe chave de teste aqui). O formato da
+     chamada segue a documentação pública do Gemini (`generateContent`, `x-goog-api-key`, `systemInstruction`,
+     `responseSchema`), mas só uma chamada real vai confirmar se está tudo certo. Se o formato real divergir,
+     o sintoma será "IA: O Gemini recusou o pedido" ou "formato inesperado" no Simulador — me chame com a
+     mensagem de erro exata.
+2. **Uazapi (WhatsApp) real**: como nas fases 3/4B/5A, o envio de mensagens (inclusive as respostas da IA)
+   nunca foi testado contra o Uazapi de verdade, só contra um servidor falso local. Teste um envio manual
+   simples antes de confiar no envio automático da IA.
+3. **Revise a matriz de permissões** (Usuários › "O que cada cargo pode"): a Fase 5B criou duas capacidades
+   novas — `useAI` (vendedor, gerente, admin: sugerir e revisar) e `manageAI` (gerente, admin: configurar,
+   base de conhecimento, simulador e métricas). Se preferir outra combinação, é mudar a matriz (nos dois
+   arquivos, front e servidor — há teste que garante que ficam iguais).
+4. **Decisões antigas ainda pendentes** (fases 3–5A) continuam listadas mais abaixo, na seção
+   "Pendências que dependem de você" — nada delas foi resolvido nesta fase.
+5. **Ambiente de teste**: como sempre, tudo aqui rodou contra o Postgres local descartável (porta 54329) e
+   servidores falsos locais para Uazapi e Gemini. Nenhum dado real de cliente foi usado.
+
 ## Como o trabalho foi conduzido
 - Tudo em uma branch separada (`feat/paridade-m7`); `main` ficou intocada.
 - Testes rodaram contra um Postgres **local descartável** (porta 54329), nunca contra o banco de produção.
@@ -117,6 +152,79 @@ Nada foi enviado ao GitHub nem colocado em produção.
 - **Histórico**: o CRM carrega as 5.000 mensagens mais recentes (`GET /message-logs`); depois disso as mais antigas somem da tela (continuam no banco/backup). Backup passou a incluir respostas rápidas, regras e disparos (nunca o segredo do webhook nem a chave dos números).
 - **Simulador**: aceita simular outro dia/horário (campo opcional) — só para conferir o agendamento; o telefone informado permite ver o **intervalo mínimo** real daquele cliente.
 
+### Fase 5B — IA (Gemini) no atendimento
+- **API real do Gemini NÃO testada.** Não há chave de teste do Google disponível neste ambiente. Todo o
+  desenvolvimento e todos os testes automatizados rodaram contra um **servidor Gemini falso** local
+  (`GEMINI_BASE_URL`), que valida o formato da chamada (caminho `/v1beta/models/<modelo>:generateContent`,
+  cabeçalho `x-goog-api-key`, corpo com `systemInstruction`/`contents`/`generationConfig` com
+  `responseMimeType: "application/json"` e `responseSchema`) e simula respostas válidas, JSON quebrado,
+  bloqueio de segurança, 429/500 (com 1 nova tentativa) e timeout. **O formato foi montado com base na
+  documentação pública do Gemini, o melhor possível, mas não foi confirmado contra o serviço de verdade.**
+  Antes de confiar, teste no Simulador com a chave real e veja se a resposta chega e se o formato bate.
+- **LGPD — nota obrigatória**: o texto da pergunta do cliente (sem CPF/CNPJ/e-mail/telefone/CEP/endereço,
+  removidos automaticamente por `server/src/lib/aiPrivacy.ts`) é enviado ao **Google (Gemini)** para gerar a
+  resposta. Isso é uma transferência de dados a um terceiro (ainda que anonimizado o melhor possível) — se a
+  sua política de privacidade/termos de uso do WhatsApp da loja não mencionar isso, vale atualizar. O que é
+  enviado: a pergunta redigida do cliente, o histórico recente da conversa (mesma poda de dados pessoais),
+  o modelo/capacidade/cor/condição/bateria/preço de venda dos aparelhos do estoque, e trechos da sua base de
+  conhecimento. **Nunca** são enviados: custo, margem, fornecedor, IMEI/serial, CPF, e-mail, endereço, ou
+  dados de OS de um cliente diferente do telefone que perguntou. O registro interno da IA (`ai_events`,
+  usado para métricas e auditoria) guarda a MESMA versão sem dados pessoais — nunca o texto original.
+- **A IA nunca inventa preço** (pedido explícito): qualquer valor em R$ citado na resposta que não apareça
+  no estoque disponível nem na base de conhecimento ativa faz a resposta ser sinalizada (confiança rebaixada
+  para no máximo 40% e `needsHuman`), então ela some da fila de auto-envio e cai na revisão. Isso é uma
+  checagem determinística (regex + comparação numérica), não depende da IA "se comportar".
+- **Avaliação de troca**: por padrão a IA NUNCA cota valor de troca sozinha (sempre encaminha para um
+  humano). Só passa a poder citar faixas de valor se você cadastrar um documento na base de conhecimento
+  com a etiqueta relacionada a "troca"/"avaliação" e o conteúdo com as faixas — mesmo assim o prompt instrui
+  a dizer que o valor final depende de avaliação presencial.
+- **Consulta de OS por WhatsApp**: só confirma a situação (status, sem previsão de prazo — não existe esse
+  campo hoje) quando o telefone de quem pergunta bate com o telefone da OS ou do cliente cadastrado, ou o
+  CPF informado bate E o telefone também bate. Sem isso, ou sem número/CPF na pergunta, a resposta diz que
+  "não consegui confirmar, um atendente vai verificar" e não vaza nada (nem para dizer "existe uma OS" ou não).
+- **Limites de segurança**: `autoSend` (envio automático) vem **desligado por padrão** (só liga com
+  confirmação na tela); limite de **3 respostas automáticas por telefone por hora** (configurável);
+  interruptor geral **"IA ligada"** funciona como kill-switch (desligado = nem sugestão nem regra automática
+  geram nada, mesmo com a chave cadastrada); a IA nunca responde a mensagens `fromMe` nem de grupo (mesma
+  regra do webhook da 5A). Falha ao enviar automaticamente (ex.: WhatsApp desconectado bem na hora) não perde
+  a resposta: ela cai na fila de revisão com o motivo.
+- **Base de conhecimento (RAG) é busca por palavras (BM25), sem embeddings**: cada documento é quebrado em
+  trechos de ~800 caracteres com sobreposição; a busca usa texto normalizado (sem acento/maiúsculas) mais um
+  pequeno dicionário de sinônimos em português (ex.: "parcelar/cartão" → pagamento; "cobre/defeito" →
+  garantia) e reforço por título/etiquetas. Não há correção de erro de digitação nem embeddings semânticos:
+  perguntas com palavras muito diferentes das do documento podem não achar o trecho certo — nesse caso, ou
+  aumente as etiquetas do documento, ou revise/adicione o texto. **Cópia duplicada com teste de paridade**
+  (`server/src/lib/aiRetrieval.ts` = `src/lib/aiRetrieval.ts`, `src/test/aiRetrieval.test.ts` compara e roda
+  os mesmos casos nas duas), porque o front usa a mesma busca em "Testar busca" da base de conhecimento.
+- **Não semeei nenhum documento de exemplo** na base de conhecimento (o pedido dizia "não semear preços
+  inventados; se semear, marcar claramente como exemplo e inativo" — decidi não semear nada para não haver
+  risco de um texto de exemplo ser usado sem revisão). A base começa vazia; cadastre o que fizer sentido.
+- **Estoque no prompt**: só aparelhos com status **Disponível**; se a pergunta citar um modelo específico
+  (com ou sem espaço, ex. "iphone15" ou "iphone 15"), mostra até 8 unidades desse modelo (a mais específica:
+  "15 Pro Max" não mistura com "15 Pro"), com filtro por capacidade/condição se citados; sem preço de venda
+  cadastrado, a linha diz "preço sob consulta (não informar valor)" — nunca usa o custo. Sem citar modelo,
+  mostra um resumo "a partir de" por modelo+capacidade (só com o menor preço de venda existente).
+- **Sugerir na conversa (`useAI`) x gerenciar a IA (`manageAI`)**: o vendedor sugere/usa/revisa respostas,
+  mas não vê o prompt enviado ao Gemini nem mexe em configuração/base de conhecimento/simulador/métricas
+  (só admin e gerente). O prompt completo só aparece no **Simulador**, para depuração.
+- **Regra "IA" nas Respostas automáticas (5A)**: liguei o gancho `registerAiReplyGenerator` que a Fase 5A já
+  tinha deixado pronto (`server/src/services/keywordReplies.ts`); a opção "Em breve: IA (Fase 5B)" no
+  formulário virou "Responder com IA (Gemini)" com um seletor do tipo de atendimento. Não toquei no webhook
+  em si (`whatsappWebhook.ts`) nem no motor de regras (`lib/keywordRules.ts`) — só o `deliver()` de
+  `inboundWhatsapp.ts` ganhou os três desfechos possíveis do gerador de IA (enviar, ir para revisão, erro).
+- **Cooldown da regra e limite por hora da IA são coisas diferentes**: o cooldown (intervalo mínimo entre
+  respostas da MESMA regra ao MESMO telefone, da 5A) continua valendo antes de a IA ser chamada; o limite de
+  respostas automáticas por hora é um limite adicional, só da IA, e conta especificamente os envios
+  automáticos (não os que foram para revisão).
+- **Migration**: a `0029` cria `ai_documents`, `ai_events`, `ai_reviews` e as colunas `ai_kind` (em
+  `keyword_rules`) e `review_id` (em `keyword_rule_hits`). Não altera nem apaga nada existente.
+- **Backup**: passou a incluir a base de conhecimento (`ai_documents`) e os eventos/revisões da IA
+  (`ai_events`, `ai_reviews`); a chave `GEMINI_API_KEY` nunca sai no backup (é uma variável customizada,
+  já excluída do backup desde a Fase 4A).
+- **Auditoria**: registra alteração de configuração da IA (com destaque quando liga/desliga a IA ou o envio
+  automático), criação/edição/ativação/exclusão de documentos da base de conhecimento e cada
+  aprovação/edição/descarte na fila de revisão.
+
 ## Pendências que dependem de você
 - **Fase 4A: revisar a matriz de permissões** (Usuários > "O que cada cargo pode") e o endurecimento do técnico (9 rotas de API que ele não usava).
 - **Fase 4A, em produção**: definir `SETTINGS_ENC_KEY` (chave para cifrar variáveis) antes de cadastrar variáveis; confirmar que o banco é UTF8; a migration `0026` roda sozinha no deploy (cria fornecedores, os 3 cargos novos e converte os fornecedores já digitados nos aparelhos).
@@ -128,8 +236,9 @@ Nada foi enviado ao GitHub nem colocado em produção.
 - **Fase 5A, testar com o Uazapi REAL (não foi possível aqui)**: configurar o webhook no painel do Uazapi com a URL da aba **Conectar WhatsApp**, mandar uma mensagem de outro número e conferir se o lead aparece e a resposta sai. Se não aparecer, me passe um exemplo do payload que o Uazapi enviou (o parser é pequeno de ajustar). Confirmar também se o Uazapi aceita o corpo de `/message/text` já usado (é o mesmo do resto do sistema).
 - **Fase 5A, em produção**: a migration `0028` roda sozinha no deploy (tabelas `quick_replies`, `keyword_rules`, `keyword_rule_hits`; colunas novas em mensagens, tarefas e números de WhatsApp; gera o segredo do webhook dos números que já existem); a **URL da API precisa ser acessível pela internet** (o Uazapi chama de fora); manter **uma única cópia da API** (fila por telefone e agendador em memória); as etapas do funil de um banco antigo só mudam se alguém clicar em **Restaurar etapas padrão**.
 - **Fase 5A, decidir**: o horário comercial padrão (seg–sáb 9–19) e os textos das respostas rápidas padrão (citam o horário e "Av. Paulista" pelo endereço da loja); se o vendedor deve poder mexer na estrutura do funil (hoje pode, como antes); se a resposta automática deve ficar fora do ar durante conversa já em andamento com humano (hoje só o intervalo mínimo por regra evita repetição).
-- **Fase 5A, IA (5B)**: o gancho está em `registerAiReplyGenerator` (`server/src/services/keywordReplies.ts`); regras com ação "IA" ficam desabilitadas na tela e, se existirem, registram "recurso ainda não disponível" no disparo.
-
+- **Fase 5B, testar com o Gemini REAL (não foi possível aqui)**: cadastrar a chave de verdade e testar no Simulador antes de confiar em qualquer coisa; comparar o formato real da resposta com o que o código espera (ver nota no topo deste arquivo). Testar também um envio de WhatsApp real de uma resposta da IA (aprovada na revisão ou automática).
+- **Fase 5B, decidir**: se `useAI` (sugerir/revisar) deve realmente incluir o vendedor (hoje inclui, pelo pedido de "sugerir resposta na conversa"); se quer restringir ainda mais quem liga o `autoSend` (hoje qualquer um com `manageAI`, ou seja, admin/gerente); os guardrails padrão e o tom de voz padrão (revise o texto e ajuste à realidade da loja); se quer cadastrar desde já uma política de troca com faixas de valor (sem isso, a IA nunca cota troca).
+- **Fase 5B, em produção**: a migration `0029` roda sozinha no deploy (tabelas `ai_documents`, `ai_events`, `ai_reviews`, colunas `ai_kind`/`review_id`); definir `GEMINI_API_KEY` (variável cifrada ou de ambiente) só quando for realmente ativar; a base de conhecimento nasce vazia — cadastre os documentos da sua loja antes de ligar a IA.
 
 ## Observações de segurança encontradas
 - **Fase 5A**: o webhook é uma das **poucas rotas públicas** (junto com o login) e a única que recebe dados de terceiros (segredo na URL). Riscos e defesas: segredo de 192 bits comparado em tempo constante; corpo limitado a 256 KB; parser que nunca lança e limita texto (4.000), nome (120) e 20 mensagens por chamada; tudo que chega é guardado como **texto puro** e exibido com escape do React (testado com `<img onerror>` e SQL). **Quem tiver a URL consegue injetar mensagens falsas** (por isso o botão Gerar novo segredo): não compartilhe. Não validamos nenhuma assinatura do provedor (não sei se o Uazapi oferece uma; se oferecer, vale adicionar). Resposta automática só sai pelo **mesmo número** que recebeu, e o cooldown por telefone limita repetição (proteção contra laço com outro robô).
@@ -139,3 +248,4 @@ Nada foi enviado ao GitHub nem colocado em produção.
 - O limite geral da API é 200 requisições por minuto por IP; o Kanban com avisos e histórico faz algumas chamadas a mais, mas é folgado para uso normal.
 - **Fase 4B**: as telas de relatório usam `GET /devices` (que entrega custo a qualquer logado) e só **escondem** o custo nos arquivos/telas; a API continua entregando. Endpoints novos (`/reconciliation`, `/planning`) respeitam capacidades; a lista de responsáveis do planejamento não expõe telefone.
 - `GET /devices` devolve o **custo** de todos os aparelhos para qualquer usuário logado (vendedor/técnico). A tela esconde, mas a API entrega. Não alterei por não ter sido pedido e para não quebrar telas; vale corrigir depois. (Na Fase 4A os endpoints NOVOS já respeitam "ver custo": ficha do fornecedor, por exemplo.)
+- **Fase 5B**: a chave `GEMINI_API_KEY` usa o mesmo mecanismo cifrado das variáveis customizadas (Fase 4A) e nunca aparece em `GET /ai/status`, `GET /ai/config`, no backup nem na auditoria (testado). O texto do cliente é enviado a um serviço externo (Google) — ver a nota de LGPD acima. `POST /ai/playground` (simulador) e `POST /ai/suggest` têm limite próprio de 30 requisições/minuto por IP (chamadas que custam dinheiro no Gemini de verdade); o registro de cada chamada (`ai_events`) guarda o texto JÁ sem dados pessoais, então mesmo um vazamento da tabela não expõe CPF/e-mail/telefone/endereço do cliente. A fila de revisão (`ai_reviews`) é visível a quem tem `useAI` (inclui vendedor) — ela mostra a pergunta e a sugestão, mas não dados de outros clientes fora daquela conversa.

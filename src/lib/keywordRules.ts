@@ -59,6 +59,7 @@ export interface KeywordRule {
   match: "any" | "all";
   replyBody: string;
   action: RuleAction;
+  aiKind?: "preco" | "troca" | "os" | "geral"; // Fase 5B: tipo de atendimento da IA (quando action = "ai")
   priority: number;
   active: boolean;
   schedule: RuleSchedule;

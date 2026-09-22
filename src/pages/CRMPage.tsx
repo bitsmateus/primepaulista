@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Megaphone, Wifi, Bot, CalendarCheck, MessageSquareText, Reply } from "lucide-react";
+import { Users, Megaphone, Wifi, Bot, CalendarCheck, MessageSquareText, Reply, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { can } from "@/lib/permissions";
 import LeadsTab from "@/components/crm/LeadsTab";
@@ -10,11 +10,17 @@ import AutomationsTab from "@/components/crm/AutomationsTab";
 import AgendaTab from "@/components/crm/AgendaTab";
 import QuickRepliesTab from "@/components/crm/QuickRepliesTab";
 import AutoRepliesTab from "@/components/crm/AutoRepliesTab";
+import AiReviewsTab from "@/components/ai/AiReviewsTab";
+import { useAiStatus } from "@/hooks/useAI";
+import { Badge } from "@/components/ui/badge";
 
 export default function CRMPage() {
   const { user } = useAuth();
   const canAutomations = can(user?.role, "manageAutomations");
   const canWhatsapp = can(user?.role, "manageWhatsapp");
+  const canAI = can(user?.role, "useAI");
+  const { data: aiStatus } = useAiStatus();
+  const aiPending = aiStatus?.pendingReviews ?? 0;
 
   return (
     <AppLayout>
@@ -42,6 +48,13 @@ export default function CRMPage() {
               <Reply className="h-4 w-4" />
               Respostas automáticas
             </TabsTrigger>
+            {canAI && (
+              <TabsTrigger value="revisao" className="gap-2">
+                <Sparkles className="h-4 w-4" />
+                Revisão da IA
+                {aiPending > 0 && <Badge variant="destructive" className="h-5 px-1.5 text-[11px]" data-testid="ai-pending-badge">{aiPending}</Badge>}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="campaigns" className="gap-2">
               <Megaphone className="h-4 w-4" />
               Campanhas
@@ -72,6 +85,11 @@ export default function CRMPage() {
           <TabsContent value="respostas">
             <AutoRepliesTab />
           </TabsContent>
+          {canAI && (
+            <TabsContent value="revisao">
+              <AiReviewsTab />
+            </TabsContent>
+          )}
           <TabsContent value="campaigns">
             <CampaignsTab />
           </TabsContent>

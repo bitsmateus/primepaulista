@@ -4,7 +4,7 @@ Documento das alterações recentes do sistema de gestão. Versão atual: **v1.0
 
 ---
 
-## 21/09/2026 — Paridade com o sistema M7 Concept (em andamento)
+## 21/09/2026 — Paridade com o sistema M7 Concept (concluída)
 
 Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual e a fonte atuais.
 
@@ -112,6 +112,22 @@ Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual
   - Quando chega uma mensagem: o sistema **cria o lead** (etapa **Novo Lead**, origem WhatsApp) ou reaproveita o que tem o mesmo telefone, **guarda a mensagem** no histórico do lead, avalia as regras e **responde pelo mesmo número**. Mensagens **próprias**, de **grupos** e repetidas são ignoradas; o webhook **nunca** devolve erro ao provedor por falha interna, mesmo sem WhatsApp conectado (o motivo fica no disparo).
   - No cartão do lead aparece o selo **"N nova(s)"** enquanto houver mensagem recebida não vista; abrir a conversa ou o histórico marca como lida. A conversa mostra as mensagens recebidas e as respostas. O aviso da Fase 4A ganhou **"mensagens novas no WhatsApp"**.
   - **O Uazapi de verdade não foi testado** (os testes usaram um servidor falso): o formato da mensagem recebida é lido de forma tolerante, mas é uma suposição a confirmar com uma mensagem real.
+
+### Fase 5B — IA (Gemini) no atendimento
+**Nova aba "IA Atendimento"** no menu (administrador e gerente) e integração na conversa do lead e nas respostas automáticas do WhatsApp.
+- **Configuração**: liga/desliga geral (kill-switch), modelo do Gemini (padrão `gemini-2.5-flash`), temperatura, tamanho máximo da resposta, confiança mínima para enviar sozinha, **envio automático** (desligado por padrão, com confirmação ao ligar), limite de respostas automáticas por telefone por hora (padrão 3), tom de voz e **guardrails** (regras que a IA sempre segue — vêm 5 padrão: desconto acima de 5%, iCloud/desbloqueio, nunca inventar preço/prazo, nunca revelar custo/margem, respeitar a garantia; dá para adicionar/remover e restaurar o padrão).
+  - A chave fica em **Configurações › Variáveis › `GEMINI_API_KEY`** (a mesma tela cifrada da Fase 4A) ou numa variável de ambiente do servidor. **Sem chave cadastrada, a tela avisa claramente** ("IA não configurada: cadastre a chave...") e nada quebra — inclusive o simulador, a sugestão na conversa e as regras automáticas.
+- **Base de conhecimento**: crie documentos colando texto ou enviando um arquivo `.txt`/`.md` (até 200 KB), com categoria (Manual, Tabela de preços, Política de garantia, Política de pagamento, Outro), etiquetas, contagem estimada de tokens, busca e **"Testar busca"** (mostra os trechos que a IA receberia para uma pergunta, sem gastar nada). Só documentos **ativos** são usados; um botão ativa/desativa cada um sem excluir.
+- **A IA responde com base em**: os documentos ativos da base de conhecimento (o trecho mais relevante, não o documento inteiro), o **estoque disponível de verdade** (modelo, capacidade, cor, condição, bateria e **preço de venda** — nunca custo, fornecedor, IMEI ou observações), e, só quando o telefone bate com o dono, a **situação de uma Ordem de Serviço** citada (status, sem CPF nem valores — não há campo de previsão de prazo hoje, então a IA nunca promete data). Sem confirmação do telefone, ou se a pergunta só citar CPF/OS sem bater, a resposta diz que "um atendente vai verificar".
+  - Ela **nunca inventa preço**: se citar um valor que não está no estoque nem na base de conhecimento, a resposta é sinalizada para revisão automaticamente. Também **não cota valor de troca sozinha** (encaminha para um humano), a menos que exista um documento de política de troca com faixas.
+- **Sugerir resposta na conversa** (CRM › Gestão de Leads, botão **"✨ Sugerir resposta com IA"**): mostra a resposta, a confiança (barra colorida), as fontes usadas e um aviso "**Baixa confiança IA — revise antes de enviar**" quando a confiança for baixa ou a IA pedir revisão humana. Ações: usar (coloca no campo de mensagem), editar, enviar (vai pelo WhatsApp já conectado) ou descartar.
+- **Resposta automática por palavra-chave com ação "IA"** (aba Respostas automáticas do CRM, que antes mostrava "Em breve: IA (Fase 5B)" desabilitado — agora está **ativa**): escolha o tipo de atendimento (Cotação & Preços, Avaliação de Troca, Consulta de Status de OS ou Atendimento geral) em vez de escrever um texto fixo; o Gemini gera a resposta na hora.
+  - Se **envio automático** estiver ligado, a confiança for **igual ou maior** que o limiar configurado, a IA não tiver pedido revisão humana e o limite por telefone/hora não tiver sido atingido → **envia sozinha**. Caso contrário, a resposta vai para a fila **"Revisão da IA"** (nova aba do CRM) com o motivo (ex.: "Confiança 50% abaixo do mínimo (75%)", "Envio automático desligado", "A IA pediu revisão humana", "Limite de respostas automáticas por hora").
+- **Revisão da IA** (nova aba do CRM, com o número de pendentes no próprio nome da aba e no sino de avisos): fila de perguntas, sugestão, confiança e fontes; **aprovar e enviar**, **editar e enviar** ou **descartar**; histórico de quem tratou cada uma e quando. Se o WhatsApp estiver desconectado na hora de aprovar, o item **continua pendente** com o motivo (nada se perde).
+- **Simulador** ("Simular pergunta", só administrador/gerente): testa uma pergunta (com tipo e telefone opcionais) e mostra a resposta, a confiança, as fontes, o contexto usado (estoque/OS), os tokens, a latência e **o prompt inteiro enviado ao Gemini** (para conferir o que foi mandado) — sem enviar nada a ninguém.
+- **Métricas** ("IA no atendimento"): perguntas atendidas, % enviada automaticamente, % revisada, % descartada, confiança média, latência média, erros e gráfico por dia (o simulador não entra nas métricas).
+- **Privacidade (LGPD)**: antes de ir ao Gemini, o texto do cliente tem CPF, CNPJ, e-mail, telefone, CEP e endereço **removidos automaticamente** (e não ficam salvos nem no registro interno da IA). Custo, margem e fornecedor **nunca** entram no que é mandado à IA.
+- **A API REAL do Gemini não foi testada** (o Google não fornece uma chave de teste): todos os testes rodaram contra um servidor Gemini **falso** local. Veja `DECISOES-PENDENTES.md` para o que fazer antes de usar de verdade.
 
 ---
 

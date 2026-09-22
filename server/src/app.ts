@@ -31,6 +31,8 @@ import { planningRoutes } from "./routes/planning";
 import { quickReplyRoutes } from "./routes/quickReplies";
 import { keywordRuleRoutes } from "./routes/keywordRules";
 import { whatsappWebhookRoutes } from "./routes/whatsappWebhook";
+import { aiRoutes } from "./routes/ai";
+import { registerAiRules } from "./services/aiRules";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -88,6 +90,8 @@ export function buildApp() {
   app.register(planningRoutes);
   app.register(quickReplyRoutes);
   app.register(keywordRuleRoutes);
+  app.register(aiRoutes);
+  registerAiRules(); // regras com ação "IA" (Fase 5B) passam a responder pelo Gemini
   app.register(whatsappWebhookRoutes); // público (segredo na URL): mantém o próprio parser de corpo
 
   return app;

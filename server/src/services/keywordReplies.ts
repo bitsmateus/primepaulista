@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/index";
 import { keywordRuleHits, keywordRules } from "../db/schema/index";
 import { getSetting } from "./settings";
+import { resolveGeminiKey } from "./ai";
 import { findLeadsByPhone, type LeadRow } from "./leadFunnel";
 import { phoneKey, renderReplyTemplate } from "../lib/crmText";
 import {
@@ -20,6 +21,7 @@ export function rowToRule(row: KeywordRuleRow): KeywordRule {
     match: row.match === "all" ? "all" : "any",
     replyBody: row.replyBody,
     action: row.action === "ai" ? "ai" : "reply",
+    aiKind: (["preco", "troca", "os", "geral"] as const).find((k) => k === row.aiKind) ?? "geral",
     priority: row.priority,
     active: row.active,
     schedule: normalizeSchedule(row.schedule),
@@ -68,16 +70,24 @@ export async function renderRuleReply(body: string, src: ReplyContextSource): Pr
 }
 
 // ---- Ponto de extensão da IA (Fase 5B) ----
-// Uma regra com action = "ai" chama o gerador registrado aqui. A Fase 5B só precisa chamar
-// registerAiReplyGenerator(...) na inicialização; o webhook (inboundWhatsapp.ts) não muda.
-// Enquanto não houver gerador, a regra "ai" não responde e o disparo fica registrado com o motivo.
+// Uma regra com action = "ai" chama o gerador registrado aqui (services/aiRules.ts registra na inicialização).
+// O gerador devolve: um texto (envia), null (nada), ou um resultado explícito:
+//   { kind: "send", text, done? }  envia o texto (done recebe o erro do envio, se houver)
+//   { kind: "review", reviewId }   não envia: foi para a fila de revisão da IA
+//   { kind: "error", message }     não responde; o motivo fica no disparo
+// Sem gerador registrado, a regra "ai" não responde e o disparo fica registrado com o motivo.
 export interface AiReplyContext {
   rule: KeywordRule;
   inboundText: string;
   phone: string;
   lead: LeadRow | null;
+  instanceId: string | null; // número que recebeu a mensagem
 }
-export type AiReplyGenerator = (ctx: AiReplyContext) => Promise<string | null>;
+export type AiReplyOutcome =
+  | { kind: "send"; text: string; done?: (error: string | null) => Promise<void> }
+  | { kind: "review"; reviewId: string }
+  | { kind: "error"; message: string };
+export type AiReplyGenerator = (ctx: AiReplyContext) => Promise<string | null | AiReplyOutcome>;
 let aiGenerator: AiReplyGenerator | null = null;
 export function registerAiReplyGenerator(fn: AiReplyGenerator | null) {
   aiGenerator = fn;
@@ -133,18 +143,22 @@ export async function simulate(input: SimulationInput): Promise<SimulationResult
   const leads = phoneKey(phone).length >= 10 ? await findLeadsByPhone(phone) : [];
   const lead = leads[0] ?? null;
   const w = res.winner;
+  // regra de IA: só "responderia" se a IA estiver ligada e com chave (a resposta em si só existe na hora)
+  const aiCfg = w?.rule.action === "ai" ? await getSetting("ai") : null;
+  const aiKey = w?.rule.action === "ai" ? await resolveGeminiKey() : null;
+  const aiReady = Boolean(aiGenerator && aiCfg?.enabled && aiKey);
   // fora do horário não há vencedora: mostra a primeira regra que casou as palavras, para explicar o motivo
   const shown = w ?? (res.status === "outside_schedule" ? res.candidates[0] ?? null : null);
   let replyText: string | null = null;
   if (w && (res.status === "fire" || res.status === "cooldown")) {
     replyText =
-      w.rule.action === "ai" && !aiGenerator
+      w.rule.action === "ai"
         ? null
         : await renderRuleReply(w.rule.replyBody, { lead });
   }
   return {
     status: res.status,
-    wouldSend: res.status === "fire" && (w?.rule.action !== "ai" || Boolean(aiGenerator)),
+    wouldSend: res.status === "fire" && (w?.rule.action !== "ai" || aiReady),
     action: res.action,
     rule: shown
       ? { id: shown.rule.id, name: shown.rule.name, category: shown.rule.category, priority: shown.rule.priority, action: shown.rule.action, cooldownMinutes: shown.rule.cooldownMinutes }
@@ -164,8 +178,15 @@ export async function simulate(input: SimulationInput): Promise<SimulationResult
       scheduleOk: c.schedule.ok,
       scheduleReason: c.schedule.reason,
     })),
-    message: res.status === "fire" && w?.rule.action === "ai" && !aiGenerator
-      ? "A regra é de IA (Fase 5B, ainda não disponível): nada seria enviado."
-      : STATUS_MESSAGE[res.status],
+    message:
+      res.status === "fire" && w?.rule.action === "ai"
+        ? !aiCfg?.enabled
+          ? "A regra é de IA, mas a IA está desligada (IA no Atendimento › Configuração): nada seria enviado."
+          : !aiKey
+            ? "A regra é de IA, mas falta a chave GEMINI_API_KEY (Configurações › Variáveis): nada seria enviado."
+            : aiCfg.autoSend
+              ? "A regra é de IA: o Gemini geraria a resposta na hora e ela sairia sozinha se a confiança for alta; senão iria para a fila de revisão."
+              : "A regra é de IA: o Gemini geraria a resposta na hora e ela iria para a fila de revisão (o envio automático está desligado)."
+        : STATUS_MESSAGE[res.status],
   };
 }

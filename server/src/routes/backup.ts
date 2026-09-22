@@ -41,6 +41,9 @@ const BUSINESS_TABLES = {
   quickReplies: schema.quickReplies,
   keywordRules: schema.keywordRules,
   keywordRuleHits: schema.keywordRuleHits,
+  aiDocuments: schema.aiDocuments,
+  aiEvents: schema.aiEvents,
+  aiReviews: schema.aiReviews,
   appSettings: schema.appSettings,
   auditLogs: schema.auditLogs,
 } as const;

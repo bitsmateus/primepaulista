@@ -46,6 +46,8 @@ export const CAPABILITIES = [
   "viewReports", // relatórios (estoque etc.)
   "managePlanning", // planejamento semanal: criar, atribuir, editar e excluir tarefas
   "reconcile", // conferência financeira dos pagamentos (conciliação)
+  "useAI", // IA no atendimento: sugerir resposta na conversa e revisar as respostas da IA
+  "manageAI", // IA: configuração, base de conhecimento, simulador e métricas
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -79,6 +81,8 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   viewReports: "Relatórios",
   managePlanning: "Planejar a semana (criar e atribuir tarefas)",
   reconcile: "Conferência financeira dos pagamentos",
+  useAI: "IA: sugerir respostas na conversa e revisar as respostas da IA",
+  manageAI: "IA: configuração, base de conhecimento, simulador e métricas",
 };
 
 const ALL: readonly Capability[] = CAPABILITIES;
@@ -86,7 +90,7 @@ const ALL: readonly Capability[] = CAPABILITIES;
 export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
   admin: ALL,
   gerente: ALL.filter((c) => c !== "manageUsers" && c !== "manageSecrets"),
-  vendedor: ["sell", "viewSales", "viewSalesData", "viewStock", "editStock", "editCustomers", "useCRM", "viewOS", "editOS"],
+  vendedor: ["sell", "viewSales", "viewSalesData", "viewStock", "editStock", "editCustomers", "useCRM", "viewOS", "editOS", "useAI"],
   tecnico: ["viewSalesData", "viewStock", "editStock", "editCustomers", "viewOS", "editOS"],
   estoquista: [
     "viewCost", "viewSalesData", "viewStock", "editStock", "importStock", "bulkStockActions",
@@ -126,6 +130,7 @@ export const ROUTE_CAPABILITY: Record<string, Capability | null> = {
   "/bi": "viewBI",
   "/planejamento": null,
   "/relatorios": "viewReports",
+  "/ia": "manageAI",
   "/auditoria": "viewAudit",
   "/configuracoes": "editSettings",
   "/usuarios": "manageUsers",

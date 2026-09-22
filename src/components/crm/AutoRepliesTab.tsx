@@ -7,8 +7,9 @@ import { useBusinessHours, useKeywordHits, useKeywordRules, useKeywordStats } fr
 import { useStoreSnapshot } from "@/hooks/useAppSettings";
 import { useAuth } from "@/contexts/AuthContext";
 import { can } from "@/lib/permissions";
-import { api, ApiError, type KeywordRuleInput, type KeywordRuleView, type KeywordSimulation } from "@/lib/api";
+import { api, ApiError, type AiKind, type KeywordRuleInput, type KeywordRuleView, type KeywordSimulation } from "@/lib/api";
 import { REPLY_VARIABLES, renderReplyTemplate } from "@/lib/crmText";
+import { AI_KINDS, AI_KIND_LABELS } from "@/lib/aiLabels";
 import {
   DEFAULT_SCHEDULE, RULE_CATEGORIES, matchKeywords,
   type BusinessHours, type RuleMode, type RuleSchedule,
@@ -54,12 +55,13 @@ interface Draft {
   match: "any" | "all";
   replyBody: string;
   action: "reply" | "ai";
+  aiKind: AiKind;
   active: boolean;
   schedule: RuleSchedule;
   cooldownMinutes: number;
 }
 const EMPTY_DRAFT: Draft = {
-  name: "", category: "Outro", keywords: [], match: "any", replyBody: "", action: "reply", active: true,
+  name: "", category: "Outro", keywords: [], match: "any", replyBody: "", action: "reply", aiKind: "preco", active: true,
   schedule: { ...DEFAULT_SCHEDULE }, cooldownMinutes: 60,
 };
 
@@ -106,7 +108,7 @@ export default function AutoRepliesTab() {
   const openEdit = (r: KeywordRuleView) => {
     setDraft({
       name: r.name, category: r.category, keywords: [...r.keywords], match: r.match, replyBody: r.replyBody,
-      action: r.action, active: r.active, schedule: { ...r.schedule, days: [...r.schedule.days] }, cooldownMinutes: r.cooldownMinutes,
+      action: r.action, aiKind: r.aiKind ?? "geral", active: r.active, schedule: { ...r.schedule, days: [...r.schedule.days] }, cooldownMinutes: r.cooldownMinutes,
     });
     setKwInput(""); setTestText(""); setEditing(r);
   };
@@ -134,7 +136,7 @@ export default function AutoRepliesTab() {
     if (draft.action === "reply" && !draft.replyBody.trim()) { toast.error("Escreva o texto da resposta."); return; }
     const input: KeywordRuleInput = {
       name: draft.name.trim(), category: draft.category, keywords, match: draft.match, replyBody: draft.replyBody.trim(),
-      action: draft.action, active: draft.active, schedule: draft.schedule, cooldownMinutes: draft.cooldownMinutes,
+      action: draft.action, aiKind: draft.aiKind, active: draft.active, schedule: draft.schedule, cooldownMinutes: draft.cooldownMinutes,
     };
     try {
       if (editing === "new") await create.mutateAsync(input);
@@ -280,7 +282,7 @@ export default function AutoRepliesTab() {
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-semibold" title="Ordem de prioridade">{idx + 1}</span>
                 <p className="font-medium">{r.name}</p>
                 <Badge variant="outline" className="text-xs">{r.category}</Badge>
-                {r.action === "ai" && <Badge variant="secondary" className="text-xs">IA (Fase 5B)</Badge>}
+                {r.action === "ai" && <Badge variant="secondary" className="text-xs" data-testid="rule-ai-badge">IA · {AI_KIND_LABELS[r.aiKind ?? "geral"]}</Badge>}
                 <div className="ml-auto flex items-center gap-1">
                   {canManage && (
                     <>
@@ -316,8 +318,8 @@ export default function AutoRepliesTab() {
                 <span className="text-xs text-muted-foreground">{dm(h.createdAt)}</span>
                 <span className="font-medium">{h.ruleName}</span>
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">“{h.inboundText}”</span>
-                <Badge variant={h.replied ? "default" : h.error ? "destructive" : "secondary"} className="text-xs" title={h.error ?? ""}>
-                  {h.replied ? "Respondeu" : h.error ? "Falhou" : "Enviando"}
+                <Badge variant={h.replied ? "default" : h.error ? "destructive" : "secondary"} className="text-xs" title={h.error ?? ""} data-testid="hit-status">
+                  {h.replied ? "Respondeu" : h.error ? "Falhou" : h.reviewId ? "Na revisão da IA" : "Enviando"}
                 </Badge>
               </div>
             ))}
@@ -376,10 +378,24 @@ export default function AutoRepliesTab() {
                     <SelectTrigger aria-label="Ação da regra"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="reply">Responder com o texto</SelectItem>
-                      <SelectItem value="ai" disabled>Em breve: IA (Fase 5B)</SelectItem>
+                      <SelectItem value="ai">Responder com IA (Gemini)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {draft.action === "ai" && (
+                  <div className="col-span-2">
+                    <Label>Tipo de atendimento da IA</Label>
+                    <Select value={draft.aiKind} onValueChange={(v) => setDraft({ ...draft, aiKind: v as AiKind })}>
+                      <SelectTrigger aria-label="Tipo de atendimento da IA"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {AI_KINDS.map((k) => <SelectItem key={k} value={k}>{AI_KIND_LABELS[k]}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-muted-foreground" data-testid="rule-ai-hint">
+                      A resposta é gerada pelo Gemini na hora (com a base de conhecimento, o estoque e os guardrails). Ela só sai sozinha se o envio automático estiver ligado e a confiança for alta; senão vai para a aba <strong>Revisão da IA</strong>. O texto abaixo não é usado.
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
                 <Label htmlFor="kr-test">Testar palavras-chave</Label>

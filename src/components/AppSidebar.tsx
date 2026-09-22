@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Smartphone, Package, ShoppingCart, Receipt, Users, MessageSquare,
   Wrench, BarChart3, LogOut, ShieldCheck, BadgeCheck, PanelLeftClose, PanelLeftOpen, Table2, RefreshCw, FileText,
-  Truck, ScrollText, Settings, UserCircle, Lock, CalendarDays, FileBarChart,
+  Truck, ScrollText, Settings, UserCircle, Lock, CalendarDays, FileBarChart, Bot,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +25,7 @@ const navItems = [
   { to: "/fornecedores", label: "Fornecedores", icon: Truck },
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/crm", label: "CRM", icon: MessageSquare },
+  { to: "/ia", label: "IA Atendimento", icon: Bot },
   { to: "/assistencia", label: "Assistência", icon: Wrench },
   { to: "/garantias", label: "Garantias", icon: BadgeCheck },
   { to: "/bi", label: "BI Financeiro", icon: BarChart3 },

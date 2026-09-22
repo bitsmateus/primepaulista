@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "../db/index";
 import { appSettings } from "../db/schema/index";
 import { DEFAULT_OS_MESSAGES, type OsMessagesSettings } from "./osMessages";
+import { AI_MODEL_RE, DEFAULT_AI, type AiSettings } from "../lib/aiConfig";
 import { DEFAULT_BUSINESS_HOURS, timeToMinutes, type BusinessHours } from "../lib/keywordRules";
 import {
   DEFAULT_SECURITY, DEFAULT_STORE, DEFAULT_WARRANTY_TERMS,
@@ -117,6 +118,22 @@ const crmAgendaSchema = z
   })
   .strict();
 
+// Fase 5B: IA (Gemini) no atendimento. A chave do Gemini NÃO fica aqui (variável GEMINI_API_KEY cifrada ou ambiente).
+const aiSchema = z
+  .object({
+    enabled: z.boolean(),
+    model: z.string().trim().regex(AI_MODEL_RE, "Nome de modelo inválido (ex.: gemini-2.5-flash)"),
+    temperature: z.number().min(0).max(1),
+    maxOutputTokens: z.number().int().min(64).max(8192),
+    confidenceThreshold: z.number().min(0).max(1),
+    autoSend: z.boolean(),
+    maxAutoPerHour: z.number().int().min(1).max(60),
+    historyMessages: z.number().int().min(0).max(20),
+    tone: z.string().trim().min(1, "Informe o tom de voz").max(400),
+    guardrails: z.array(z.string().trim().min(1, "Regra vazia").max(400)).max(30),
+  })
+  .strict();
+
 export const SETTINGS = {
   os_messages: {
     schema: osMessagesSchema,
@@ -128,6 +145,7 @@ export const SETTINGS = {
   security: { schema: securitySchema, defaults: DEFAULT_SECURITY } satisfies SettingDef<SecuritySettings>,
   business_hours: { schema: businessHoursSchema, defaults: DEFAULT_BUSINESS_HOURS } satisfies SettingDef<BusinessHours>,
   crm_agenda: { schema: crmAgendaSchema, defaults: DEFAULT_CRM_AGENDA } satisfies SettingDef<CrmAgendaSettings>,
+  ai: { schema: aiSchema, defaults: DEFAULT_AI } satisfies SettingDef<AiSettings>,
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

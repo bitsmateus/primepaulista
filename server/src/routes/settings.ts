@@ -5,6 +5,8 @@ import { SETTINGS, getSetting, isSettingKey, saveSetting } from "../services/set
 
 // Configurações da loja (chave -> JSON). Leitura: qualquer usuário logado.
 // Gravação: quem tem a capacidade editSettings (admin, gerente). Só chaves registradas em services/settings.ts.
+// A chave "ai" (Fase 5B) tem rotas próprias (/ai/config, capacidade manageAI) e NÃO passa por aqui.
+const RESERVED = new Set(["ai"]);
 export async function settingsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
@@ -22,13 +24,13 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.get("/settings/:key", async (req, reply) => {
     const { key } = req.params as { key: string };
-    if (!isSettingKey(key)) return reply.code(400).send({ error: "Configuração desconhecida." });
+    if (!isSettingKey(key) || RESERVED.has(key)) return reply.code(400).send({ error: "Configuração desconhecida." });
     return { key, value: await getSetting(key) };
   });
 
   app.put("/settings/:key", { preHandler: requireCapability("editSettings") }, async (req, reply) => {
     const { key } = req.params as { key: string };
-    if (!isSettingKey(key)) return reply.code(400).send({ error: "Configuração desconhecida." });
+    if (!isSettingKey(key) || RESERVED.has(key)) return reply.code(400).send({ error: "Configuração desconhecida." });
     const parsed = SETTINGS[key].schema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Dados inválidos", details: parsed.error.flatten() });
