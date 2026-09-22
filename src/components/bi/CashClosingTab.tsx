@@ -1,4 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ClipboardCheck } from "lucide-react";
+import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,9 +18,10 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   financial: any;
+  onOpenReconciliation?: () => void; // abre a aba Conferência (só quem pode conferir)
 }
 
-export function CashClosingTab({ financial }: Props) {
+export function CashClosingTab({ financial, onOpenReconciliation }: Props) {
   const { getDailyCash, sangrias, addSangria } = financial;
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [sangriaAmount, setSangriaAmount] = useState("");
@@ -23,6 +29,15 @@ export function CashClosingTab({ financial }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
+  const { user } = useAuth();
+  // Pagamentos do dia ainda sem conferência financeira (só quem confere vê)
+  const { data: recSummary } = useQuery({
+    queryKey: ["reconciliationSummary", dateStr],
+    queryFn: () => api.reconciliationSummary({ from: dateStr, to: dateStr }),
+    enabled: can(user?.role, "reconcile"),
+    staleTime: 15_000,
+  });
+  const awaiting = recSummary?.Aguardando.count ?? 0;
   const cash = getDailyCash(dateStr);
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -77,13 +92,27 @@ export function CashClosingTab({ financial }: Props) {
         </Dialog>
       </div>
 
+      {can(user?.role, "reconcile") && recSummary && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2 text-sm" data-testid="caixa-conferencia">
+          <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+          <span data-testid="caixa-aguardando">Aguardando conferência ({awaiting})</span>
+          {onOpenReconciliation && (
+            <Button variant="link" size="sm" className="h-auto p-0" onClick={onOpenReconciliation}>
+              Ir para a Conferência
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Payment breakdown */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { label: "PIX", value: cash.pix, color: "text-success" },
           { label: "Dinheiro", value: cash.dinheiro, color: "text-foreground" },
           { label: "Cartão Crédito", value: cash.creditCard, color: "text-primary" },
           { label: "Cartão Débito", value: cash.debitCard, color: "text-primary" },
+          { label: "Mercado Pago / Link", value: cash.mercadoPago, color: "text-primary" },
+          { label: "Outro / Verificação externa", value: cash.outro, color: "text-foreground" },
         ].map(item => (
           <Card key={item.label} className="border shadow-none">
             <CardContent className="p-6">

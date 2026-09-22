@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { Sale, PaymentMethod } from "@/types/inventory";
 import { printReceipt } from "@/utils/receiptGenerator";
 import {
@@ -11,6 +12,8 @@ import {
 } from "@/lib/sales";
 import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
+import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
+import { AUDIT_STATUS_LABEL } from "@/lib/reconciliation";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +26,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const PAYMENT_METHODS: PaymentMethod[] = ["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"];
 const PERIODS = [
   { value: "all", label: "Todo o período" },
   { value: "today", label: "Hoje" },
@@ -44,7 +46,10 @@ function inPeriod(date: Date, period: string, now: Date): boolean {
 export default function VendasPage() {
   const { sales, salesLoading, devices, accessories, customers, returnSale, updateSale } = useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canCost = can(user?.role, "viewCost");
+  const canEditSale = can(user?.role, "editSales");
+  const canReturnSale = can(user?.role, "returnSales");
+  const canSeeAuditDetail = can(user?.role, "reconcile"); // observação e conferente da conferência financeira
 
   const devicesById = useMemo(() => buildDeviceMap(devices), [devices]);
   const accessoriesById = useMemo(() => buildAccessoryMap(accessories), [accessories]);
@@ -53,6 +58,7 @@ export default function VendasPage() {
   const [status, setStatus] = useState("all");
   const [period, setPeriod] = useState("all");
   const [sellerFilter, setSellerFilter] = useState("all");
+  const [originFilter, setOriginFilter] = useState("all");
 
   const [viewSale, setViewSale] = useState<Sale | null>(null);
   const [editSale, setEditSale] = useState<Sale | null>(null);
@@ -81,12 +87,21 @@ export default function VendasPage() {
         if (status === "active" && isReturned(s)) return false;
         if (status === "returned" && !isReturned(s)) return false;
         if (sellerFilter !== "all" && s.seller !== sellerFilter) return false;
+        if (originFilter !== "all" && (s.origin ?? "Balcão") !== originFilter) return false;
         if (!inPeriod(s.createdAt, period, now)) return false;
         return true;
       }),
-    [sales, search, status, sellerFilter, period]
+    [sales, search, status, sellerFilter, originFilter, period]
   );
   const summary = buildSalesSummary(filtered);
+  // Lucro líquido acumulado das vendas filtradas (devolvidas não contam) — só admin
+  const accumulatedProfit = useMemo(
+    () =>
+      filtered
+        .filter((s) => !isReturned(s))
+        .reduce((sum, s) => sum + saleNetProfit(s, devicesById, accessoriesById), 0),
+    [filtered, devicesById, accessoriesById]
+  );
 
   const openEdit = (s: Sale) => {
     setEditSale(s);
@@ -112,7 +127,7 @@ export default function VendasPage() {
         requiresInvoice: eRequiresInvoice,
         notes: eNotes,
         paymentMethod: ePayment,
-        installments: ePayment === "Cartão de Crédito" ? Number(eInstallments) || 1 : 1,
+        installments: allowsInstallments(ePayment) ? Number(eInstallments) || 1 : 1,
       });
       toast.success("Venda atualizada!");
       setEditSale(null);
@@ -131,16 +146,17 @@ export default function VendasPage() {
     <AppLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Vendas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Histórico de vendas, recibos e edição</p>
+          <h1 className="text-2xl font-semibold text-foreground">Vendas realizadas</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Histórico de vendas e comprovantes: 2ª via do recibo, notas fiscais anexas e edição</p>
         </div>
 
         {/* Resumo */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={`grid grid-cols-2 gap-4 ${canCost ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           {[
             { label: "Vendas", value: summary.count },
             { label: "Faturamento líquido", value: fmt(summary.net) },
             { label: "Faturamento bruto", value: fmt(summary.gross) },
+            ...(canCost ? [{ label: "Lucro líquido acumulado", value: fmt(accumulatedProfit) }] : []),
             { label: "Devolvidas", value: summary.returned },
           ].map((c) => (
             <Card key={c.label} className="border shadow-none">
@@ -169,6 +185,14 @@ export default function VendasPage() {
               {sellers.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={originFilter} onValueChange={setOriginFilter}>
+            <SelectTrigger className="w-36" aria-label="Origem"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toda origem</SelectItem>
+              <SelectItem value="Balcão">Venda de balcão</SelectItem>
+              <SelectItem value="Orçamento">De orçamento</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -190,10 +214,11 @@ export default function VendasPage() {
                     <TableHead>Data</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Vendedor</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Itens</TableHead>
                     <TableHead>Pagamento</TableHead>
                     <TableHead>Total</TableHead>
-                    {isAdmin && <TableHead>Lucro líquido</TableHead>}
+                    {canCost && <TableHead>Lucro líquido</TableHead>}
                     <TableHead>Status</TableHead>
                     <TableHead className="w-32"></TableHead>
                   </TableRow>
@@ -206,12 +231,17 @@ export default function VendasPage() {
                       </TableCell>
                       <TableCell className="font-medium">{s.customer?.name || "—"}</TableCell>
                       <TableCell>{s.seller || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={s.origin === "Orçamento" ? "reserved" : "secondary"} className="whitespace-nowrap font-normal">
+                          {s.origin === "Orçamento" ? "Orçamento" : "Balcão"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground" title={saleItemsSummary(s)}>
                         {saleItemsSummary(s)}
                       </TableCell>
                       <TableCell className="text-xs">{salePaymentLabel(s)}</TableCell>
                       <TableCell className="font-semibold">{fmt(saleFullValue(s))}</TableCell>
-                      {isAdmin && (
+                      {canCost && (
                         <TableCell className="font-semibold text-success">
                           {fmt(saleNetProfit(s, devicesById, accessoriesById))}
                         </TableCell>
@@ -227,12 +257,12 @@ export default function VendasPage() {
                           <Button variant="ghost" size="icon" title="2ª via do recibo" onClick={() => printReceipt(s, devices)}>
                             <Printer className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                          {isAdmin && !isReturned(s) && (
+                          {canEditSale && !isReturned(s) && (
                             <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(s)}>
                               <Pencil className="h-4 w-4 text-muted-foreground" />
                             </Button>
                           )}
-                          {canReturn(s, isAdmin) && (
+                          {canReturn(s, canReturnSale) && (
                             <Button variant="ghost" size="icon" title="Devolver/Estornar" onClick={() => { setReturnTarget(s); setReturnReason(""); }}>
                               <Undo2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -243,7 +273,7 @@ export default function VendasPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 9 : 8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={canCost ? 10 : 9} className="py-8 text-center text-muted-foreground">
                         {salesLoading ? "Carregando vendas…" : "Nenhuma venda encontrada."}
                       </TableCell>
                     </TableRow>
@@ -285,7 +315,7 @@ export default function VendasPage() {
                   <div className="flex justify-between text-muted-foreground"><span>Total pago (após troca)</span><span>{fmt(viewSale.total)}</span></div>
                 )}
               </div>
-              {isAdmin && (
+              {canCost && (
                 <div className="space-y-1 rounded-lg border p-3">
                   {viewSale.giftsCost > 0 && (
                     <div className="flex justify-between text-muted-foreground"><span>Custo dos brindes</span><span>− {fmt(viewSale.giftsCost)}</span></div>
@@ -306,7 +336,16 @@ export default function VendasPage() {
                 <Label className="text-xs text-muted-foreground">Pagamento</Label>
                 <div className="mt-1 space-y-1">
                   {viewSale.payments.map((p) => (
-                    <div key={p.id} className="flex justify-between"><span>{p.method}{p.installments && p.installments > 1 ? ` (${p.installments}x)` : ""}</span><span>{fmt(p.amount)}</span></div>
+                    <div key={p.id} data-testid="sale-payment">
+                      <div className="flex justify-between"><span>{p.method}{p.installments && p.installments > 1 ? ` (${p.installments}x)` : ""}</span><span>{fmt(p.amount)}</span></div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant="secondary" data-testid="sale-payment-status" className={p.auditStatus === "Conferido" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : p.auditStatus === "Divergente" ? "bg-red-100 text-red-800 hover:bg-red-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
+                          Conferência: {AUDIT_STATUS_LABEL[p.auditStatus ?? "Aguardando"]}
+                        </Badge>
+                        {canSeeAuditDetail && p.auditedAt && (<span className="text-muted-foreground">{p.auditedByName} · {p.auditedAt.toLocaleString("pt-BR")}</span>)}
+                        {canSeeAuditDetail && p.auditNote && (<span className="text-muted-foreground">Obs.: {p.auditNote}</span>)}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -365,7 +404,7 @@ export default function VendasPage() {
                   </Select>
                 </div>
               </div>
-              {ePayment === "Cartão de Crédito" && (
+              {allowsInstallments(ePayment) && (
                 <div>
                   <Label>Parcelas</Label>
                   <Input type="number" min={1} value={eInstallments} onChange={(e) => setEInstallments(e.target.value)} />

@@ -10,6 +10,9 @@ import { InventoryProvider } from "@/contexts/InventoryContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CRMProvider } from "@/contexts/CRMContext";
 import { ServiceOrderProvider } from "@/contexts/ServiceOrderContext";
+import { LockProvider, useLock } from "@/contexts/LockContext";
+import { SettingsBootstrap } from "@/hooks/useAppSettings";
+import { NotificationsWatcher } from "@/hooks/useNotifications";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import DevicesPage from "./pages/DevicesPage";
@@ -17,12 +20,19 @@ import EstoqueGeralPage from "./pages/EstoqueGeralPage";
 import AccessoriesPage from "./pages/AccessoriesPage";
 import PDVPage from "./pages/PDVPage";
 import VendasPage from "./pages/VendasPage";
+import OrcamentosPage from "./pages/OrcamentosPage";
 import CustomersPage from "./pages/CustomersPage";
 import CRMPage from "./pages/CRMPage";
 import AssistenciaPage from "./pages/AssistenciaPage";
 import GarantiasPage from "./pages/GarantiasPage";
 import BIDashboardPage from "./pages/BIDashboardPage";
 import UsersPage from "./pages/UsersPage";
+import SuppliersPage from "./pages/SuppliersPage";
+import AuditPage from "./pages/AuditPage";
+import SettingsPage from "./pages/SettingsPage";
+import PlanningPage from "./pages/PlanningPage";
+import ReportsPage from "./pages/ReportsPage";
+import IAPage from "./pages/IAPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -36,15 +46,9 @@ const queryClient = new QueryClient({
 });
 
 // Agrupa os providers de dados que só fazem sentido após o login
-function ProtectedApp({
-  children,
-  adminOnly = false,
-}: {
-  children: React.ReactNode;
-  adminOnly?: boolean;
-}) {
+function ProtectedApp({ children }: { children: React.ReactNode }) {
   return (
-    <ProtectedRoute requireAdmin={adminOnly}>
+    <ProtectedRoute>
       <InventoryProvider>
         <CRMProvider>
           <ServiceOrderProvider>{children}</ServiceOrderProvider>
@@ -65,19 +69,32 @@ function AppRoutes() {
         <Route path="/" element={<ProtectedApp><Dashboard /></ProtectedApp>} />
         <Route path="/pdv" element={<ProtectedApp><PDVPage /></ProtectedApp>} />
         <Route path="/vendas" element={<ProtectedApp><VendasPage /></ProtectedApp>} />
+        <Route path="/orcamentos" element={<ProtectedApp><OrcamentosPage /></ProtectedApp>} />
         <Route path="/devices" element={<ProtectedApp><DevicesPage /></ProtectedApp>} />
         <Route path="/estoque" element={<ProtectedApp><EstoqueGeralPage /></ProtectedApp>} />
         <Route path="/accessories" element={<ProtectedApp><AccessoriesPage /></ProtectedApp>} />
+        <Route path="/fornecedores" element={<ProtectedApp><SuppliersPage /></ProtectedApp>} />
         <Route path="/customers" element={<ProtectedApp><CustomersPage /></ProtectedApp>} />
         <Route path="/crm" element={<ProtectedApp><CRMPage /></ProtectedApp>} />
         <Route path="/assistencia" element={<ProtectedApp><AssistenciaPage /></ProtectedApp>} />
         <Route path="/garantias" element={<ProtectedApp><GarantiasPage /></ProtectedApp>} />
-        <Route path="/bi" element={<ProtectedApp adminOnly><BIDashboardPage /></ProtectedApp>} />
-        <Route path="/usuarios" element={<ProtectedApp adminOnly><UsersPage /></ProtectedApp>} />
+        <Route path="/bi" element={<ProtectedApp><BIDashboardPage /></ProtectedApp>} />
+        <Route path="/usuarios" element={<ProtectedApp><UsersPage /></ProtectedApp>} />
+        <Route path="/planejamento" element={<ProtectedApp><PlanningPage /></ProtectedApp>} />
+        <Route path="/relatorios" element={<ProtectedApp><ReportsPage /></ProtectedApp>} />
+        <Route path="/ia" element={<ProtectedApp><IAPage /></ProtectedApp>} />
+        <Route path="/auditoria" element={<ProtectedApp><AuditPage /></ProtectedApp>} />
+        <Route path="/configuracoes" element={<ProtectedApp><SettingsPage /></ProtectedApp>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </ErrorBoundary>
   );
+}
+
+// Avisos do navegador: pausa com a tela bloqueada
+function NotificationsGate() {
+  const { locked } = useLock();
+  return <NotificationsWatcher paused={locked} />;
 }
 
 const App = () => (
@@ -86,9 +103,13 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <SettingsBootstrap />
+        <LockProvider>
+          <BrowserRouter>
+            <NotificationsGate />
+            <AppRoutes />
+          </BrowserRouter>
+        </LockProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

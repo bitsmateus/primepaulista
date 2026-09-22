@@ -8,8 +8,10 @@ import {
   sellerCommissions,
   accountsReceivable,
   accountsPayable,
+  suppliers,
 } from "../db/schema/index";
-import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
+import { brl, logAudit } from "../services/audit";
+import { authenticate, requireCapability, type JwtUser } from "../plugins/auth";
 
 const EXPENSE_CATEGORIES = [
   "Aluguel",
@@ -28,9 +30,9 @@ const DEFAULT_COMMISSIONS = [
 ];
 
 export async function financeRoutes(app: FastifyInstance) {
-  // Financeiro é restrito a administradores
+  // Financeiro: quem tem a capacidade manageFinance (admin, gerente, financeiro)
   app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireRole("admin"));
+  app.addHook("preHandler", requireCapability("manageFinance"));
 
   // ===== Despesas =====
   app.get("/expenses", async () => {
@@ -59,12 +61,28 @@ export async function financeRoutes(app: FastifyInstance) {
         ...(p.data.date ? { date: new Date(p.data.date) } : {}),
       })
       .returning();
+    await logAudit(req, {
+      action: "expense.create",
+      entity: "expense",
+      entityId: row.id,
+      description: `Lançou a despesa "${row.description}" de ${brl(row.amount)}`,
+      details: { category: row.category, amount: row.amount, recurring: row.recurring },
+    });
     return reply.code(201).send({ expense: row });
   });
 
   app.delete("/expenses/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await db.delete(expenses).where(eq(expenses.id, id));
+    const [old] = await db.delete(expenses).where(eq(expenses.id, id)).returning();
+    if (old) {
+      await logAudit(req, {
+        action: "expense.delete",
+        entity: "expense",
+        entityId: id,
+        description: `Excluiu a despesa "${old.description}" de ${brl(old.amount)}`,
+        details: { category: old.category, amount: old.amount },
+      });
+    }
     return { ok: true };
   });
 
@@ -92,6 +110,13 @@ export async function financeRoutes(app: FastifyInstance) {
         ...(p.data.date ? { date: new Date(p.data.date) } : {}),
       })
       .returning();
+    await logAudit(req, {
+      action: "sangria.create",
+      entity: "sangria",
+      entityId: row.id,
+      description: `Registrou uma sangria de ${brl(row.amount)}${row.justification ? ` (${row.justification})` : ""}`,
+      details: { amount: row.amount },
+    });
     return reply.code(201).send({ sangria: row });
   });
 
@@ -138,6 +163,13 @@ export async function financeRoutes(app: FastifyInstance) {
         .values({ sellerName, ...values })
         .returning();
     }
+    await logAudit(req, {
+      action: "commission.update",
+      entity: "commission",
+      entityId: sellerName,
+      description: `Alterou a comissão de ${sellerName}: aparelhos ${row.devicePercent}%, acessórios ${row.accessoryPercent}%`,
+      details: { devicePercent: row.devicePercent, accessoryPercent: row.accessoryPercent },
+    });
     return { commission: row };
   });
 
@@ -170,6 +202,13 @@ export async function financeRoutes(app: FastifyInstance) {
         ...(p.data.dueDate ? { dueDate: new Date(p.data.dueDate) } : {}),
       })
       .returning();
+    await logAudit(req, {
+      action: "receivable.create",
+      entity: "receivable",
+      entityId: row.id,
+      description: `Criou uma conta a receber de ${brl(row.amount)}`,
+      details: { amount: row.amount },
+    });
     return reply.code(201).send({ receivable: row });
   });
 
@@ -186,19 +225,39 @@ export async function financeRoutes(app: FastifyInstance) {
       .where(eq(accountsReceivable.id, id))
       .returning();
     if (!row) return reply.code(404).send({ error: "Conta não encontrada" });
+    await logAudit(req, {
+      action: "receivable.update",
+      entity: "receivable",
+      entityId: id,
+      description: `Marcou a conta a receber de ${brl(row.amount)} como ${row.status}`,
+      details: { status: row.status },
+    });
     return { receivable: row };
   });
 
   app.delete("/receivables/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await db.delete(accountsReceivable).where(eq(accountsReceivable.id, id));
+    const [old] = await db.delete(accountsReceivable).where(eq(accountsReceivable.id, id)).returning();
+    if (old) {
+      await logAudit(req, {
+        action: "receivable.delete",
+        entity: "receivable",
+        entityId: id,
+        description: `Excluiu a conta a receber de ${brl(old.amount)}`,
+        details: { amount: old.amount, status: old.status },
+      });
+    }
     return { ok: true };
   });
 
   // ===== Contas a pagar =====
   app.get("/payables", async () => {
-    const rows = await db.select().from(accountsPayable).orderBy(desc(accountsPayable.createdAt));
-    return { payables: rows };
+    const rows = await db
+      .select({ p: accountsPayable, supplierName: suppliers.name })
+      .from(accountsPayable)
+      .leftJoin(suppliers, eq(accountsPayable.supplierId, suppliers.id))
+      .orderBy(desc(accountsPayable.createdAt));
+    return { payables: rows.map((r) => ({ ...r.p, supplierName: r.supplierName ?? null })) };
   });
 
   app.post("/payables", async (req, reply) => {
@@ -209,9 +268,16 @@ export async function financeRoutes(app: FastifyInstance) {
         amount: z.coerce.number().min(0),
         dueDate: z.string().optional(),
         recurring: z.boolean().optional().default(false),
+        supplierId: z.string().uuid().nullable().optional(),
       })
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    let supplierName: string | null = null;
+    if (p.data.supplierId) {
+      const [sup] = await db.select().from(suppliers).where(eq(suppliers.id, p.data.supplierId)).limit(1);
+      if (!sup) return reply.code(400).send({ error: "Fornecedor não encontrado." });
+      supplierName = sup.name;
+    }
     const [row] = await db
       .insert(accountsPayable)
       .values({
@@ -219,30 +285,68 @@ export async function financeRoutes(app: FastifyInstance) {
         category: p.data.category,
         amount: String(p.data.amount),
         recurring: p.data.recurring,
+        supplierId: p.data.supplierId ?? null,
         ...(p.data.dueDate ? { dueDate: new Date(p.data.dueDate) } : {}),
       })
       .returning();
-    return reply.code(201).send({ payable: row });
+    await logAudit(req, {
+      action: "payable.create",
+      entity: "payable",
+      entityId: row.id,
+      description: `Criou a conta a pagar "${row.description}" de ${brl(row.amount)}${supplierName ? ` (fornecedor ${supplierName})` : ""}`,
+      details: { amount: row.amount, category: row.category, supplierId: row.supplierId },
+    });
+    return reply.code(201).send({ payable: { ...row, supplierName } });
   });
 
   app.patch("/payables/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const p = z
-      .object({ status: z.enum(["pendente", "pago", "atrasado"]) })
+      .object({
+        status: z.enum(["pendente", "pago", "atrasado"]).optional(),
+        supplierId: z.string().uuid().nullable().optional(),
+      })
+      .refine((v) => v.status !== undefined || v.supplierId !== undefined)
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    if (p.data.supplierId) {
+      const [sup] = await db.select({ id: suppliers.id }).from(suppliers).where(eq(suppliers.id, p.data.supplierId)).limit(1);
+      if (!sup) return reply.code(400).send({ error: "Fornecedor não encontrado." });
+    }
+    const set: Record<string, unknown> = {};
+    if (p.data.status !== undefined) {
+      set.status = p.data.status;
+      set.paidAt = p.data.status === "pago" ? new Date() : null;
+    }
+    if (p.data.supplierId !== undefined) set.supplierId = p.data.supplierId;
     const [row] = await db
       .update(accountsPayable)
-      .set({ status: p.data.status, paidAt: p.data.status === "pago" ? new Date() : null })
+      .set(set)
       .where(eq(accountsPayable.id, id))
       .returning();
     if (!row) return reply.code(404).send({ error: "Conta não encontrada" });
+    await logAudit(req, {
+      action: "payable.update",
+      entity: "payable",
+      entityId: id,
+      description: `Atualizou a conta a pagar "${row.description}" de ${brl(row.amount)}${p.data.status ? ` para ${row.status}` : ""}`,
+      details: { status: row.status, supplierId: row.supplierId },
+    });
     return { payable: row };
   });
 
   app.delete("/payables/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await db.delete(accountsPayable).where(eq(accountsPayable.id, id));
+    const [old] = await db.delete(accountsPayable).where(eq(accountsPayable.id, id)).returning();
+    if (old) {
+      await logAudit(req, {
+        action: "payable.delete",
+        entity: "payable",
+        entityId: id,
+        description: `Excluiu a conta a pagar "${old.description}" de ${brl(old.amount)}`,
+        details: { amount: old.amount, status: old.status },
+      });
+    }
     return { ok: true };
   });
 }

@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index";
 import { saleAttachments, sales } from "../db/schema/index";
-import { authenticate, requireRole } from "../plugins/auth";
+import { authenticate, requireCapability } from "../plugins/auth";
+import { logAudit } from "../services/audit";
 import { storageEnabled, uploadObject, removeObject, presignedUrl } from "../storage/minio";
 
 // Detecta o tipo real pelo magic bytes (NF costuma ser PDF; também aceita imagem)
@@ -18,7 +19,7 @@ export async function saleAttachmentRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
   // GET /sales/:id/attachments
-  app.get("/sales/:id/attachments", async (req) => {
+  app.get("/sales/:id/attachments", { preHandler: requireCapability("viewSalesData") }, async (req) => {
     const { id } = req.params as { id: string };
     const rows = await db.select().from(saleAttachments).where(eq(saleAttachments.saleId, id));
     const attachments = await Promise.all(
@@ -34,7 +35,7 @@ export async function saleAttachmentRoutes(app: FastifyInstance) {
 
   // POST /sales/:id/attachments  (multipart, campo "file") — qualquer usuário logado
   // (o vendedor anexa a NF após a venda; a exclusão fica restrita a admin)
-  app.post("/sales/:id/attachments", async (req, reply) => {
+  app.post("/sales/:id/attachments", { preHandler: requireCapability("sell") }, async (req, reply) => {
     if (!storageEnabled) {
       return reply.code(503).send({ error: "Armazenamento (MinIO) não configurado." });
     }
@@ -64,7 +65,7 @@ export async function saleAttachmentRoutes(app: FastifyInstance) {
   });
 
   // DELETE /sales/:id/attachments/:attId — somente admin
-  app.delete("/sales/:id/attachments/:attId", { preHandler: requireRole("admin") }, async (req, reply) => {
+  app.delete("/sales/:id/attachments/:attId", { preHandler: requireCapability("deleteRecords") }, async (req, reply) => {
     const { id, attId } = req.params as { id: string; attId: string };
     const [row] = await db
       .select()
@@ -74,6 +75,13 @@ export async function saleAttachmentRoutes(app: FastifyInstance) {
     if (!row) return reply.code(404).send({ error: "Anexo não encontrado" });
     if (storageEnabled) await removeObject(row.objectKey).catch(() => {});
     await db.delete(saleAttachments).where(eq(saleAttachments.id, attId));
+    await logAudit(req, {
+      action: "sale_attachment.delete",
+      entity: "sale",
+      entityId: id,
+      description: `Excluiu o anexo "${row.filename}" de uma venda`,
+      details: { attachmentId: attId },
+    });
     return { ok: true };
   });
 }

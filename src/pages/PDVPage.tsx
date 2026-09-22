@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Repeat, Printer, UserPlus, Package, RotateCcw, Tag, Paperclip } from "lucide-react";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { AppLayout } from "@/components/AppLayout";
@@ -9,7 +10,9 @@ import {
 } from "@/types/inventory";
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY, CAPACITIES_BY_CATEGORY } from "@/data/appleCatalog";
 import { printReceipt } from "@/utils/receiptGenerator";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
+import { resolveQuoteForSale } from "@/lib/quotes";
 import { formatCapacity } from "@/lib/utils";
 import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue, resolveDiscount } from "@/lib/pdv";
 import { warrantyDaysForCondition } from "@/lib/warranty";
@@ -25,7 +28,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
-const PAYMENT_METHODS: PaymentMethod[] = ["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"];
 const SELLERS: Seller[] = ["Gabriel", "Matheus", "Tassio"];
 const LEAD_ORIGINS: LeadOrigin[] = ["Instagram", "Indicação", "Tráfego Pago"];
 
@@ -33,9 +35,15 @@ export default function PDVPage() {
   const {
     devices, accessories, customers, addCustomer,
     findDeviceBySerial, getCompatibleAccessories, finalizeSale,
-    devicesLoading,
+    devicesLoading, accessoriesLoading, customersLoading,
   } = useInventoryContext();
   const { user } = useAuth();
+
+  // Venda a partir de um orçamento (?orcamento=<id>)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const quoteParam = searchParams.get("orcamento");
+  const appliedQuote = useRef<string | null>(null);
+  const [fromQuote, setFromQuote] = useState<{ id: string; number: number } | null>(null);
 
   // Customer
   const [customerQuery, setCustomerQuery] = useState("");
@@ -307,7 +315,7 @@ export default function PDVPage() {
         id: crypto.randomUUID(),
         method: payMethod,
         amount,
-        installments: payMethod === "Cartão de Crédito" ? Number(payInstallments) : undefined,
+        installments: allowsInstallments(payMethod) ? Number(payInstallments) : undefined,
       },
     ]);
     setPayAmount("");
@@ -371,6 +379,7 @@ export default function PDVPage() {
         giftsCost: Number(giftsCost) || 0,
         requiresInvoice,
         notes: saleNotes.trim() || undefined,
+        quoteId: fromQuote?.id,
       });
 
       printReceipt(sale, devices);
@@ -380,6 +389,7 @@ export default function PDVPage() {
       setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
       setCustomerQuery(""); setImeiQuery(""); setDiscountValue(""); setSaleNotes("");
       setGiftsCost(""); setRequiresInvoice(false);
+      if (fromQuote) { setFromQuote(null); setSearchParams({}, { replace: true }); }
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : "Falha ao registrar a venda. Tente novamente."
@@ -390,6 +400,47 @@ export default function PDVPage() {
   };
 
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  // Carrega o orçamento pedido na URL assim que estoque e clientes estiverem prontos
+  useEffect(() => {
+    if (!quoteParam || appliedQuote.current === quoteParam) return;
+    if (devicesLoading || accessoriesLoading || customersLoading) return;
+    appliedQuote.current = quoteParam;
+    (async () => {
+      try {
+        const q = await api.getQuote(quoteParam);
+        if (q.status === "Convertido") {
+          toast.error(`O orçamento nº ${q.number} já foi convertido em venda.`);
+          setSearchParams({}, { replace: true });
+          return;
+        }
+        const { items, skipped, adjusted } = resolveQuoteForSale(q, devices, accessories);
+        setCart(items);
+        setDiscountMode("R$");
+        setDiscountValue(q.discount > 0 ? String(q.discount) : "");
+        setSaleNotes([`Orçamento nº ${q.number}`, q.notes].filter(Boolean).join(" — "));
+        if (q.sellerName) setSeller(q.sellerName);
+        const linked = q.customerId ? customers.find((c) => c.id === q.customerId) : undefined;
+        if (linked) {
+          setCustomer(linked);
+        } else {
+          // cliente avulso: abre o cadastro rápido já preenchido
+          setNewName(q.customerName);
+          setNewWhatsapp(q.customerPhone);
+          setShowNewCustomer(true);
+        }
+        setFromQuote({ id: q.id, number: q.number });
+        if (items.length > 0) toast.success(`Orçamento nº ${q.number} carregado no carrinho.`);
+        skipped.forEach((m) => toast.warning(m));
+        adjusted.forEach((m) => toast.warning(m));
+        if (items.length === 0) toast.error("Nenhum item do orçamento pôde ser levado para o carrinho.");
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Não foi possível carregar o orçamento.");
+        setSearchParams({}, { replace: true });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteParam, devicesLoading, accessoriesLoading, customersLoading]);
 
   // Atalho: F2 finaliza a venda
   const finalizeRef = useRef(handleFinalize);
@@ -409,6 +460,15 @@ export default function PDVPage() {
           <h1 className="text-2xl font-semibold text-foreground">Frente de Caixa</h1>
           <p className="mt-1 text-sm text-muted-foreground">PDV – Ponto de Venda</p>
         </div>
+
+        {fromQuote && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm" data-testid="quote-banner">
+            <span>Venda a partir do <strong>orçamento nº {fromQuote.number}</strong>. Confira os itens, a forma de pagamento e finalize.</span>
+            <Button variant="ghost" size="sm" onClick={() => { setFromQuote(null); setSearchParams({}, { replace: true }); }}>
+              Desvincular
+            </Button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Left: inputs */}
@@ -571,14 +631,14 @@ export default function PDVPage() {
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   <Select value={payMethod} onValueChange={(v) => setPayMethod(v as PaymentMethod)}>
-                    <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {PAYMENT_METHODS.map((m) => (
                         <SelectItem key={m} value={m}>{m}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {payMethod === "Cartão de Crédito" && (
+                  {allowsInstallments(payMethod) && (
                     <Select value={payInstallments} onValueChange={setPayInstallments}>
                       <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                       <SelectContent>

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Wifi, WifiOff, RefreshCw, Power, QrCode, Plus, Loader2, Trash2, Check } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, Power, QrCode, Plus, Loader2, Trash2, Check, Copy, KeyRound, Webhook } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { api, ApiError, webhookUrl } from "@/lib/api";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -29,8 +31,29 @@ export default function WhatsAppTab() {
   const [instanceName, setInstanceName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [regenTarget, setRegenTarget] = useState<{ id: string; name: string } | null>(null);
+  const qc = useQueryClient();
 
   const selected = instances.find((i) => i.id === selectedInstanceId) ?? null;
+  const fullWebhook = selected?.webhookPath ? webhookUrl(selected.webhookPath) : "";
+
+  const copyWebhook = async () => {
+    try {
+      await navigator.clipboard.writeText(fullWebhook);
+      toast.success("URL copiada!");
+    } catch {
+      toast.error("Não foi possível copiar. Selecione o texto e copie manualmente.");
+    }
+  };
+  const regenerate = async (id: string) => {
+    try {
+      await api.regenerateWebhookSecret(id);
+      await qc.invalidateQueries({ queryKey: ["whatsappInstances"] });
+      toast.success("Novo segredo gerado. Atualize a URL no painel do Uazapi.");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Não foi possível gerar o novo segredo.");
+    }
+  };
 
   const openCreate = () => {
     setEditingId(null); setName(""); setInstanceUrl(""); setInstanceName(""); setApiKey("");
@@ -152,6 +175,30 @@ export default function WhatsAppTab() {
             </CardContent>
           </Card>
 
+          {/* Receber mensagens (webhook do Uazapi) */}
+          {selected.webhookPath && (
+            <Card data-testid="webhook-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg"><Webhook className="h-5 w-5" /> Receber mensagens (webhook)</CardTitle>
+                <CardDescription>
+                  Cole esta URL no painel do Uazapi, em Webhook, evento de mensagens recebidas. Assim o CRM cria o lead, guarda a conversa e responde às regras de palavra-chave.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2">
+                  <Input readOnly aria-label="URL do webhook" value={fullWebhook} className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+                  <Button variant="outline" className="gap-1" onClick={copyWebhook}><Copy className="h-4 w-4" /> Copiar</Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="outline" size="sm" className="gap-1" onClick={() => setRegenTarget({ id: selected.id, name: selected.name })}>
+                    <KeyRound className="h-4 w-4" /> Gerar novo segredo
+                  </Button>
+                  <p className="text-xs text-muted-foreground">O segredo faz parte da URL: não compartilhe. Gerar um novo invalida o anterior na hora.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* QR Code */}
           <Card>
             <CardHeader>
@@ -195,6 +242,21 @@ export default function WhatsAppTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!regenTarget} onOpenChange={(o) => !o && setRegenTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gerar novo segredo do webhook?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {regenTarget && <>A URL atual do número <strong>{regenTarget.name}</strong> deixa de funcionar. Você precisará colar a nova URL no painel do Uazapi.</>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (regenTarget) regenerate(regenTarget.id); setRegenTarget(null); }}>Gerar novo segredo</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>

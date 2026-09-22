@@ -1,11 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Lead, MessageLog, ConnectionStatus, FunnelColumn } from "@/types/crm";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 
 export function useCRM() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  // Só busca o que o cargo pode ler (a API responde 403 para os demais) e só nas telas que usam
+  // dados do CRM (CRM, Assistência — leads sugerem clientes na OS — e BI). Isso poupa ~5 chamadas por
+  // carregamento de tela nas demais (o limite da API é 200 por minuto por IP).
+  const usesCRMData = /^\/(crm|assistencia|bi)(\/|$)/.test(pathname);
+  const crmOn = usesCRMData && can(user?.role, "useCRM");
+  const leadsOn = usesCRMData && (can(user?.role, "useCRM") || can(user?.role, "editOS"));
+
+  // No CRM, leads e mensagens recebidas (webhook do WhatsApp) são atualizados sozinhos a cada 30 s
+  const livePoll = /^\/crm(\/|$)/.test(pathname) ? 30_000 : false;
 
   const crmError = (fallback: string) => (err: unknown) =>
     toast.error(err instanceof ApiError ? err.message : fallback);
@@ -14,18 +28,24 @@ export function useCRM() {
   const { data: leads = [], isLoading: leadsLoading } = useQuery({
     queryKey: ["leads"],
     queryFn: api.listLeads,
+    enabled: leadsOn,
+    refetchInterval: livePoll,
   });
   const { data: funnelColumns = [], isLoading: columnsLoading } = useQuery({
     queryKey: ["funnelColumns"],
     queryFn: api.listFunnelColumns,
+    enabled: crmOn,
   });
   const { data: messageLogs = [] } = useQuery({
     queryKey: ["messageLogs"],
     queryFn: api.listMessageLogs,
+    enabled: crmOn,
+    refetchInterval: livePoll,
   });
   const { data: leadTasks = [] } = useQuery({
     queryKey: ["leadTasks"],
     queryFn: api.listLeadTasks,
+    enabled: crmOn,
   });
   const invalidateTasks = () => qc.invalidateQueries({ queryKey: ["leadTasks"] });
 
@@ -40,6 +60,7 @@ export function useCRM() {
   const { data: instances = [] } = useQuery({
     queryKey: ["whatsappInstances"],
     queryFn: api.listWhatsappInstances,
+    enabled: crmOn,
   });
   const invalidateInstances = () => qc.invalidateQueries({ queryKey: ["whatsappInstances"] });
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>("");
@@ -71,6 +92,26 @@ export function useCRM() {
     mutationFn: (id: string) => api.deleteFunnelColumn(id),
     onSuccess: invalidateColumns,
     onError: crmError("Não foi possível remover a coluna."),
+  });
+
+  const reorderColumnsMut = useMutation({
+    mutationFn: (ids: string[]) => api.reorderFunnelColumns(ids),
+    onSuccess: invalidateColumns,
+    onError: crmError("Não foi possível reordenar as etapas."),
+  });
+  const restoreDefaultsMut = useMutation({
+    mutationFn: () => api.restoreFunnelDefaults(),
+    onSuccess: invalidateColumns,
+    onError: crmError("Não foi possível restaurar as etapas."),
+  });
+  const markReadMut = useMutation({
+    mutationFn: (leadId: string) => api.markLeadMessagesRead(leadId),
+    onSuccess: (n) => {
+      if (n > 0) {
+        qc.invalidateQueries({ queryKey: ["messageLogs"] });
+        qc.invalidateQueries({ queryKey: ["notificationsSummary"] });
+      }
+    },
   });
 
   const addFunnelColumn = useCallback(
@@ -280,6 +321,10 @@ export function useCRM() {
     addFunnelColumn,
     removeFunnelColumn,
     renameFunnelColumn,
+    updateFunnelColumn: (id: string, patch: { name?: string; color?: string }) => updateColumnMut.mutateAsync({ id, patch }),
+    reorderFunnelColumns: (ids: string[]) => reorderColumnsMut.mutateAsync(ids),
+    restoreFunnelDefaults: () => restoreDefaultsMut.mutateAsync(),
+    markLeadMessagesRead: (leadId: string) => markReadMut.mutate(leadId),
     createInstance,
     updateInstance,
     deleteInstance,

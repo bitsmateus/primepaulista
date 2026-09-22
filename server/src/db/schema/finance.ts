@@ -11,6 +11,7 @@ import { expenseCategoryEnum, receivableStatusEnum } from "./enums";
 import { profiles } from "./auth";
 import { customers } from "./customers";
 import { sales } from "./sales";
+import { suppliers } from "./suppliers";
 
 export const expenses = pgTable("expenses", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -52,6 +53,7 @@ export const accountsPayable = pgTable("accounts_payable", {
   status: receivableStatusEnum("status").notNull().default("pendente"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   recurring: boolean("recurring").notNull().default(false),
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

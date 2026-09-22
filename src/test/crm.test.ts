@@ -111,6 +111,22 @@ describe("resumo do funil", () => {
   it("funil vazio não divide por zero", () => {
     expect(buildFunnelSummary([], columns).conversionRate).toBe(0);
   });
+  it("funil de 10 etapas: Venda Concluída e Pós-venda contam como convertido; Perdido não", () => {
+    const cols: FunnelColumn[] = [
+      "Novo Lead", "Primeiro Contato", "Atendimento", "Cliente Interessado", "Orçamento Enviado",
+      "Negociação", "Aguardando Pagamento", "Venda Concluída", "Pós-venda", "Perdido",
+    ].map((name, i) => ({ id: String(i), name, color: "x" }));
+    const ls = [
+      mkLead({ id: "1", status: "Novo Lead" }),
+      mkLead({ id: "2", status: "Venda Concluída" }),
+      mkLead({ id: "3", status: "Pós-venda" }),
+      mkLead({ id: "4", status: "Perdido" }),
+    ];
+    const s = buildFunnelSummary(ls, cols);
+    expect(s.converted).toBe(2);
+    expect(s.conversionRate).toBeCloseTo(0.5);
+    expect(s.byColumn).toHaveLength(10);
+  });
 });
 
 describe("lead que comprou", () => {

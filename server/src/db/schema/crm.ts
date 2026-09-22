@@ -1,4 +1,5 @@
-import { boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { messageStatusEnum } from "./enums";
 
 export const funnelColumns = pgTable("funnel_columns", {
@@ -33,7 +34,15 @@ export const messageLogs = pgTable("message_logs", {
   message: text("message"),
   status: messageStatusEnum("status").notNull().default("pending"),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
-});
+  // Fase 5A: mensagens RECEBIDAS pelo webhook do WhatsApp entram aqui com direction = 'in'
+  direction: text("direction").notNull().default("out"), // 'out' (enviada) | 'in' (recebida)
+  externalId: text("external_id"), // id da mensagem no provedor (idempotência do webhook)
+  instanceId: uuid("instance_id"), // número de WhatsApp que enviou/recebeu
+  readAt: timestamp("read_at", { withTimezone: true }), // mensagem recebida ainda não vista = null
+}, (t) => ({
+  recipientIdx: index("message_logs_recipient_idx").on(t.recipientId),
+  extUidx: uniqueIndex("message_logs_instance_ext_uidx").on(t.instanceId, t.externalId).where(sql`external_id is not null`),
+}));
 
 // Tarefas / follow-up de leads (com lembrete por data)
 export const leadTasks = pgTable("lead_tasks", {
@@ -42,6 +51,8 @@ export const leadTasks = pgTable("lead_tasks", {
   title: text("title").notNull(),
   dueDate: timestamp("due_date", { withTimezone: true }),
   done: boolean("done").notNull().default(false),
+  // Fase 5A: chave da sugestão automática da Agenda que originou a tarefa (ex.: "purchase:<cliente>:<venda>")
+  sourceKey: text("source_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   leadIdx: index("lead_tasks_lead_id_idx").on(t.leadId),

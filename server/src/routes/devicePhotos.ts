@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index";
 import { devicePhotos, devices } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireCapability } from "../plugins/auth";
 import {
   storageEnabled,
   uploadObject,
@@ -15,7 +15,7 @@ export async function devicePhotoRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
   // GET /devices/:id/photos
-  app.get("/devices/:id/photos", async (req) => {
+  app.get("/devices/:id/photos", { preHandler: requireCapability("viewStock") }, async (req) => {
     const { id } = req.params as { id: string };
     const rows = await db
       .select()
@@ -32,7 +32,7 @@ export async function devicePhotoRoutes(app: FastifyInstance) {
   });
 
   // POST /devices/:id/photos (multipart, campo "file")
-  app.post("/devices/:id/photos", async (req, reply) => {
+  app.post("/devices/:id/photos", { preHandler: requireCapability("editStock") }, async (req, reply) => {
     if (!storageEnabled) {
       return reply.code(503).send({ error: "Armazenamento de fotos (MinIO) não configurado." });
     }
@@ -67,7 +67,7 @@ export async function devicePhotoRoutes(app: FastifyInstance) {
   });
 
   // DELETE /devices/:id/photos/:photoId
-  app.delete("/devices/:id/photos/:photoId", async (req, reply) => {
+  app.delete("/devices/:id/photos/:photoId", { preHandler: requireCapability("editStock") }, async (req, reply) => {
     const { id, photoId } = req.params as { id: string; photoId: string };
     const [row] = await db
       .select()

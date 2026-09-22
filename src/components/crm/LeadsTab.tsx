@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertical, Pencil, ShoppingBag, ListChecks, BarChart3, Check } from "lucide-react";
+import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertical, Pencil, ShoppingBag, ListChecks, BarChart3, Check, ArrowUp, ArrowDown, RotateCcw, Inbox } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { useCRMContext } from "@/contexts/CRMContext";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { ApiError } from "@/lib/api";
 import { formatPhoneInput, leadMatchesSearch, buildFunnelSummary, leadHasPurchased, buildFunnelMetrics, pendingTasksToday } from "@/lib/crm";
 import { Lead } from "@/types/crm";
@@ -15,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import QuickReplyPicker from "@/components/crm/QuickReplyPicker";
+import AiSuggestPanel from "@/components/ai/AiSuggestPanel";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -33,12 +36,14 @@ export default function LeadsTab() {
   const {
     leads, leadsLoading, addLead, updateLead, deleteLead, moveLeadInColumn,
     sendMessage, addMessageLog, getLogsForRecipient, connectionStatus,
-    funnelColumns, columnsLoading, addFunnelColumn, removeFunnelColumn, renameFunnelColumn,
+    funnelColumns, columnsLoading, addFunnelColumn, removeFunnelColumn, updateFunnelColumn,
+    reorderFunnelColumns, restoreFunnelDefaults, markLeadMessagesRead, messageLogs,
     leadTasks, addLeadTask, toggleLeadTask, deleteLeadTask, getTasksForLead,
   } = useCRMContext();
   const { devices, sales } = useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const seesAllOwners = can(user?.role, "manageAutomations");
+  const canUseAI = can(user?.role, "useAI");
 
   const [search, setSearch] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all"); // "all" | "mine" | nome do vendedor
@@ -78,6 +83,7 @@ export default function LeadsTab() {
   const [newColColor, setNewColColor] = useState(COLUMN_COLORS[0]);
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [editColName, setEditColName] = useState("");
+  const [editColColor, setEditColColor] = useState(COLUMN_COLORS[0]);
 
   const owners = [...new Set(leads.map((l) => l.ownerName).filter(Boolean))] as string[];
   const matchesOwner = (l: Lead) => {
@@ -121,17 +127,19 @@ export default function LeadsTab() {
     }
   };
 
-  const handleSendMessage = async (leadId: string) => {
+  const handleSendMessage = async (leadId: string, textOverride?: string): Promise<boolean> => {
     const lead = leads.find((l) => l.id === leadId);
-    if (!lead || !msgText.trim()) return;
-    if (connectionStatus !== "connected") { toast.error("WhatsApp não conectado."); return; }
-    const success = await sendMessage(lead.phone, msgText);
+    const body = textOverride ?? msgText;
+    if (!lead || !body.trim()) return false;
+    if (connectionStatus !== "connected") { toast.error("WhatsApp não conectado."); return false; }
+    const success = await sendMessage(lead.phone, body);
     addMessageLog({
       recipientId: lead.id, recipientName: lead.name, recipientPhone: lead.phone,
-      templateType: "Manual", message: msgText, status: success ? "sent" : "failed",
+      templateType: textOverride !== undefined ? "IA (sugestão)" : "Manual", message: body, status: success ? "sent" : "failed",
     });
     toast[success ? "success" : "error"](success ? "Mensagem enviada!" : "Falha ao enviar");
-    setMsgText(""); setShowSendMsg(null);
+    if (success) { setMsgText(""); setShowSendMsg(null); }
+    return success;
   };
 
   const handleDragEnd = (result: DropResult) => {
@@ -151,12 +159,53 @@ export default function LeadsTab() {
     toast.success("Coluna adicionada!");
   };
 
-  const handleRenameColumn = (id: string) => {
+  const handleRenameColumn = async (id: string) => {
     if (!editColName.trim()) return;
-    renameFunnelColumn(id, editColName.trim());
-    setEditingCol(null);
-    setEditColName("");
-    toast.success("Coluna renomeada!");
+    try {
+      await updateFunnelColumn(id, { name: editColName.trim(), color: editColColor });
+      setEditingCol(null);
+      setEditColName("");
+      toast.success("Etapa atualizada!");
+    } catch {
+      /* o hook mostra o motivo (ex.: nome repetido) */
+    }
+  };
+
+  const moveColumn = async (idx: number, dir: -1 | 1) => {
+    const ids = funnelColumns.map((c) => c.id);
+    const j = idx + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[idx], ids[j]] = [ids[j], ids[idx]];
+    try { await reorderFunnelColumns(ids); } catch { /* o hook avisa */ }
+  };
+
+  const handleRestoreDefaults = async () => {
+    try {
+      const r = await restoreFunnelDefaults();
+      toast.success(r.created.length ? `Etapas restauradas: ${r.created.join(", ")}.` : "Todas as etapas padrão já existem.");
+    } catch { /* o hook avisa */ }
+  };
+
+  const handleRemoveColumn = async (col: { id: string; name: string }) => {
+    if (leads.some((l) => l.status === col.name)) {
+      toast.error(`A etapa "${col.name}" ainda tem leads. Mova-os para outra etapa antes de remover.`);
+      return;
+    }
+    removeFunnelColumn(col.id);
+  };
+
+  // Mensagens recebidas ainda não vistas, por lead (webhook do WhatsApp)
+  const unreadByLead = new Map<string, number>();
+  for (const m of messageLogs) {
+    if (m.direction === "in" && !m.readAt) unreadByLead.set(m.recipientId, (unreadByLead.get(m.recipientId) ?? 0) + 1);
+  }
+  const openConversation = (leadId: string) => {
+    setShowSendMsg(leadId);
+    if (unreadByLead.has(leadId)) markLeadMessagesRead(leadId);
+  };
+  const openHistory = (leadId: string) => {
+    setShowHistory(leadId);
+    if (unreadByLead.has(leadId)) markLeadMessagesRead(leadId);
   };
 
   return (
@@ -194,7 +243,7 @@ export default function LeadsTab() {
           <SelectContent>
             <SelectItem value="all">Todos os leads</SelectItem>
             <SelectItem value="mine">Meus leads</SelectItem>
-            {isAdmin && owners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+            {seesAllOwners && owners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
           </SelectContent>
         </Select>
         <Button variant="outline" onClick={() => setShowMetrics(true)}>
@@ -263,6 +312,11 @@ export default function LeadsTab() {
                                             <ShoppingBag className="h-2.5 w-2.5" /> Comprou
                                           </Badge>
                                         )}
+                                        {(unreadByLead.get(lead.id) ?? 0) > 0 && (
+                                          <Badge variant="destructive" className="h-4 gap-0.5 px-1 text-[10px]" data-testid="lead-unread">
+                                            <Inbox className="h-2.5 w-2.5" /> {unreadByLead.get(lead.id)} nova(s)
+                                          </Badge>
+                                        )}
                                       </div>
                                       <p className="text-xs text-muted-foreground">{lead.phone}</p>
                                       {lead.modelInterest && (
@@ -272,7 +326,7 @@ export default function LeadsTab() {
                                     </div>
                                   </div>
                                   <div className="flex justify-end gap-1 mt-2 border-t pt-2">
-                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Enviar mensagem" onClick={() => setShowSendMsg(lead.id)}>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Enviar mensagem" onClick={() => openConversation(lead.id)}>
                                       <MessageCircle className="h-3.5 w-3.5" />
                                     </Button>
                                     <Button size="icon" variant="ghost" className="h-7 w-7 relative" title="Tarefas / follow-up" onClick={() => setShowTasks(lead.id)}>
@@ -281,7 +335,7 @@ export default function LeadsTab() {
                                         <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-warning" />
                                       )}
                                     </Button>
-                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Histórico" onClick={() => setShowHistory(lead.id)}>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Histórico" onClick={() => openHistory(lead.id)}>
                                       <History className="h-3.5 w-3.5" />
                                     </Button>
                                     <Button size="icon" variant="ghost" className="h-7 w-7" title="Editar" onClick={() => openEdit(lead)}>
@@ -312,36 +366,58 @@ export default function LeadsTab() {
 
       {/* Configurar Funil */}
       <Dialog open={showFunnelSettings} onOpenChange={setShowFunnelSettings}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
           <DialogHeader><DialogTitle>Configurar Funil</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Colunas do Funil</Label>
-              {funnelColumns.map((col) => (
-                <div key={col.id} className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: `hsl(${col.color})` }} />
-                  {editingCol === col.id ? (
-                    <>
-                      <Input value={editColName} onChange={(e) => setEditColName(e.target.value)} className="h-8 flex-1"
-                        onKeyDown={(e) => e.key === "Enter" && handleRenameColumn(col.id)} />
-                      <Button size="sm" variant="ghost" onClick={() => handleRenameColumn(col.id)}>✓</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingCol(null)}>✕</Button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm flex-1">{col.name}</span>
-                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setEditingCol(col.id); setEditColName(col.name); }}>
-                        Editar
-                      </Button>
-                      {funnelColumns.length > 1 && (
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeFunnelColumn(col.id)}>
-                          <X className="h-3.5 w-3.5 text-destructive" />
+              {funnelColumns.map((col, idx) => (
+                <div key={col.id} data-testid="funnel-col-row" className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: `hsl(${col.color})` }} />
+                    {editingCol === col.id ? (
+                      <>
+                        <Input aria-label="Nome da etapa" value={editColName} onChange={(e) => setEditColName(e.target.value)} className="h-8 flex-1"
+                          onKeyDown={(e) => e.key === "Enter" && handleRenameColumn(col.id)} />
+                        <Button size="sm" variant="ghost" aria-label="Salvar etapa" onClick={() => handleRenameColumn(col.id)}>✓</Button>
+                        <Button size="sm" variant="ghost" aria-label="Cancelar edição da etapa" onClick={() => setEditingCol(null)}>✕</Button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm flex-1">{col.name}</span>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Subir etapa ${col.name}`} disabled={idx === 0} onClick={() => moveColumn(idx, -1)}>
+                          <ArrowUp className="h-3.5 w-3.5" />
                         </Button>
-                      )}
-                    </>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Descer etapa ${col.name}`} disabled={idx === funnelColumns.length - 1} onClick={() => moveColumn(idx, 1)}>
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" aria-label={`Editar etapa ${col.name}`}
+                          onClick={() => { setEditingCol(col.id); setEditColName(col.name); setEditColColor(col.color); }}>
+                          Editar
+                        </Button>
+                        {funnelColumns.length > 1 && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Remover etapa ${col.name}`} title="Remover (só se estiver vazia)" onClick={() => handleRemoveColumn(col)}>
+                            <X className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {editingCol === col.id && (
+                    <div className="flex flex-wrap gap-2 pl-5">
+                      {COLUMN_COLORS.map((c) => (
+                        <button key={c} type="button" aria-label={`Cor ${c}`}
+                          className={`h-5 w-5 rounded-full border-2 transition-all ${editColColor === c ? "border-foreground scale-110" : "border-transparent"}`}
+                          style={{ backgroundColor: `hsl(${c})` }} onClick={() => setEditColColor(c)} />
+                      ))}
+                    </div>
                   )}
                 </div>
               ))}
+              <Button variant="outline" size="sm" className="w-full gap-1" onClick={handleRestoreDefaults}>
+                <RotateCcw className="h-3.5 w-3.5" /> Restaurar etapas padrão
+              </Button>
+              <p className="text-xs text-muted-foreground">Cria só as etapas padrão que faltam; nada é apagado nem renomeado. Uma etapa só pode ser removida quando estiver vazia.</p>
             </div>
             <div className="border-t pt-4 space-y-3">
               <Label>Adicionar Coluna</Label>
@@ -404,6 +480,17 @@ export default function LeadsTab() {
         <DialogContent>
           <DialogHeader><DialogTitle>Enviar Mensagem WhatsApp</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            {showSendMsg && getLogsForRecipient(showSendMsg).length > 0 && (
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-2" data-testid="conversation">
+                {getLogsForRecipient(showSendMsg).slice(0, 8).reverse().map((log) => (
+                  <div key={log.id} className={`flex ${log.direction === "in" ? "justify-start" : "justify-end"}`}>
+                    <p className={`max-w-[85%] whitespace-pre-line rounded-lg px-2 py-1 text-xs ${log.direction === "in" ? "bg-background border" : "bg-primary/10"}`}>
+                      {log.message}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
             {connectionStatus !== "connected" && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                 WhatsApp não conectado. Configure em "Conectar WhatsApp".
@@ -413,7 +500,21 @@ export default function LeadsTab() {
               <Label>Mensagem</Label>
               <Textarea className="min-h-[120px]" value={msgText} onChange={(e) => setMsgText(e.target.value)} placeholder="Digite sua mensagem..." />
             </div>
+            {canUseAI && showSendMsg && (
+              <AiSuggestPanel
+                key={showSendMsg}
+                leadId={showSendMsg}
+                lastInbound={getLogsForRecipient(showSendMsg).find((l) => l.direction === "in")?.message ?? ""}
+                canSend={connectionStatus === "connected"}
+                onUse={setMsgText}
+                onSend={(t) => handleSendMessage(showSendMsg, t)}
+              />
+            )}
             <div className="flex gap-2 flex-wrap">
+              {(() => {
+                const l = leads.find((x) => x.id === showSendMsg);
+                return l ? <QuickReplyPicker lead={l} onPick={setMsgText} /> : null;
+              })()}
               <Button variant="outline" size="sm" onClick={() => setMsgText("Olá! Tudo bem? Aqui é da Prime Paulista 🍎. Seu aparelho está pronto para retirada!")}>Pós-venda</Button>
               <Button variant="outline" size="sm" onClick={() => setMsgText("Olá! Passando para saber como está seu aparelho. Qualquer dúvida, estamos à disposição! 😊")}>Follow-up</Button>
               <Button variant="outline" size="sm" onClick={() => setMsgText("Olá! Temos novidades na loja que combinam com o que você procura. Vem conferir! 📱")}>Promoção</Button>
@@ -431,13 +532,15 @@ export default function LeadsTab() {
           <DialogHeader><DialogTitle>Histórico de Mensagens</DialogTitle></DialogHeader>
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
             {showHistory && getLogsForRecipient(showHistory).length === 0 ? (
-              <p className="text-center text-muted-foreground py-6">Nenhuma mensagem enviada ainda</p>
+              <p className="text-center text-muted-foreground py-6">Nenhuma mensagem ainda</p>
             ) : (
               showHistory && getLogsForRecipient(showHistory).map((log) => (
                 <div key={log.id} className="rounded-lg border p-3 space-y-1">
                   <div className="flex items-center justify-between">
-                    <Badge variant="secondary">{log.templateType}</Badge>
-                    <Badge variant={log.status === "sent" ? "default" : "destructive"}>{log.status === "sent" ? "Enviada" : "Falha"}</Badge>
+                    {log.direction !== "in" && <Badge variant="secondary">{log.templateType}</Badge>}
+                    {log.direction === "in"
+                      ? <Badge variant="outline">Recebida</Badge>
+                      : <Badge variant={log.status === "sent" ? "default" : "destructive"}>{log.status === "sent" ? "Enviada" : "Falha"}</Badge>}
                   </div>
                   <p className="text-sm text-foreground">{log.message}</p>
                   <p className="text-xs text-muted-foreground">{format(log.sentAt, "dd/MM/yyyy HH:mm")}</p>

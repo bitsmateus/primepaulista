@@ -18,7 +18,10 @@ import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useServiceOrderContext } from "@/contexts/ServiceOrderContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { canSeeCost } from "@/lib/permissions";
+import { OS_STATUSES } from "@/lib/serviceOrders";
 import { salesGrossProfit } from "@/lib/profit";
+import { sellerComparison } from "@/lib/sellerStats";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtShort = (v: number) =>
@@ -191,6 +194,18 @@ export default function Dashboard() {
     return { revenue, count, avg, profit, delta, days, byPayment, bySeller, byCategory, topModels, attachRate };
   }, [periodSales, activeSales, deviceById, accessoryById, prevStart, prevEnd, seller]);
 
+  // Comparativo por vendedor no período (todos os vendedores, independente do filtro de vendedor)
+  const sellerCmp = useMemo(
+    () =>
+      sellerComparison(
+        activeSales.filter((s) => new Date(s.createdAt) >= start),
+        deviceById,
+        accessoryById,
+        showCost ? "profit" : "revenue"
+      ),
+    [activeSales, start, deviceById, accessoryById, showCost]
+  );
+
   // ===================== OS =====================
   const os = useMemo(() => {
     const open = orders.filter((o) => o.status !== "Entregue / Finalizado");
@@ -201,8 +216,7 @@ export default function Dashboard() {
     const servRevenue = completedPeriod.reduce((a, o) => a + o.chargedAmount, 0);
     const servProfit = completedPeriod.reduce((a, o) => a + (o.chargedAmount - o.partCost - o.taxes), 0);
 
-    const statuses = ["Aguardando Diagnóstico", "Aguardando Peça", "Em Reparo", "Pronto para Retirada", "Entregue / Finalizado"];
-    const byStatus = statuses.map((st) => ({ name: st.replace("Aguardando ", "Ag. "), qtd: orders.filter((o) => o.status === st).length }));
+    const byStatus = OS_STATUSES.map((st) => ({ name: st.replace("Aguardando ", "Ag. "), qtd: orders.filter((o) => o.status === st).length }));
     const prMap: Record<string, number> = {};
     for (const o of open) prMap[o.priority] = (prMap[o.priority] || 0) + 1;
     const byPriority = Object.entries(prMap).map(([name, value]) => ({ name, value }));
@@ -367,6 +381,58 @@ export default function Dashboard() {
                 )}
               </ChartCard>
             </div>
+
+            <ChartCard
+              title={
+                showCost
+                  ? "Comparativo por vendedor: lucro total e ticket médio"
+                  : "Comparativo por vendedor: faturamento e ticket médio"
+              }
+            >
+              {sellerCmp.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sem vendas no período.</p>
+              ) : (
+                <div className="space-y-4" data-testid="seller-comparison">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={sellerCmp}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="seller" fontSize={11} />
+                      <YAxis fontSize={11} tickFormatter={fmtShort} width={50} />
+                      <Tooltip formatter={(v: number) => fmt(v)} />
+                      <Legend />
+                      <Bar dataKey={showCost ? "profit" : "revenue"} name={showCost ? "Lucro total" : "Faturamento"} fill="#0a84ff" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={showCost ? "avgProfit" : "avgTicket"} name={showCost ? "Lucro por venda (ticket médio)" : "Ticket médio"} fill="#30d158" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Vendedor</TableHead>
+                          <TableHead className="text-right">Qtd vendas</TableHead>
+                          <TableHead className="text-right">Faturamento</TableHead>
+                          <TableHead className="text-right">Ticket médio</TableHead>
+                          {showCost && <TableHead className="text-right">Lucro total</TableHead>}
+                          {showCost && <TableHead className="text-right">Lucro por venda</TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sellerCmp.map((s) => (
+                          <TableRow key={s.seller}>
+                            <TableCell className="font-medium">{s.seller}</TableCell>
+                            <TableCell className="text-right">{s.salesCount}</TableCell>
+                            <TableCell className="text-right">{fmt(s.revenue)}</TableCell>
+                            <TableCell className="text-right">{fmt(s.avgTicket)}</TableCell>
+                            {showCost && <TableCell className="text-right font-semibold text-success">{fmt(s.profit)}</TableCell>}
+                            {showCost && <TableCell className="text-right">{fmt(s.avgProfit)}</TableCell>}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </ChartCard>
           </div>
         )}
 

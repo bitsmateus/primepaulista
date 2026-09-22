@@ -19,6 +19,20 @@ import { crmRoutes } from "./routes/crm";
 import { whatsappRoutes } from "./routes/whatsapp";
 import { automationRoutes } from "./routes/automations";
 import { financeRoutes } from "./routes/finance";
+import { quoteRoutes } from "./routes/quotes";
+import { settingsRoutes } from "./routes/settings";
+import { supplierRoutes } from "./routes/suppliers";
+import { auditLogRoutes } from "./routes/auditLogs";
+import { customVarRoutes } from "./routes/customVars";
+import { backupRoutes } from "./routes/backup";
+import { notificationRoutes } from "./routes/notifications";
+import { reconciliationRoutes } from "./routes/reconciliation";
+import { planningRoutes } from "./routes/planning";
+import { quickReplyRoutes } from "./routes/quickReplies";
+import { keywordRuleRoutes } from "./routes/keywordRules";
+import { whatsappWebhookRoutes } from "./routes/whatsappWebhook";
+import { aiRoutes } from "./routes/ai";
+import { registerAiRules } from "./services/aiRules";
 
 export function buildApp() {
   const app = Fastify({ logger: true });
@@ -65,6 +79,20 @@ export function buildApp() {
   app.register(whatsappRoutes);
   app.register(automationRoutes);
   app.register(financeRoutes);
+  app.register(quoteRoutes);
+  app.register(settingsRoutes);
+  app.register(supplierRoutes);
+  app.register(auditLogRoutes);
+  app.register(customVarRoutes);
+  app.register(backupRoutes);
+  app.register(notificationRoutes);
+  app.register(reconciliationRoutes);
+  app.register(planningRoutes);
+  app.register(quickReplyRoutes);
+  app.register(keywordRuleRoutes);
+  app.register(aiRoutes);
+  registerAiRules(); // regras com ação "IA" (Fase 5B) passam a responder pelo Gemini
+  app.register(whatsappWebhookRoutes); // público (segredo na URL): mantém o próprio parser de corpo
 
   return app;
 }

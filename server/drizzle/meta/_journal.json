@@ -162,6 +162,55 @@
       "when": 1788378006037,
       "tag": "0022_minor_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789992130261,
+      "tag": "0023_fase1_marca_local_auditoria",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789994093266,
+      "tag": "0024_fase2_orcamentos_pagamentos",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789995480619,
+      "tag": "0025_fase3_assistencia",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790002016261,
+      "tag": "0026_fase4a_fornecedores_cargos",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790017296542,
+      "tag": "0027_fase4b_conferencia_planejamento",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790025256251,
+      "tag": "0028_fase5a_crm",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790033325665,
+      "tag": "0029_fase5b_ia",
+      "breakpoints": true
     }
   ]
 }

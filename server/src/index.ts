@@ -3,6 +3,7 @@ import { buildApp } from "./app";
 import { env } from "./env";
 import { ensureBucket, storageEnabled } from "./storage/minio";
 import { runAutomations } from "./services/automations";
+import { dispatchDueWhatsapp } from "./services/planning";
 
 const app = buildApp();
 
@@ -13,6 +14,16 @@ cron.schedule("0 9 * * *", async () => {
     console.log("⏰ Automações executadas:", JSON.stringify(summary));
   } catch (err) {
     console.error("⏰ Falha nas automações:", (err as Error).message);
+  }
+});
+
+// Lembretes do planejamento por WhatsApp: a cada minuto envia os que já venceram
+cron.schedule("* * * * *", async () => {
+  try {
+    const n = await dispatchDueWhatsapp();
+    if (n > 0) console.log(`⏰ Lembretes de tarefa enviados por WhatsApp: ${n}`);
+  } catch (err) {
+    console.error("⏰ Falha nos lembretes de tarefa:", (err as Error).message);
   }
 });
 

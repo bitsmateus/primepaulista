@@ -3,7 +3,8 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { accessories, stockMovements } from "../db/schema/index";
-import { authenticate, requireRole, type JwtUser } from "../plugins/auth";
+import { authenticate, requireCapability, type JwtUser } from "../plugins/auth";
+import { brl, diffFields, logAudit } from "../services/audit";
 
 const accessoryInput = z.object({
   name: z.string().min(1),
@@ -21,13 +22,13 @@ export async function accessoryRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
   // GET /accessories
-  app.get("/accessories", async () => {
+  app.get("/accessories", { preHandler: requireCapability("viewStock") }, async () => {
     const rows = await db.select().from(accessories).orderBy(desc(accessories.createdAt));
     return { accessories: rows };
   });
 
   // POST /accessories
-  app.post("/accessories", async (req, reply) => {
+  app.post("/accessories", { preHandler: requireCapability("editStock") }, async (req, reply) => {
     const parsed = accessoryInput.safeParse(req.body);
     if (!parsed.success) {
       return reply
@@ -60,7 +61,7 @@ export async function accessoryRoutes(app: FastifyInstance) {
   });
 
   // PATCH /accessories/:id  (quantidade e/ou outros campos)
-  app.patch("/accessories/:id", async (req, reply) => {
+  app.patch("/accessories/:id", { preHandler: requireCapability("editStock") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const partial = accessoryInput.partial().safeParse(req.body);
     if (!partial.success) {
@@ -70,19 +71,43 @@ export async function accessoryRoutes(app: FastifyInstance) {
     const values: Record<string, unknown> = { ...data };
     if (data.cost !== undefined) values.cost = String(data.cost);
     if (data.price !== undefined) values.price = String(data.price);
+    const priceChange = data.cost !== undefined || data.price !== undefined;
+    const [before] = priceChange ? await db.select().from(accessories).where(eq(accessories.id, id)).limit(1) : [];
     const [row] = await db
       .update(accessories)
       .set(values)
       .where(eq(accessories.id, id))
       .returning();
     if (!row) return reply.code(404).send({ error: "Acessório não encontrado" });
+    if (before) {
+      const changes = diffFields(before as Record<string, unknown>, { cost: data.cost, price: data.price }, ["cost", "price"]);
+      if (Object.keys(changes).length) {
+        await logAudit(req, {
+          action: "accessory.price_change",
+          entity: "accessory",
+          entityId: id,
+          description: `Alterou ${changes.cost ? "o custo" : ""}${changes.cost && changes.price ? " e " : ""}${changes.price ? "o preço" : ""} do acessório ${row.name}`,
+          details: changes,
+        });
+      }
+    }
     return { accessory: row };
   });
 
   // DELETE /accessories/:id (somente admin)
-  app.delete("/accessories/:id", { preHandler: requireRole("admin") }, async (req) => {
+  app.delete("/accessories/:id", { preHandler: requireCapability("deleteRecords") }, async (req) => {
     const { id } = req.params as { id: string };
+    const [acc] = await db.select().from(accessories).where(eq(accessories.id, id)).limit(1);
     await db.delete(accessories).where(eq(accessories.id, id));
+    if (acc) {
+      await logAudit(req, {
+        action: "accessory.delete",
+        entity: "accessory",
+        entityId: id,
+        description: `Excluiu o acessório ${acc.name}`,
+        details: { quantity: acc.quantity, price: acc.price, cost: acc.cost },
+      });
+    }
     return { ok: true };
   });
 }

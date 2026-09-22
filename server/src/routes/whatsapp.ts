@@ -1,10 +1,12 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { whatsappInstances } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
-import { callUazapi, getInstance, getInstances } from "../services/whatsapp";
+import { authenticate, requireCapability, currentRole } from "../plugins/auth";
+import { can } from "../lib/permissions";
+import { callUazapi, ensureWebhookSecrets, getInstance, getInstances, newWebhookSecret } from "../services/whatsapp";
+import { logAudit } from "../services/audit";
 import { storageEnabled, uploadObject, presignedUrl } from "../storage/minio";
 
 function detectImageExt(buf: Buffer): string | null {
@@ -19,9 +21,12 @@ type JwtUser = { sub: string; name: string; role: string };
 // Aceita apenas http(s) para evitar SSRF a esquemas internos
 const urlSchema = z.string().max(500).url().refine((u) => /^https?:\/\//i.test(u), "URL deve ser http(s)");
 
-// Formato público da instância (NUNCA devolve a apiKey)
-function publicInstance(i: typeof whatsappInstances.$inferSelect, userId: string) {
+// Formato público da instância (NUNCA devolve a apiKey). O caminho do webhook (que contém o segredo)
+// só vai para o dono do número e para quem gerencia WhatsApp.
+function publicInstance(i: typeof whatsappInstances.$inferSelect, userId: string, role?: string) {
+  const seesSecret = i.ownerId === userId || can(role, "manageWhatsapp");
   return {
+    webhookPath: seesSecret && i.webhookSecret ? `/whatsapp/webhook/${i.webhookSecret}` : null,
     id: i.id,
     name: i.name,
     instanceUrl: i.instanceUrl,
@@ -36,12 +41,15 @@ function publicInstance(i: typeof whatsappInstances.$inferSelect, userId: string
 
 export async function whatsappRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
+  app.addHook("preHandler", requireCapability("useCRM"));
 
   // GET /whatsapp/instances — todas (cada um vê as suas e também as dos outros)
   app.get("/whatsapp/instances", async (req) => {
     const user = req.user as JwtUser;
+    await ensureWebhookSecrets();
     const rows = await getInstances();
-    return { instances: rows.map((i) => publicInstance(i, user.sub)) };
+    const role = currentRole(req);
+    return { instances: rows.map((i) => publicInstance(i, user.sub, role)) };
   });
 
   // Carrega a instância e exige que o usuário seja o dono ou admin
@@ -49,7 +57,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
     const inst = await getInstance(id);
     if (!inst) { reply.code(404).send({ error: "Instância não encontrada" }); return null; }
     const user = req.user as JwtUser;
-    if (inst.ownerId && inst.ownerId !== user.sub && user.role !== "admin") {
+    if (inst.ownerId && inst.ownerId !== user.sub && !can(currentRole(req as FastifyRequest), "manageWhatsapp")) {
       reply.code(403).send({ error: "Sem permissão para esta instância." });
       return null;
     }
@@ -70,9 +78,9 @@ export async function whatsappRoutes(app: FastifyInstance) {
     const user = req.user as JwtUser;
     const [row] = await db
       .insert(whatsappInstances)
-      .values({ ...p.data, ownerId: user.sub, ownerName: user.name })
+      .values({ ...p.data, ownerId: user.sub, ownerName: user.name, webhookSecret: newWebhookSecret() })
       .returning();
-    return reply.code(201).send({ instance: publicInstance(row, user.sub) });
+    return reply.code(201).send({ instance: publicInstance(row, user.sub, currentRole(req)) });
   });
 
   // PUT /whatsapp/instances/:id — atualiza (apiKey vazia mantém a atual)
@@ -102,7 +110,28 @@ export async function whatsappRoutes(app: FastifyInstance) {
       })
       .where(eq(whatsappInstances.id, id))
       .returning();
-    return { instance: publicInstance(row, user.sub) };
+    return { instance: publicInstance(row, user.sub, currentRole(req)) };
+  });
+
+  // POST /whatsapp/instances/:id/webhook-secret — gera um novo segredo (o antigo deixa de valer na hora)
+  app.post("/whatsapp/instances/:id/webhook-secret", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
+    const cur = await requireOwnerOrAdmin(id, req, reply);
+    if (!cur) return;
+    const user = req.user as JwtUser;
+    const [row] = await db
+      .update(whatsappInstances)
+      .set({ webhookSecret: newWebhookSecret() })
+      .where(eq(whatsappInstances.id, id))
+      .returning();
+    await logAudit(req, {
+      action: "whatsapp.webhook_secret",
+      entity: "whatsapp_instance",
+      entityId: id,
+      description: `Gerou um novo segredo do webhook do número "${cur.name}"`,
+    });
+    return { instance: publicInstance(row, user.sub, currentRole(req)) };
   });
 
   // DELETE /whatsapp/instances/:id (dono ou admin)

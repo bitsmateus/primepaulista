@@ -1,24 +1,21 @@
 import type { FastifyInstance } from "fastify";
-import { asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { funnelColumns, leads, leadTasks, messageLogs } from "../db/schema/index";
-import { authenticate } from "../plugins/auth";
+import { authenticate, requireCapability } from "../plugins/auth";
+import { logAudit } from "../services/audit";
+import { foldText } from "../lib/crmText";
+import { entryStageName, findOrCreateLeadByPhone, listFunnelColumns, restoreDefaultColumns } from "../services/leadFunnel";
 
-const DEFAULT_COLUMNS = [
-  { name: "Novo", color: "211 100% 45%", position: 0 },
-  { name: "Contatado", color: "38 92% 50%", position: 1 },
-  { name: "Negociação", color: "25 95% 53%", position: 2 },
-  { name: "Convertido", color: "160 84% 39%", position: 3 },
-  { name: "Perdido", color: "0 84% 60%", position: 4 },
-];
+const validDate = (v: string) => !Number.isNaN(new Date(v).getTime());
 
 const leadInput = z.object({
   name: z.string().min(1).max(200),
   phone: z.string().max(30).optional().default(""),
   modelInterest: z.string().max(100).optional().default(""),
   origin: z.string().max(100).optional().default(""),
-  status: z.string().max(100).optional().default("Novo"),
+  status: z.string().max(100).optional(), // sem status: entra na etapa de entrada do funil ("Novo Lead")
   notes: z.string().max(2000).optional().default(""),
 });
 
@@ -31,27 +28,54 @@ const messageLogInput = z.object({
   status: z.enum(["sent", "failed", "pending"]).optional().default("sent"),
 });
 
+// Tarefa nova: para um lead existente (leadId) OU a partir de um contato (cliente/orçamento da Agenda):
+// o servidor acha o lead pelo telefone ou cria um.
+const taskInput = z
+  .object({
+    leadId: z.string().uuid().optional(),
+    contact: z
+      .object({
+        name: z.string().trim().max(200).optional().default(""),
+        phone: z.string().trim().min(8).max(30),
+        origin: z.string().trim().max(100).optional(),
+        stage: z.string().trim().max(60).optional(),
+      })
+      .optional(),
+    title: z.string().trim().min(1).max(300),
+    dueDate: z.string().refine(validDate, "Data inválida").optional(),
+    sourceKey: z.string().trim().max(160).optional(),
+    done: z.boolean().optional(),
+  })
+  .refine((v) => Boolean(v.leadId) !== Boolean(v.contact), "Informe leadId ou contact");
+
 export async function crmRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
-
-  // ===== Colunas do funil =====
-  app.get("/funnel-columns", async () => {
-    let rows = await db
-      .select()
-      .from(funnelColumns)
-      .orderBy(asc(funnelColumns.position));
-    if (rows.length === 0) {
-      await db.insert(funnelColumns).values(DEFAULT_COLUMNS);
-      rows = await db.select().from(funnelColumns).orderBy(asc(funnelColumns.position));
-    }
-    return { funnelColumns: rows };
+  // Todo o CRM exige useCRM. Exceção de compatibilidade: a LEITURA de leads também é liberada
+  // a quem edita OS (o técnico usa os leads para sugerir clientes ao abrir uma ordem de serviço).
+  const crmGuard = requireCapability("useCRM");
+  const leadsReadGuard = requireCapability("useCRM", "editOS");
+  app.addHook("preHandler", async (req, reply) => {
+    const guard = req.method === "GET" && req.routeOptions.url === "/leads" ? leadsReadGuard : crmGuard;
+    return guard(req, reply);
   });
 
+  // ===== Colunas do funil =====
+  // Instalação nova já nasce com as 10 etapas padrão; bancos existentes só ganham as que faltam
+  // pelo botão "Restaurar etapas padrão" (POST /funnel-columns/restore-defaults).
+  app.get("/funnel-columns", async () => {
+    return { funnelColumns: await listFunnelColumns() };
+  });
+
+  const colorSchema = z.string().trim().regex(/^\d{1,3}(\.\d+)? \d{1,3}(\.\d+)?% \d{1,3}(\.\d+)?%$/, "Cor inválida");
+  const colNameSchema = z.string().trim().min(1).max(60);
+
   app.post("/funnel-columns", async (req, reply) => {
-    const p = z
-      .object({ name: z.string().min(1), color: z.string().min(1) })
-      .safeParse(req.body);
+    const p = z.object({ name: colNameSchema, color: colorSchema }).safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const existing = await db.select({ name: funnelColumns.name }).from(funnelColumns);
+    if (existing.some((c) => foldText(c.name) === foldText(p.data.name))) {
+      return reply.code(409).send({ error: "Já existe uma etapa com esse nome" });
+    }
     const [agg] = await db
       .select({ max: sql<number>`coalesce(max(${funnelColumns.position}), -1)` })
       .from(funnelColumns);
@@ -62,59 +86,81 @@ export async function crmRoutes(app: FastifyInstance) {
     return reply.code(201).send({ funnelColumn: row });
   });
 
+  // Restaurar etapas padrão: cria só as que faltam (por nome), sem apagar nem renomear nada
+  app.post("/funnel-columns/restore-defaults", async (req) => {
+    const r = await restoreDefaultColumns();
+    await logAudit(req, {
+      action: "funnel.restore_defaults",
+      entity: "funnel",
+      description: r.created.length
+        ? `Restaurou as etapas padrão do funil (criou: ${r.created.join(", ")})`
+        : "Restaurou as etapas padrão do funil (nenhuma faltava)",
+      details: { created: r.created },
+    });
+    return { created: r.created, funnelColumns: r.columns };
+  });
+
+  // Reordenar: recebe TODOS os ids na nova ordem
+  app.post("/funnel-columns/reorder", async (req, reply) => {
+    const p = z.object({ ids: z.array(z.string().uuid()).min(1).max(100) }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const rows = await db.select({ id: funnelColumns.id }).from(funnelColumns);
+    const have = new Set(rows.map((r) => r.id));
+    const given = new Set(p.data.ids);
+    if (given.size !== p.data.ids.length || given.size !== have.size || [...given].some((id) => !have.has(id))) {
+      return reply.code(400).send({ error: "A lista precisa ter todas as etapas, sem repetir" });
+    }
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < p.data.ids.length; i++) {
+        await tx.update(funnelColumns).set({ position: i }).where(eq(funnelColumns.id, p.data.ids[i]));
+      }
+    });
+    return { funnelColumns: await listFunnelColumns() };
+  });
+
   // Renomear/alterar coluna (renomear também atualiza o status dos leads)
   app.patch("/funnel-columns/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
     const p = z
       .object({
-        name: z.string().min(1).optional(),
-        color: z.string().optional(),
-        position: z.number().int().optional(),
+        name: colNameSchema.optional(),
+        color: colorSchema.optional(),
+        position: z.number().int().min(0).max(1000).optional(),
       })
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
 
-    await db.transaction(async (tx) => {
-      const [old] = await tx
-        .select()
-        .from(funnelColumns)
-        .where(eq(funnelColumns.id, id))
-        .limit(1);
-      if (old && p.data.name && p.data.name !== old.name) {
+    const result = await db.transaction(async (tx) => {
+      const [old] = await tx.select().from(funnelColumns).where(eq(funnelColumns.id, id)).limit(1);
+      if (!old) return "404" as const;
+      if (p.data.name && p.data.name !== old.name) {
+        const others = await tx.select({ name: funnelColumns.name }).from(funnelColumns).where(ne(funnelColumns.id, id));
+        if (others.some((c) => foldText(c.name) === foldText(p.data.name!))) return "409" as const;
         await tx.update(leads).set({ status: p.data.name }).where(eq(leads.status, old.name));
       }
-      await tx.update(funnelColumns).set(p.data).where(eq(funnelColumns.id, id));
+      if (Object.keys(p.data).length > 0) await tx.update(funnelColumns).set(p.data).where(eq(funnelColumns.id, id));
+      return "ok" as const;
     });
-    const [row] = await db
-      .select()
-      .from(funnelColumns)
-      .where(eq(funnelColumns.id, id))
-      .limit(1);
-    if (!row) return reply.code(404).send({ error: "Coluna não encontrada" });
+    if (result === "404") return reply.code(404).send({ error: "Coluna não encontrada" });
+    if (result === "409") return reply.code(409).send({ error: "Já existe uma etapa com esse nome" });
+    const [row] = await db.select().from(funnelColumns).where(eq(funnelColumns.id, id)).limit(1);
     return { funnelColumn: row };
   });
 
-  // Remover coluna (leads órfãos vão para a primeira coluna restante)
-  app.delete("/funnel-columns/:id", async (req) => {
+  // Remover coluna: só se estiver vazia (e nunca a última)
+  app.delete("/funnel-columns/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    await db.transaction(async (tx) => {
-      const [col] = await tx
-        .select()
-        .from(funnelColumns)
-        .where(eq(funnelColumns.id, id))
-        .limit(1);
-      if (!col) return;
-      const [first] = await tx
-        .select()
-        .from(funnelColumns)
-        .where(ne(funnelColumns.id, id))
-        .orderBy(asc(funnelColumns.position))
-        .limit(1);
-      if (first) {
-        await tx.update(leads).set({ status: first.name }).where(eq(leads.status, col.name));
-      }
-      await tx.delete(funnelColumns).where(eq(funnelColumns.id, id));
-    });
+    if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
+    const [col] = await db.select().from(funnelColumns).where(eq(funnelColumns.id, id)).limit(1);
+    if (!col) return reply.code(404).send({ error: "Coluna não encontrada" });
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(leads).where(eq(leads.status, col.name));
+    if (Number(n) > 0) {
+      return reply.code(409).send({ error: `A etapa "${col.name}" ainda tem ${n} lead(s). Mova-os para outra etapa antes de remover.` });
+    }
+    const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(funnelColumns);
+    if (Number(total) <= 1) return reply.code(409).send({ error: "O funil precisa ter pelo menos uma etapa." });
+    await db.delete(funnelColumns).where(eq(funnelColumns.id, id));
     return { ok: true };
   });
 
@@ -128,9 +174,10 @@ export async function crmRoutes(app: FastifyInstance) {
     const p = leadInput.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
     const user = req.user as { sub: string; name: string };
+    const status = p.data.status || (await entryStageName());
     const [row] = await db
       .insert(leads)
-      .values({ ...p.data, ownerId: user.sub, ownerName: user.name })
+      .values({ ...p.data, status, ownerId: user.sub, ownerName: user.name })
       .returning();
     return reply.code(201).send({ lead: row });
   });
@@ -157,30 +204,56 @@ export async function crmRoutes(app: FastifyInstance) {
   });
 
   app.post("/lead-tasks", async (req, reply) => {
-    const p = z
-      .object({
-        leadId: z.string().uuid(),
-        title: z.string().min(1).max(300),
-        dueDate: z.string().optional(),
-      })
-      .safeParse(req.body);
-    if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
+    const p = taskInput.safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.issues[0]?.message || "Dados inválidos" });
+    const user = req.user as { sub: string; name: string };
+    let leadId = p.data.leadId;
+    let leadCreated = false;
+    if (leadId) {
+      const [l] = await db.select({ id: leads.id }).from(leads).where(eq(leads.id, leadId)).limit(1);
+      if (!l) return reply.code(404).send({ error: "Lead não encontrado" });
+    } else if (p.data.contact) {
+      const c = p.data.contact;
+      const r = await findOrCreateLeadByPhone({
+        phone: c.phone,
+        name: c.name,
+        origin: c.origin || "Cliente",
+        stage: c.stage,
+        ownerId: user.sub,
+        ownerName: user.name,
+      });
+      leadId = r.lead.id;
+      leadCreated = r.created;
+    }
     const [row] = await db
       .insert(leadTasks)
       .values({
-        leadId: p.data.leadId,
+        leadId: leadId!,
         title: p.data.title,
+        done: p.data.done ?? false,
+        sourceKey: p.data.sourceKey ?? null,
         ...(p.data.dueDate ? { dueDate: new Date(p.data.dueDate) } : {}),
       })
       .returning();
-    return reply.code(201).send({ task: row });
+    return reply.code(201).send({ task: row, leadId, leadCreated });
   });
 
+  // Concluir, renomear ou reagendar (dueDate null = sem data)
   app.patch("/lead-tasks/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const p = z.object({ done: z.boolean().optional(), title: z.string().min(1).max(300).optional() }).safeParse(req.body);
+    if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
+    const p = z
+      .object({
+        done: z.boolean().optional(),
+        title: z.string().trim().min(1).max(300).optional(),
+        dueDate: z.string().refine(validDate, "Data inválida").nullable().optional(),
+      })
+      .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
-    const [row] = await db.update(leadTasks).set(p.data).where(eq(leadTasks.id, id)).returning();
+    const { dueDate, ...rest } = p.data;
+    const set = { ...rest, ...(dueDate !== undefined ? { dueDate: dueDate === null ? null : new Date(dueDate) } : {}) };
+    if (Object.keys(set).length === 0) return reply.code(400).send({ error: "Nada para alterar" });
+    const [row] = await db.update(leadTasks).set(set).where(eq(leadTasks.id, id)).returning();
     if (!row) return reply.code(404).send({ error: "Tarefa não encontrada" });
     return { task: row };
   });
@@ -192,9 +265,22 @@ export async function crmRoutes(app: FastifyInstance) {
   });
 
   // ===== Logs de mensagens =====
+  // Os 5000 mais recentes (enviadas e recebidas)
   app.get("/message-logs", async () => {
-    const rows = await db.select().from(messageLogs).orderBy(desc(messageLogs.sentAt));
+    const rows = await db.select().from(messageLogs).orderBy(desc(messageLogs.sentAt)).limit(5000);
     return { messageLogs: rows };
+  });
+
+  // Marca como vistas as mensagens recebidas de um lead (some do contador "Mensagens novas")
+  app.post("/leads/:id/messages/read", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) return reply.code(400).send({ error: "Identificador inválido" });
+    const rows = await db
+      .update(messageLogs)
+      .set({ readAt: new Date() })
+      .where(and(eq(messageLogs.recipientId, id), eq(messageLogs.direction, "in"), sql`${messageLogs.readAt} is null`))
+      .returning({ id: messageLogs.id });
+    return { marked: rows.length };
   });
 
   app.post("/message-logs", async (req, reply) => {

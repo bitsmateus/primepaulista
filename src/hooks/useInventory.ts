@@ -181,6 +181,7 @@ export function useInventory() {
       giftsCost: sale.giftsCost,
       requiresInvoice: sale.requiresInvoice,
       notes: sale.notes,
+      quoteId: sale.quoteId,
       items: sale.items.map((item) => ({
         productType: item.type,
         productId: (item.deviceId ?? item.accessoryId)!,
@@ -202,6 +203,7 @@ export function useInventory() {
     invalidateDevices();
     invalidateAccessories();
     qc.invalidateQueries({ queryKey: ["sales"] });
+    if (sale.quoteId) qc.invalidateQueries({ queryKey: ["quotes"] });
 
     const newSale: Sale = { ...sale, id: saleId, createdAt: new Date() };
     return newSale;

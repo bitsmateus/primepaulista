@@ -1,7 +1,7 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 
 // Usuários / cargos
-export const roleEnum = pgEnum("role", ["admin", "vendedor", "tecnico"]);
+export const roleEnum = pgEnum("role", ["admin", "vendedor", "tecnico", "gerente", "estoquista", "financeiro"]);
 
 // Estoque
 export const deviceConditionEnum = pgEnum("device_condition", ["Lacrado", "Seminovo"]);
@@ -34,11 +34,24 @@ export const paymentMethodEnum = pgEnum("payment_method", [
   "Dinheiro",
   "Cartão de Crédito",
   "Cartão de Débito",
+  "Mercado Pago / Link de Pagamento",
+  "Outro / Verificação Externa",
+]);
+
+// Orçamentos ("Expirado" não é gravado: é calculado pela validade)
+export const quoteStatusEnum = pgEnum("quote_status", [
+  "Aberto",
+  "Enviado",
+  "Aprovado",
+  "Recusado",
+  "Convertido",
 ]);
 
 // Assistência técnica
 export const osStatusEnum = pgEnum("os_status", [
   "Aguardando Diagnóstico",
+  "Em Diagnóstico",
+  "Aguardando Aprovação",
   "Aguardando Peça",
   "Em Reparo",
   "Pronto para Retirada",

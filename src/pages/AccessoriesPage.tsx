@@ -1,10 +1,12 @@
-import { useState, useMemo } from "react";
-import { Plus, Trash2, Barcode, Pencil, Search, Minus, Tag } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { Plus, Trash2, Barcode, Pencil, Search, Minus, Tag, ScanLine } from "lucide-react";
+import { BarcodeScannerDialog } from "@/components/devices/BarcodeScannerDialog";
 import { printAccessoryLabel } from "@/utils/labelGenerator";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { AccessoryCategory, AccessorySubcategory, Accessory } from "@/types/inventory";
 import { MODELS_BY_CATEGORY } from "@/data/appleCatalog";
 import {
@@ -68,7 +70,9 @@ export default function AccessoriesPage() {
     generateBarcode,
   } = useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canCost = can(user?.role, "viewCost");
+  const canEdit = can(user?.role, "editStock");
+  const canDelete = can(user?.role, "deleteRecords");
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -77,6 +81,10 @@ export default function AccessoriesPage() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<Accessory | null>(null);
+  // Leitor de código: "search" filtra a lista; "barcode" preenche o campo do formulário
+  const [scanTarget, setScanTarget] = useState<"search" | "barcode" | null>(null);
+  const lastScanTarget = useRef<"search" | "barcode">("search");
+  if (scanTarget) lastScanTarget.current = scanTarget;
 
   // Form state
   const [name, setName] = useState("");
@@ -180,7 +188,7 @@ export default function AccessoriesPage() {
             <h1 className="text-2xl font-semibold text-foreground">Acessórios</h1>
             <p className="mt-1 text-sm text-muted-foreground">Periféricos e acessórios por modelo</p>
           </div>
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} disabled={!canEdit}>
             <Plus className="mr-2 h-4 w-4" /> Novo Acessório
           </Button>
         </div>
@@ -190,7 +198,7 @@ export default function AccessoriesPage() {
           {[
             { label: "Itens distintos", value: report.distinct },
             { label: "Unidades em estoque", value: report.totalUnits },
-            ...(isAdmin
+            ...(canCost
               ? [
                   { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },
                   { label: "Margem potencial", value: fmt(report.potentialMargin) },
@@ -215,8 +223,17 @@ export default function AccessoriesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome, modelo, código..."
-              className="pl-9"
+              className="pl-9 pr-10"
             />
+            <button
+              type="button"
+              onClick={() => setScanTarget("search")}
+              title="Escanear para filtrar acessórios"
+              aria-label="Escanear para filtrar acessórios"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <ScanLine className="h-4 w-4" />
+            </button>
           </div>
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Categoria" /></SelectTrigger>
@@ -250,9 +267,9 @@ export default function AccessoriesPage() {
                     <TableHead>Categoria</TableHead>
                     <TableHead>Modelo</TableHead>
                     <TableHead>Código</TableHead>
-                    {isAdmin && <TableHead>Custo</TableHead>}
+                    {canCost && <TableHead>Custo</TableHead>}
                     <TableHead>Preço</TableHead>
-                    {isAdmin && <TableHead>Margem</TableHead>}
+                    {canCost && <TableHead>Margem</TableHead>}
                     <TableHead>Qtd</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-20"></TableHead>
@@ -265,9 +282,9 @@ export default function AccessoriesPage() {
                       <TableCell className="text-muted-foreground">{a.category} · {a.subcategory}</TableCell>
                       <TableCell>{a.compatibleModel}</TableCell>
                       <TableCell className="font-mono text-xs">{a.barcode}</TableCell>
-                      {isAdmin && <TableCell>{fmt(a.cost)}</TableCell>}
+                      {canCost && <TableCell>{fmt(a.cost)}</TableCell>}
                       <TableCell>{a.price != null ? fmt(a.price) : "—"}</TableCell>
-                      {isAdmin && (
+                      {canCost && (
                         <TableCell>
                           {(() => {
                             const m = accessoryMargin(a);
@@ -280,14 +297,18 @@ export default function AccessoriesPage() {
                       )}
                       <TableCell>
                         <div className="flex items-center gap-1.5">
-                          <Button variant="outline" size="icon" className="h-7 w-7"
+                          <Button variant="outline" size="icon" className="h-7 w-7" title="Diminuir 1 un" aria-label="Diminuir 1 un"
                             onClick={() => updateAccessoryQuantity(a.id, Math.max(0, a.quantity - 1))}>
                             <Minus className="h-3 w-3" />
                           </Button>
                           <span className="w-7 text-center text-sm font-medium">{a.quantity}</span>
-                          <Button variant="outline" size="icon" className="h-7 w-7"
+                          <Button variant="outline" size="icon" className="h-7 w-7" title="Aumentar 1 un" aria-label="Aumentar 1 un"
                             onClick={() => updateAccessoryQuantity(a.id, a.quantity + 1)}>
                             <Plus className="h-3 w-3" />
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs" title="Adicionar +5 un" aria-label="Adicionar 5 un"
+                            onClick={() => updateAccessoryQuantity(a.id, a.quantity + 5)}>
+                            +5
                           </Button>
                         </div>
                       </TableCell>
@@ -298,10 +319,10 @@ export default function AccessoriesPage() {
                             onClick={() => printAccessoryLabel({ name: a.name, price: a.price ?? 0, barcode: a.barcode })}>
                             <Tag className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(a)} title="Editar">
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(a)} disabled={!canEdit} title="Editar">
                             <Pencil className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                          {isAdmin && (
+                          {canDelete && (
                             <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(a)} title="Excluir">
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -312,7 +333,7 @@ export default function AccessoriesPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 10 : 8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={canCost ? 10 : 8} className="py-8 text-center text-muted-foreground">
                         {accessoriesLoading ? "Carregando acessórios…" : "Nenhum acessório encontrado."}
                       </TableCell>
                     </TableRow>
@@ -369,7 +390,7 @@ export default function AccessoriesPage() {
               </datalist>
             </div>
 
-            {isAdmin && (
+            {canCost && (
               <div className="space-y-2">
                 <Label>Custo Unitário (R$)</Label>
                 <Input type="number" min={0} value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0,00" />
@@ -395,6 +416,9 @@ export default function AccessoriesPage() {
               <Label>Código de Barras</Label>
               <div className="flex gap-2">
                 <Input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Gerado automaticamente" className="flex-1" />
+                <Button variant="outline" type="button" title="Escanear código de barras / SKU com a câmera" aria-label="Escanear código" onClick={() => setScanTarget("barcode")}>
+                  <ScanLine className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" type="button" onClick={() => setBarcode(generateBarcode())}>
                   <Barcode className="mr-2 h-4 w-4" /> Gerar Código
                 </Button>
@@ -410,6 +434,17 @@ export default function AccessoriesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <BarcodeScannerDialog
+        open={scanTarget !== null}
+        onOpenChange={(o) => { if (!o) setScanTarget(null); }}
+        onDetected={(code) => {
+          if (scanTarget === "barcode") setBarcode(code);
+          else { setSearch(code); toast.message("Busca filtrada pelo código lido.", { description: code }); }
+        }}
+        title={lastScanTarget.current === "barcode" ? "Escanear código do acessório" : "Escanear para filtrar acessórios"}
+        description="Aponte a câmera para o código de barras ou etiqueta de SKU."
+      />
 
       {/* Confirmação de exclusão */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>

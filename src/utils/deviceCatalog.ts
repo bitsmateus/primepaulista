@@ -1,14 +1,15 @@
 import { Device } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
 import { capacityInGB } from "@/lib/devices";
-import logo from "@/assets/logo-prime-paulista.png";
+import { getLogoPrintUrl, getStoreSettings } from "@/lib/storeSettings";
+import { escapeHtml as esc } from "@/utils/html";
 
-// Dados da loja (cabeçalho da vitrine para o cliente)
+// Dados da loja (Configurações > Loja), já escapados para uso dentro do HTML
 const STORE = {
-  name: "Prime Paulista",
-  whatsapp: "11 97038-3539",
-  instagram: "@primeavpaulista",
-  address: "Av. Paulista, 2064 - Ed. Paulista - 14º Andar",
+  get name() { return esc(getStoreSettings().name); },
+  get whatsapp() { return esc(getStoreSettings().whatsapp); },
+  get instagram() { return esc(getStoreSettings().instagram); },
+  get address() { return esc(getStoreSettings().address); },
 };
 
 const money = (v?: number) =>
@@ -48,7 +49,7 @@ const sumCost = (list: Device[]) => list.reduce((s, d) => s + (d.cost ?? 0), 0);
 // ---------------------------------------------------------------------------
 // 1) Catálogo A4 — uso interno de controle (com preço, status e totais)
 // ---------------------------------------------------------------------------
-export function generateCatalogHTML(devices: Device[], isAdmin = false): string {
+export function generateCatalogHTML(devices: Device[], showCost = false): string {
   const grouped = groupByModel(devices);
 
   const sections = grouped
@@ -95,7 +96,7 @@ export function generateCatalogHTML(devices: Device[], isAdmin = false): string 
   const summaryCards = [
     { label: "Aparelhos", value: String(totalUnits) },
     { label: "Valor em venda", value: money(totalPrice) },
-    ...(isAdmin
+    ...(showCost
       ? [
           { label: "Valor em custo", value: money(totalCost) },
           { label: "Margem potencial", value: money(totalPrice - totalCost) },
@@ -111,7 +112,7 @@ export function generateCatalogHTML(devices: Device[], isAdmin = false): string 
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Catálogo de Estoque – Prime Paulista</title>
+<title>Catálogo de Estoque – ${STORE.name}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 11px; padding: 14px; }
@@ -142,18 +143,18 @@ export function generateCatalogHTML(devices: Device[], isAdmin = false): string 
 </head>
 <body>
   <div class="head">
-    <h1>Estoque de Aparelhos — Prime Paulista</h1>
+    <h1>Estoque de Aparelhos — ${STORE.name}</h1>
     <div class="meta">${totalUnits} aparelho(s)<br/>${now}</div>
   </div>
   <div class="summary">${summaryCards}</div>
   ${sections || "<p>Nenhum aparelho para exibir.</p>"}
-  <div class="foot">Prime Paulista · documento interno de controle de estoque</div>
+  <div class="foot">${STORE.name} · documento interno de controle de estoque</div>
 </body>
 </html>`;
 }
 
-export function printDeviceCatalog(devices: Device[], isAdmin = false) {
-  const html = generateCatalogHTML(devices, isAdmin);
+export function printDeviceCatalog(devices: Device[], showCost = false) {
+  const html = generateCatalogHTML(devices, showCost);
   const win = window.open("", "_blank", "width=900,height=1000");
   if (win) {
     win.document.write(html);
@@ -214,7 +215,7 @@ export function generateStockReportHTML(devices: Device[]): string {
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Relatório de Estoque – Prime Paulista</title>
+<title>Relatório de Estoque – ${STORE.name}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 11px; padding: 14px; }
@@ -245,7 +246,7 @@ export function generateStockReportHTML(devices: Device[]): string {
 </head>
 <body>
   <div class="head">
-    <h1>Relatório de Estoque — Prime Paulista</h1>
+    <h1>Relatório de Estoque — ${STORE.name}</h1>
     <div class="meta">${totalUnits} aparelho(s)<br/>${now}</div>
   </div>
   <div class="summary">
@@ -253,7 +254,7 @@ export function generateStockReportHTML(devices: Device[]): string {
     <div class="sumcard"><span class="lbl">Valor em custo</span><span class="val">${money(totalCost)}</span></div>
   </div>
   ${sections || "<p>Nenhum aparelho para exibir.</p>"}
-  <div class="foot">Prime Paulista · relatório de conferência de estoque (uso interno)</div>
+  <div class="foot">${STORE.name} · relatório de conferência de estoque (uso interno)</div>
 </body>
 </html>`;
 }
@@ -304,14 +305,14 @@ export function generateShowcaseHTML(devices: Device[]): string {
     })
     .join("");
 
-  const logoUrl = `${window.location.origin}${logo}`;
+  const logoUrl = getLogoPrintUrl();
   const now = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Vitrine – Prime Paulista</title>
+<title>Vitrine – ${STORE.name}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #f5f5f7; background: #1c1c1e; padding: 20px; }

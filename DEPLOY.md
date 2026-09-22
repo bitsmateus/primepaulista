@@ -30,6 +30,7 @@ Ambos buildam direto do GitHub (`bitsmateus/primepaulista`).
 |----------|-------|
 | `DATABASE_URL` | `postgres://postgres:SENHA_DO_BANCO@prime_paulista_postgres:5432/prime_paulista?sslmode=disable` (host **interno**) |
 | `JWT_SECRET` | (chave de produção — fornecida no chat) |
+| `SETTINGS_ENC_KEY` | (opcional, recomendada) chave longa e aleatória para cifrar as variáveis customizadas de Configurações. Defina **antes** de cadastrar variáveis e guarde-a: sem ela usa-se o `JWT_SECRET`. |
 | `PORT` | `3333` |
 | `MINIO_ENDPOINT` | `prime-paulista-minio.zpajmr.easypanel.host` |
 | `MINIO_PORT` | `443` |

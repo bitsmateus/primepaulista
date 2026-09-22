@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Check, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
+import { SupplierSelect, type SupplierValue } from "@/components/devices/SupplierSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +30,8 @@ export function PayablesTab() {
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [recurring, setRecurring] = useState(false);
+  const { user } = useAuth();
+  const [supplier, setSupplier] = useState<SupplierValue>({ supplierId: null, name: "" });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["payables"] });
   const addMut = useMutation({
@@ -36,10 +41,11 @@ export function PayablesTab() {
         amount: parseFloat(amount) || 0,
         dueDate: dueDate ? new Date(dueDate + "T12:00:00").toISOString() : undefined,
         recurring,
+        supplierId: supplier.supplierId,
       }),
     onSuccess: () => {
       invalidate();
-      setDescription(""); setCategory("Fornecedor"); setAmount(""); setDueDate(""); setRecurring(false);
+      setDescription(""); setCategory("Fornecedor"); setAmount(""); setDueDate(""); setRecurring(false); setSupplier({ supplierId: null, name: "" });
       toast.success("Conta a pagar adicionada!");
     },
     onError: () => toast.error("Falha ao adicionar conta."),
@@ -101,6 +107,16 @@ export function PayablesTab() {
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
+          <div className="mt-3 max-w-sm">
+            <Label>Fornecedor (opcional)</Label>
+            <SupplierSelect
+              value={supplier}
+              onChange={setSupplier}
+              canCreate={can(user?.role, "manageSuppliers")}
+              ariaLabel="Fornecedor da conta"
+              placeholder="Sem fornecedor"
+            />
+          </div>
           <div className="mt-3 flex items-center justify-between">
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={recurring} onCheckedChange={(v) => setRecurring(!!v)} /> Conta recorrente (mensal)
@@ -136,7 +152,10 @@ export function PayablesTab() {
                   const status = overdue ? "atrasado" : p.status;
                   return (
                     <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.description}{p.recurring ? " · 🔁" : ""}</TableCell>
+                      <TableCell className="font-medium">
+                        {p.description}{p.recurring ? " · 🔁" : ""}
+                        {p.supplierName && <span className="block text-xs font-normal text-muted-foreground">Fornecedor: {p.supplierName}</span>}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{p.category || "—"}</TableCell>
                       <TableCell>{fmt(p.amount)}</TableCell>
                       <TableCell className={overdue ? "text-destructive font-medium" : ""}>

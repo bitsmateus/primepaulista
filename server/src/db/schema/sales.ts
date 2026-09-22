@@ -26,6 +26,9 @@ export const sales = pgTable("sales", {
   giftsCost: numeric("gifts_cost", { precision: 12, scale: 2 }).notNull().default("0"), // custo dos brindes incluídos na venda
   requiresInvoice: boolean("requires_invoice").notNull().default(false), // cliente exigiu emissão de nota fiscal
   notes: text("notes"), // descrição / observação da venda
+  // De onde veio a venda: "Balcão" (PDV direto) ou "Orçamento" (convertida de um orçamento)
+  origin: text("origin").notNull().default("Balcão"),
+  quoteId: uuid("quote_id"), // orçamento de origem (sem FK: evita dependência circular)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   returnedAt: timestamp("returned_at", { withTimezone: true }), // data da devolução/estorno (se houver)
 }, (t) => ({
@@ -57,8 +60,15 @@ export const payments = pgTable("payments", {
   method: paymentMethodEnum("method").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
   installments: integer("installments").default(1),
+  // Conferência financeira (conciliação): 'Aguardando' | 'Conferido' | 'Divergente'
+  auditStatus: text("audit_status").notNull().default("Aguardando"),
+  auditNote: text("audit_note").notNull().default(""), // NSU, autenticação bancária, cópia do comprovante
+  auditedBy: uuid("audited_by").references(() => profiles.id, { onDelete: "set null" }),
+  auditedByName: text("audited_by_name").notNull().default(""),
+  auditedAt: timestamp("audited_at", { withTimezone: true }),
 }, (t) => ({
   saleIdx: index("payments_sale_id_idx").on(t.saleId),
+  auditStatusIdx: index("payments_audit_status_idx").on(t.auditStatus),
 }));
 
 export const tradeIns = pgTable("trade_ins", {

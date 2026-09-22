@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/lib/permissions";
 import { Customer, LeadOrigin, Sale } from "@/types/inventory";
 import { isReturned, canReturn } from "@/lib/returns";
 import { parseCustomersCsv, dedupeCustomers, ParsedCustomersCsv } from "@/lib/customerCsv";
@@ -33,7 +34,8 @@ export default function CustomersPage() {
   const { customers, customersLoading, sales, addCustomer, updateCustomer, deleteCustomer, returnSale, importCustomers } =
     useInventoryContext();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canDelete = can(user?.role, "deleteRecords");
+  const canReturnSale = can(user?.role, "returnSales");
 
   const [returnTarget, setReturnTarget] = useState<Sale | null>(null);
   const [returnReason, setReturnReason] = useState("");
@@ -271,7 +273,7 @@ export default function CustomersPage() {
                             <Button variant="ghost" size="icon" onClick={() => openEdit(c)} title="Editar">
                               <Pencil className="h-4 w-4 text-muted-foreground" />
                             </Button>
-                            {isAdmin && (
+                            {canDelete && (
                               <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(c)} title="Excluir">
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
@@ -370,7 +372,7 @@ export default function CustomersPage() {
                     ) : (
                       <span className="text-xs text-muted-foreground">Venda ativa</span>
                     )}
-                    {canReturn(s, isAdmin) && (
+                    {canReturn(s, canReturnSale) && (
                       <Button variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive"
                         onClick={() => { setReturnTarget(s); setReturnReason(""); }}>
                         Devolver / Estornar

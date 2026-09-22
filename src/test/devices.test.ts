@@ -9,6 +9,8 @@ import { Device } from "@/types/inventory";
 const mkDevice = (over: Partial<Device>): Device => ({
   id: Math.random().toString(),
   category: "iPhone",
+  brand: "Apple",
+  location: "Estoque",
   model: "iPhone 15",
   capacity: "128",
   color: "Preto",

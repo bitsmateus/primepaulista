@@ -3,14 +3,14 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { automations } from "../db/schema/index";
-import { authenticate, requireRole } from "../plugins/auth";
+import { authenticate, requireCapability } from "../plugins/auth";
 import { getAutomations, runAutomations } from "../services/automations";
 
 export async function automationRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
 
   // GET /automations
-  app.get("/automations", async () => {
+  app.get("/automations", { preHandler: requireCapability("useCRM") }, async () => {
     const rows = await getAutomations();
     return { automations: rows };
   });
@@ -18,7 +18,7 @@ export async function automationRoutes(app: FastifyInstance) {
   // PUT /automations/:key  (admin)
   app.put(
     "/automations/:key",
-    { preHandler: requireRole("admin") },
+    { preHandler: requireCapability("manageAutomations") },
     async (req, reply) => {
       const { key } = req.params as { key: string };
       const p = z
@@ -43,7 +43,7 @@ export async function automationRoutes(app: FastifyInstance) {
   // POST /automations/run  (admin) — dispara as automações manualmente
   app.post(
     "/automations/run",
-    { preHandler: requireRole("admin") },
+    { preHandler: requireCapability("manageAutomations") },
     async () => {
       const summary = await runAutomations();
       return { summary };

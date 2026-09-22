@@ -4,6 +4,133 @@ Documento das alterações recentes do sistema de gestão. Versão atual: **v1.0
 
 ---
 
+## 21/09/2026 — Paridade com o sistema M7 Concept (concluída)
+
+Funções levadas do sistema M7 Concept para o Prime Paulista, mantendo o visual e a fonte atuais.
+
+### Fase 1 — Estoque de aparelhos
+- **Marca** e **Localização** (Estoque, Vitrine 1, Vitrine 2, Assistência ou qualquer outra) no cadastro, na busca, nos filtros e na exportação CSV.
+- **Mover localização** pela linha do aparelho ou em lote (selecionando vários).
+- **Filtros** por categoria, marca, condição (Lacrado/Seminovo), local e status.
+- **9 ordenações**: modelo A-Z, modelos mais antigos → mais novos (e o inverso), maior/menor preço de venda, maior custo (admin), maior quantidade, maior bateria e entrada mais recente.
+- **4 visões**: Lista, Por modelo (agrupada, com contador), Resumo (uma linha por modelo + capacidade + condição, com faixa de preço e média de bateria) e Grade.
+- **Ficha do aparelho**: dados completos, fotos, vendas em que apareceu (cliente, vendedor, garantia) e histórico de movimentações. Custo e margem só para admin.
+- **Leitor por câmera** (código de barras/QR/IMEI): nos campos IMEI 1, IMEI 2 e Serial, na busca de aparelhos, na busca de acessórios e no código do acessório. Sempre há o campo manual como alternativa (e serve para leitor USB).
+- **Importação CSV e Excel (.xlsx)** com prévia linha a linha, validação de IMEI/serial duplicado (no estoque e no arquivo) e opção de substituir o estoque atual (exige digitar APAGAR; vendidos são sempre mantidos). Modelos de planilha para baixar em Excel e CSV.
+- **Balanço de estoque**: confere aparelho por aparelho (câmera ou leitor), mostra progresso e a lista de faltantes (com download), por local. Admin inicia um novo balanço.
+- **Zerar preço de venda de todos** (admin, exige digitar ZERAR).
+- **Aparelho vendido não pode ser excluído** (fica no histórico permanente).
+- **Acessórios**: botão +5 unidades na lista.
+- **Auditoria**: importação, exclusão, mudança de local em lote, zerar preços e novo balanço ficam registrados (tela de consulta na Fase 4).
+
+### Fase 2 — Vendas e orçamentos
+- **Orçamentos** (novo menu, para admin e vendedor): monta a proposta com aparelhos e acessórios do estoque (preço editável, item avulso, desconto, validade de 7 dias, condições de pagamento), com número sequencial.
+  - Lista com filtros (status, período, vendedor, busca por nº/cliente/telefone/produto) e resumo (em aberto, valor em aberto, convertidos, taxa de conversão).
+  - Ações: editar, duplicar, imprimir/PDF, enviar por WhatsApp (abre a conversa com a proposta pronta e marca como Enviado), mudar status (Aberto, Enviado, Aprovado, Recusado; "Expirado" é automático pela validade) e excluir (admin ou quem criou).
+  - **Converter em venda**: abre o PDV com cliente, itens, preço negociado, desconto e vendedor já preenchidos; itens que saíram do estoque ou ficaram sem saldo são avisados e não entram. Ao finalizar, o orçamento vira "Convertido" na mesma operação (não dá para converter duas vezes).
+- **Novas formas de pagamento**: "Mercado Pago / Link de Pagamento" e "Outro / Verificação Externa" no PDV, na edição da venda, no fechamento de caixa e nos gráficos.
+- **Vendas realizadas**: coluna e filtro de **origem** (Venda de balcão / De orçamento) e card **Lucro líquido acumulado** (admin) do período filtrado.
+- **Dashboard**: **comparativo por vendedor** no período (qtd de vendas, faturamento, ticket médio e, para admin, lucro total e lucro por venda).
+
+### Fase 3 — Assistência técnica (Ordens de Serviço)
+- **Origem da OS**: "Aparelho do cliente" (como sempre) ou **"Estoque da loja"**. Na OS de estoque você busca o aparelho por modelo/IMEI/serial (só aparecem os não vendidos e que não estão em outra OS aberta); modelo, cor, IMEI e serial vêm do cadastro do aparelho e o cliente é opcional.
+  - Ao abrir a OS, o aparelho vai automaticamente para **Em Manutenção** e local **Assistência** (a movimentação fica no histórico do aparelho). Ao **entregar/finalizar** ou **excluir** a OS aberta, ele volta para o status e o local em que estava. Se o aparelho foi vendido ou alterado nesse meio tempo, o sistema **não sobrescreve**.
+  - Aparelho vendido ou já em outra OS aberta é recusado com mensagem clara. O custo do reparo **não** é somado ao custo do aparelho (o lucro da assistência já desconta a peça).
+  - Selo "Estoque da loja" no cartão do Kanban, no detalhe, filtro por origem e coluna no CSV.
+- **Quem paga o custo**: Cliente (padrão), **Garantia da Loja**, **Cortesia / Loja** ou **Dividido / Co-participação**.
+  - Garantia e Cortesia: o valor cobrado do cliente fica travado em **R$ 0,00** (o servidor também zera) e o recibo sai como **R$ 0,00 (ISENTO - COBERTO PELA GARANTIA DA LOJA)** ou **(ISENTO - CORTESIA DA LOJA)**.
+  - Dividido: o campo passa a se chamar "Parte paga pelo cliente" e o recibo mostra "Valor pago pelo cliente" + "Custo dividido com a loja".
+  - A receita dos dashboards continua sendo o valor cobrado (sem contar em dobro); o custo das peças entra como antes. Filtro por "Quem paga" no painel.
+- **Novos status**: **Em Diagnóstico** e **Aguardando Aprovação**. Colunas do Kanban: Aguardando Diagnóstico → Em Diagnóstico → Aguardando Aprovação → Aguardando Peça → Em Reparo → Pronto para Retirada → Entregue / Finalizado. Dashboards e filtros já contam os status novos.
+- **Mensagens de WhatsApp editáveis** (nova aba **Mensagens** na Assistência):
+  - O administrador edita o texto de cada aviso (Aguardando Aprovação, Pronto para Retirada, Entregue), liga/desliga cada um, define o nome da loja e a **chave PIX**, com **prévia em tempo real** e lista de variáveis clicáveis: `{cliente} {primeiro_nome} {os} {aparelho} {marca} {modelo} {imei} {valor} {loja} {chave_pix}`. O `{valor}` respeita "quem paga" (ex.: "R$ 0,00 (isento – coberto pela garantia da loja)").
+  - Quando a OS muda para essas etapas, **o servidor** envia o aviso pelo WhatsApp já conectado (Uazapi). Sem telefone na OS, sem número conectado ou WhatsApp desconectado, a mudança de status **não quebra**: o aviso fica registrado como **Pendente** com o motivo; se o provedor recusar, fica como **Falhou**.
+  - **Histórico de avisos**: lista geral (data, OS, cliente, aviso, status, motivo, com filtro) e o histórico de cada OS no detalhe, com botões **Notificar agora** e **Reenviar**. Vendedor e técnico veem o histórico e podem reenviar; só o administrador edita os modelos.
+  - Filtro **Pendentes (N)** no painel: OS em Pronto para Retirada ou Aguardando Aprovação que ainda não tiveram aviso enviado com sucesso (cartão ganha o selo "Aviso pendente").
+- **Base para as próximas fases**: armazenamento genérico de configurações da loja (`/settings/:chave`, só o administrador grava), já usado pelas mensagens.
+- O aviso "pronto para retirada" que antes saía do navegador (só quando o CRM estava aberto e conectado) agora sai pelo servidor, com o texto editável.
+
+### Fase 4A — Gestão: fornecedores, cargos, auditoria, configurações, conta e segurança
+- **Fornecedores** (novo menu): cadastro com nome, CPF/CNPJ, telefone, e-mail, endereço e observações; busca; ativo/inativo; **ficha** com os aparelhos comprados, contas a pagar e **total comprado** (o total e os custos só aparecem para quem pode ver custo).
+  - Fornecedor com aparelhos ou contas ligados **não é excluído**: o sistema avisa e oferece **inativar** (some das listas de escolha, o histórico continua).
+  - No cadastro do aparelho, o campo Fornecedor virou **seleção com busca** e o botão **"Cadastrar novo fornecedor"** na hora. Quem não gerencia fornecedores (ex.: vendedor) ainda pode digitar um nome livre.
+  - **Importação CSV/Excel** casa o fornecedor pelo nome (sem diferenciar maiúsculas) e cadastra sozinha os que faltam (a prévia avisa quais). **Contas a pagar** (BI) têm campo de fornecedor opcional.
+  - Os fornecedores que você já tinha digitado nos aparelhos foram **convertidos em cadastros automaticamente** (uma vez só, sem duplicar).
+- **Novos cargos**: **Gerente**, **Estoquista** e **Financeiro** (além de Administrador, Vendedor e Técnico). Na tela de Usuários há a tabela **"O que cada cargo pode"**.
+  - **Gerente**: tudo do administrador, menos usuários/cargos e variáveis/backup. **Estoquista**: estoque completo, fornecedores e importação, vê custo; sem PDV/CRM/BI. **Financeiro**: BI, contas, despesas e relatórios, vê custo e lucro; estoque só para consulta.
+  - A regra é a mesma no site e na API: o que o cargo não pode é **recusado pelo servidor** (não só escondido no menu). Trocar o cargo ou desativar alguém vale **na hora**, mesmo com a pessoa logada.
+  - Administrador, vendedor e técnico continuam com o que já podiam. Única mudança: o **técnico** deixou de conseguir, pela API, criar venda e mexer no CRM/WhatsApp (as telas dele nunca mostraram isso).
+- **Auditoria** (novo menu, para administrador e gerente; só leitura): quem fez o quê e quando, com filtros (período, usuário, ação, entidade, busca), paginação, detalhes em JSON e **exportar CSV**. Passaram a ser registrados: criar/editar/devolver venda, exclusões (aparelho, acessório, cliente, OS, orçamento, anexo, fornecedor), **mudança de custo/preço com antes → depois**, usuários (criar, cargo, ativar/desativar, redefinir senha), configurações, despesas/sangrias/comissões/contas, login (com sucesso e sem sucesso — **nunca a senha**) e troca da própria senha.
+- **Configurações** (novo menu; administrador e gerente):
+  - **Loja**: nome, slogan, WhatsApp, Facebook, Instagram, e-mail, endereço, CNPJ e chave PIX. Valem no recibo de venda, recibo de OS, orçamento, vitrine, catálogo e relatório de estoque. As mensagens de WhatsApp da assistência usam o nome e o PIX da loja quando os campos delas estiverem vazios.
+  - **Logo**: envie PNG/JPG/WEBP (até 2 MB); o navegador reduz para até 512 px. Aparece no menu, no login e nos documentos impressos. Tem "Restaurar logo padrão".
+  - **Termos de garantia**: prazos (lacrado, seminovo, bateria, serviço) e o texto do termo do recibo em blocos editáveis. Com os textos padrão o recibo sai **idêntico** ao de antes.
+  - **Segurança**: bloqueio automático da tela por inatividade (minutos; 0 = desligado).
+  - **Variáveis** (só administrador): chaves de integração (ex.: GEMINI_API_KEY) guardadas **cifradas** e **mascaradas**; "Mostrar valor" e "Copiar" ficam registrados na auditoria.
+  - **Backup** (só administrador): exporta todos os dados em JSON (sem senhas e sem valores de variáveis) e restaura **apenas as configurações**.
+- **Minha conta** (rodapé do menu): alterar a própria senha (senha atual, nova com 6+ caracteres e confirmação) e preferências de notificação.
+- **Bloquear tela** (rodapé do menu ou atalho **Alt+L**): cobre o sistema até a pessoa digitar a própria senha; continua bloqueada mesmo recarregando a página; "Sair" funciona na tela bloqueada. Também bloqueia sozinha por inatividade, se configurado.
+- **Notificações e alerta sonoro**: a cada 60 segundos (e ao voltar para a aba) o sistema confere OS prontas sem aviso, tarefas de leads vencidas/para hoje, orçamentos que vencem hoje, acessórios com estoque baixo e aparelhos parados há mais de 30 dias. **Só avisa quando algum número aumenta** (aviso na tela, notificação do navegador e um bipe curto), nunca na primeira carga nem repetindo o mesmo total. Cada usuário liga/desliga avisos e som em **Minha conta**.
+
+### Fase 4B — Conferência financeira, Planejamento semanal e Central de Relatórios
+- **Conferência financeira** (nova aba **Conferência** no BI; para administrador, gerente e financeiro): lista cada pagamento das vendas (data, cliente, venda, vendedor, forma, parcelas, valor, status e observação) com filtros por período, forma de pagamento, status, vendedor e busca (cliente, código da venda, NSU).
+  - Cada pagamento nasce **Aguardando** e pode virar **Conferido** ou **Divergente / Em análise**, ou voltar a Aguardando ("desfazer"). O sistema grava **quem conferiu e quando**. Campo de **observação** para NSU, autenticação bancária ou cópia do comprovante.
+  - **Em lote**: marque vários pagamentos, ou use **"Selecionar todos os N do filtro"** (pede confirmação). Tudo fica na **Auditoria**, com textos como "Conferência realizada em lote pelo responsável financeiro (60 pagamentos …)"; desfazer também gera registro.
+  - Cartões de resumo (total e quantidade/valor por status; clicar no cartão filtra). **Vendas devolvidas ficam de fora** e não podem ser conferidas.
+  - O detalhe da venda (**Vendas realizadas**) mostra "Conferência: <status>" em cada pagamento (o vendedor vê o status, mas não a observação nem quem conferiu). Na aba **Caixa** do BI aparece **"Aguardando conferência (N)"** do dia, com atalho para a Conferência.
+  - **Exportar CSV/Excel** da conferência (todas as linhas do filtro, não só a página).
+  - Se a forma de pagamento de uma venda for editada, o pagamento novo volta a Aguardando; editar outros dados da venda mantém a conferência.
+- **Planejamento semanal** (novo menu **Planejamento**, para todos): quadro com 7 colunas (segunda a domingo), navegação **semana anterior / próxima / Hoje**, resumo da semana (total, concluídas e %), filtro **"Minhas tarefas"**.
+  - **Administrador e gerente** criam, editam, atribuem, excluem e **arrastam** tarefas entre os dias; criação e exclusão ficam na Auditoria. **Os demais** veem só as **próprias** tarefas e marcam como feitas (não editam nada).
+  - **Salvar e Lembrar Colaborador**: com responsável e lembrete (agora ou data/hora), o colaborador é avisado **no sistema** (aviso na tela, notificação e bipe da Fase 4A, uma única vez, quando chega a hora) e **por WhatsApp** (Uazapi) se tiver WhatsApp cadastrado e houver número conectado. O formulário mostra a **"Mensagem que será enviada"** (editável; variáveis {nome} {tarefa} {dia} {loja}) com prévia. Falha de WhatsApp nunca impede de salvar (o cartão mostra "Sem WhatsApp cadastrado", "WhatsApp falhou" etc.). Há também o botão **Lembrar agora**.
+  - Em **Usuários** há o campo **WhatsApp** de cada colaborador (edita direto na tabela) e no cadastro de novo usuário.
+- **Central de Relatórios** (novo menu **Relatórios**; administrador, gerente, financeiro e estoquista — cada um vê só os relatórios dos dados que já pode ver): **Estoque**, **Vendas**, **Financeiro**, **Ordens de Serviço**, **Clientes**, **Orçamentos**, **Garantias** (vencendo em N dias, vigentes ou vencidas) e **Conferência**. Cada um tem filtros, resumo, prévia paginada com linha de totais e exporta em **PDF, Excel e CSV**.
+  - **PDF**: A4 (paisagem quando tem muitas colunas), com logo e nome da loja, título, filtros, "gerado por … em …", tabela, totais e "Página X de Y", com acentos corretos.
+  - **Custo, margem e lucro só saem para quem pode ver custo** — em colunas, totais, resumos e nos três formatos de arquivo.
+  - Orçamentos: o cargo Financeiro passou a poder **ler** (só ler) os orçamentos, para o relatório funcionar.
+
+### Fase 5A — CRM: funil de 10 etapas, agenda de follow-up, respostas rápidas e respostas automáticas
+- **Funil com 10 etapas** (cada uma com cor): Novo Lead, Primeiro Contato, Atendimento, Cliente Interessado, Orçamento Enviado, Negociação, Aguardando Pagamento, Venda Concluída, Pós-venda e Perdido. Instalações novas já nascem assim.
+  - **Bancos que já tinham etapas não são mexidos**: em **Funil** há o botão **"Restaurar etapas padrão"**, que cria só as que faltam (comparando o nome sem acento/maiúsculas) e **nunca apaga nem renomeia** nada.
+  - Em **Funil** também dá para **renomear, recolorir, reordenar (setas)**, adicionar e **remover a etapa só se estiver vazia** (se tiver leads, o sistema avisa para movê-los antes). Nomes repetidos são recusados.
+  - As métricas por etapa e o selo "Comprou" continuam. A taxa de conversão passou a contar **Venda Concluída** e **Pós-venda** (e "Convertido", do funil antigo).
+  - **Integração com Orçamentos e Vendas**: ao criar ou marcar como **Enviado** um orçamento para um cliente que também é lead (mesmo telefone, ignorando formatação, o 55 e o 9º dígito antigo), o lead vai para **Orçamento Enviado**; ao **vender** para esse cliente (inclusive orçamento convertido), vai para **Venda Concluída**. O lead só **avança** (nunca volta uma etapa) e um lead **Perdido** que volta a pedir orçamento ou comprar é reaberto. Só age se a etapa existir.
+- **Agenda de follow-up** (nova aba **Agenda** no CRM), por grupo (**Atrasados, Hoje, Próximos 7 dias, Depois, Sem data**) ou por **semana** (segunda a domingo, com navegação):
+  - Mostra as **tarefas dos leads** e **sugestões automáticas** de contato com clientes: **aniversariantes da semana**, **clientes com compra há 30 dias ou mais e sem contato**, **orçamentos enviados sem resposta há 3 dias ou mais** e **garantia vencendo nos próximos 15 dias**. Os números (30, 3, 15, e "não sugerir compras com mais de 365 dias") são configuráveis no botão **Sugestões** (administrador e gerente).
+  - Ações rápidas: **concluir** (e reabrir), **reagendar** (hoje, amanhã, em 7 dias ou data escolhida), **abrir o WhatsApp** (link wa.me já com o texto sugerido), **criar tarefa a partir da sugestão** (se o cliente ainda não é lead, o lead é criado no funil) e **"já entrei em contato"** (a sugestão some). Filtro **Todos / Minhas / por responsável**.
+- **Respostas rápidas** (nova aba): modelos de mensagem com categorias (Boas-vindas, Preço, Garantia, Endereço, Pagamento, Troca…), variáveis **{nome} {primeiro_nome} {modelo} {loja} {endereco} {chave_pix}**, botão para inserir variável e **prévia** com um lead de exemplo ou um lead real. Já vêm **6 modelos padrão** (boas-vindas, endereço, formas de pagamento, garantia, avaliação de troca, chave PIX), criados uma única vez e sem sobrescrever nada.
+  - Na conversa do lead, o botão **Respostas rápidas** insere o texto **já com as variáveis resolvidas** (nome e modelo de interesse do lead, dados da loja). A linha que depende de algo que não existe (ex.: sem chave PIX cadastrada) some sozinha.
+  - **Administrador e gerente** criam/editam/excluem; o **vendedor só usa** (e só vê as ativas).
+- **Respostas automáticas por palavra-chave** (nova aba): o cliente escreve no WhatsApp e a **primeira regra ativa (na ordem de prioridade) que casar e estiver dentro do horário** responde sozinha.
+  - Cada regra tem nome, categoria (Preço, Garantia, Endereço, Pagamento, Troca, Orçamento, Pós-venda, Outro), **palavras-chave** (casa a palavra inteira, sem diferenciar acento/maiúsculas; **garant\*** casa garantia/garantido), modo **qualquer palavra / todas as palavras**, texto com variáveis, **quando responder** (sempre, só no horário comercial, só fora dele, ou janela de dias e horas), **período de campanha** (ex.: Black Friday, Natal, feriado), **intervalo mínimo entre respostas ao mesmo cliente** (padrão 60 minutos) e ligar/desligar. Ordem por **setas** (prioridade).
+  - **Horário comercial** editável (padrão segunda a sábado, 09h às 19h, fuso de São Paulo).
+  - Por regra: **total de disparos, último disparo e taxa de resposta enviada**; gráficos de **disparos ao longo do tempo** e **por categoria** e lista dos últimos disparos.
+  - **Simulador**: escreva uma mensagem (e, se quiser, um telefone e um dia/horário) e veja **qual regra responderia, por quê (palavra que casou), o texto final e se o horário permite** — **sem enviar nada**.
+  - "Ação: IA" aparece como **"Em breve: IA (Fase 5B)"**, desabilitada; o motor já devolve a regra e a ação para a IA entrar depois sem mexer no restante.
+  - Administrador e gerente editam (tudo vai para a **Auditoria**); vendedor vê, simula e usa.
+- **Entrada de mensagens do WhatsApp (webhook do Uazapi)**: na aba **Conectar WhatsApp**, cada número mostra a **URL do webhook** (com um segredo aleatório) para colar no painel do Uazapi, com botões **Copiar** e **Gerar novo segredo** (o antigo deixa de valer na hora).
+  - Quando chega uma mensagem: o sistema **cria o lead** (etapa **Novo Lead**, origem WhatsApp) ou reaproveita o que tem o mesmo telefone, **guarda a mensagem** no histórico do lead, avalia as regras e **responde pelo mesmo número**. Mensagens **próprias**, de **grupos** e repetidas são ignoradas; o webhook **nunca** devolve erro ao provedor por falha interna, mesmo sem WhatsApp conectado (o motivo fica no disparo).
+  - No cartão do lead aparece o selo **"N nova(s)"** enquanto houver mensagem recebida não vista; abrir a conversa ou o histórico marca como lida. A conversa mostra as mensagens recebidas e as respostas. O aviso da Fase 4A ganhou **"mensagens novas no WhatsApp"**.
+  - **O Uazapi de verdade não foi testado** (os testes usaram um servidor falso): o formato da mensagem recebida é lido de forma tolerante, mas é uma suposição a confirmar com uma mensagem real.
+
+### Fase 5B — IA (Gemini) no atendimento
+**Nova aba "IA Atendimento"** no menu (administrador e gerente) e integração na conversa do lead e nas respostas automáticas do WhatsApp.
+- **Configuração**: liga/desliga geral (kill-switch), modelo do Gemini (padrão `gemini-2.5-flash`), temperatura, tamanho máximo da resposta, confiança mínima para enviar sozinha, **envio automático** (desligado por padrão, com confirmação ao ligar), limite de respostas automáticas por telefone por hora (padrão 3), tom de voz e **guardrails** (regras que a IA sempre segue — vêm 5 padrão: desconto acima de 5%, iCloud/desbloqueio, nunca inventar preço/prazo, nunca revelar custo/margem, respeitar a garantia; dá para adicionar/remover e restaurar o padrão).
+  - A chave fica em **Configurações › Variáveis › `GEMINI_API_KEY`** (a mesma tela cifrada da Fase 4A) ou numa variável de ambiente do servidor. **Sem chave cadastrada, a tela avisa claramente** ("IA não configurada: cadastre a chave...") e nada quebra — inclusive o simulador, a sugestão na conversa e as regras automáticas.
+- **Base de conhecimento**: crie documentos colando texto ou enviando um arquivo `.txt`/`.md` (até 200 KB), com categoria (Manual, Tabela de preços, Política de garantia, Política de pagamento, Outro), etiquetas, contagem estimada de tokens, busca e **"Testar busca"** (mostra os trechos que a IA receberia para uma pergunta, sem gastar nada). Só documentos **ativos** são usados; um botão ativa/desativa cada um sem excluir.
+- **A IA responde com base em**: os documentos ativos da base de conhecimento (o trecho mais relevante, não o documento inteiro), o **estoque disponível de verdade** (modelo, capacidade, cor, condição, bateria e **preço de venda** — nunca custo, fornecedor, IMEI ou observações), e, só quando o telefone bate com o dono, a **situação de uma Ordem de Serviço** citada (status, sem CPF nem valores — não há campo de previsão de prazo hoje, então a IA nunca promete data). Sem confirmação do telefone, ou se a pergunta só citar CPF/OS sem bater, a resposta diz que "um atendente vai verificar".
+  - Ela **nunca inventa preço**: se citar um valor que não está no estoque nem na base de conhecimento, a resposta é sinalizada para revisão automaticamente. Também **não cota valor de troca sozinha** (encaminha para um humano), a menos que exista um documento de política de troca com faixas.
+- **Sugerir resposta na conversa** (CRM › Gestão de Leads, botão **"✨ Sugerir resposta com IA"**): mostra a resposta, a confiança (barra colorida), as fontes usadas e um aviso "**Baixa confiança IA — revise antes de enviar**" quando a confiança for baixa ou a IA pedir revisão humana. Ações: usar (coloca no campo de mensagem), editar, enviar (vai pelo WhatsApp já conectado) ou descartar.
+- **Resposta automática por palavra-chave com ação "IA"** (aba Respostas automáticas do CRM, que antes mostrava "Em breve: IA (Fase 5B)" desabilitado — agora está **ativa**): escolha o tipo de atendimento (Cotação & Preços, Avaliação de Troca, Consulta de Status de OS ou Atendimento geral) em vez de escrever um texto fixo; o Gemini gera a resposta na hora.
+  - Se **envio automático** estiver ligado, a confiança for **igual ou maior** que o limiar configurado, a IA não tiver pedido revisão humana e o limite por telefone/hora não tiver sido atingido → **envia sozinha**. Caso contrário, a resposta vai para a fila **"Revisão da IA"** (nova aba do CRM) com o motivo (ex.: "Confiança 50% abaixo do mínimo (75%)", "Envio automático desligado", "A IA pediu revisão humana", "Limite de respostas automáticas por hora").
+- **Revisão da IA** (nova aba do CRM, com o número de pendentes no próprio nome da aba e no sino de avisos): fila de perguntas, sugestão, confiança e fontes; **aprovar e enviar**, **editar e enviar** ou **descartar**; histórico de quem tratou cada uma e quando. Se o WhatsApp estiver desconectado na hora de aprovar, o item **continua pendente** com o motivo (nada se perde).
+- **Simulador** ("Simular pergunta", só administrador/gerente): testa uma pergunta (com tipo e telefone opcionais) e mostra a resposta, a confiança, as fontes, o contexto usado (estoque/OS), os tokens, a latência e **o prompt inteiro enviado ao Gemini** (para conferir o que foi mandado) — sem enviar nada a ninguém.
+- **Métricas** ("IA no atendimento"): perguntas atendidas, % enviada automaticamente, % revisada, % descartada, confiança média, latência média, erros e gráfico por dia (o simulador não entra nas métricas).
+- **Privacidade (LGPD)**: antes de ir ao Gemini, o texto do cliente tem CPF, CNPJ, e-mail, telefone, CEP e endereço **removidos automaticamente** (e não ficam salvos nem no registro interno da IA). Custo, margem e fornecedor **nunca** entram no que é mandado à IA.
+- **A API REAL do Gemini não foi testada** (o Google não fornece uma chave de teste): todos os testes rodaram contra um servidor Gemini **falso** local. Veja `DECISOES-PENDENTES.md` para o que fazer antes de usar de verdade.
+
+---
+
 ## 19/06/2026 — v1.0.0
 
 - **Versão do sistema** exibida no rodapé do menu lateral (`Prime Paulista · v1.0.0`).

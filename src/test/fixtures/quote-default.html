@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Orçamento nº 42 – Prime Paulista</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 12px; }
+  .page { max-width: 720px; margin: 0 auto; padding: 24px; }
+  .head { background: #3a3a3c; color: #fff; border-radius: 8px; padding: 12px 16px; display: flex; gap: 14px; align-items: center; }
+  .head img { height: 48px; width: 48px; object-fit: contain; border-radius: 50%; background: #fff; padding: 4px; }
+  .head .contacts { font-size: 10px; line-height: 1.5; flex: 1; }
+  .head .num { text-align: right; }
+  .head .num .t { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; opacity: .8; }
+  .head .num .n { font-size: 22px; font-weight: 700; }
+  .addr { text-align: center; font-weight: 700; font-size: 11px; margin-top: 8px; }
+  .cnpj { text-align: right; font-size: 10px; color: #444; margin-top: 2px; }
+  .box { border: 1px solid #111; border-radius: 6px; padding: 8px 12px; margin-top: 10px; }
+  .row { display: flex; gap: 6px; padding: 3px 0; border-bottom: 1px dotted #bbb; }
+  .row:last-child { border-bottom: none; }
+  .row .l { font-weight: 600; min-width: 80px; }
+  .warn { margin-top: 10px; padding: 6px 10px; border: 1px solid #b45309; background: #fef3c7; color: #92400e; border-radius: 6px; font-weight: 700; text-align: center; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { border: 1px solid #111; padding: 6px 8px; font-size: 11px; }
+  th { background: #f0f0f0; text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
+  td.c { text-align: center; }
+  td.r { text-align: right; }
+  .sub { font-size: 9.5px; color: #555; margin-top: 2px; }
+  .subrow td { color: #444; }
+  .totrow td { font-weight: 700; font-size: 13px; }
+  .terms { margin-top: 10px; font-size: 11px; }
+  .terms p { margin-bottom: 4px; }
+  .note { margin-top: 10px; font-size: 10px; color: #444; line-height: 1.5; border-top: 1px dashed #999; padding-top: 8px; }
+  .sign { margin-top: 36px; text-align: center; }
+  .sign .line { width: 60%; margin: 0 auto; border-top: 1px solid #111; padding-top: 4px; font-size: 10px; }
+  @media print { .page { padding: 4px; } @page { margin: 8mm; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <img src="http://localhost:3000/src/assets/logo-prime-paulista.png" alt="Prime Paulista" />
+    <div class="contacts">
+      <div>📱 11 97038-3539</div>
+      <div>📷 @primeavpaulista</div>
+      <div>✉️ primeavpaulista@gmail.com</div>
+    </div>
+    <div class="num"><div class="t">Orçamento</div><div class="n">nº 42</div></div>
+  </div>
+  <div class="addr">Av. Paulista, 2064 - Ed. Paulista - 14º Andar</div>
+  <div class="cnpj">CNPJ: 35.646.573/0001-71</div>
+
+  <div class="box">
+    <div class="row"><span class="l">Data:</span><span>10/03/2026</span></div>
+    <div class="row"><span class="l">Cliente:</span><span>João &lt;Teste&gt;</span></div>
+    <div class="row"><span class="l">Telefone:</span><span>11999990000</span></div>
+    <div class="row"><span class="l">Vendedor:</span><span>Gabriel</span></div>
+    <div class="row"><span class="l">Válido até:</span><span>31/12/2099</span></div>
+  </div>
+  
+
+  <table>
+    <thead>
+      <tr><th style="width:48px">Quant.</th><th>Produto</th><th style="width:100px">Valor unit.</th><th style="width:100px">Valor total</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr>
+        <td class="c">1</td>
+        <td>iPhone 13<div class="sub">IMEI/Serial: ABC</div></td>
+        <td class="r">R$ 1.000,00</td>
+        <td class="r">R$ 1.000,00</td>
+      </tr>
+      <tr class="subrow"><td colspan="3" class="r">Subtotal</td><td class="r">R$ 1.000,00</td></tr>
+             <tr class="subrow"><td colspan="3" class="r">Desconto</td><td class="r">− R$ 50,00</td></tr>
+      <tr class="totrow"><td colspan="3" class="r">TOTAL</td><td class="r">R$ 950,00</td></tr>
+    </tbody>
+  </table>
+
+  <div class="terms">
+    <p><b>Condições de pagamento:</b> PIX à vista</p>
+    <p><b>Observações:</b> Obs</p>
+  </div>
+
+  <div class="note">
+    Orçamento válido até 31/12/2099. Valores sujeitos a alteração e disponibilidade de estoque.
+    Aparelhos lacrados: 1 ano de garantia do fabricante. Seminovos: garantia conforme termo entregue na compra.
+  </div>
+  <div class="sign"><div class="line">Prime Paulista</div></div>
+</div>
+</body>
+</html>

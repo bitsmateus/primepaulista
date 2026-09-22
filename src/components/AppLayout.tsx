@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppSidebar, SidebarContent } from "./AppSidebar";
 import { useAuth } from "@/contexts/AuthContext";
-import logo from "@/assets/logo-prime-paulista.png";
+import { useLogoSrc, useStoreSnapshot } from "@/hooks/useAppSettings";
 
 const COLLAPSE_KEY = "pp_sidebar_collapsed";
 
@@ -13,6 +13,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const logo = useLogoSrc();
+  const store = useStoreSnapshot();
 
   const toggleCollapsed = () => {
     setCollapsed((v) => {
@@ -52,8 +54,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <SidebarContent onNavigate={() => setOpen(false)} />
             </SheetContent>
           </Sheet>
-          <img src={logo} alt="Prime Paulista" className="h-8 w-8 rounded-full object-cover" />
-          <span className="flex-1 truncate text-base font-semibold text-foreground">Prime Paulista</span>
+          <img src={logo} alt={store.name} className="h-8 w-8 rounded-full object-cover" />
+          <span className="flex-1 truncate text-base font-semibold text-foreground">{store.name}</span>
           <button onClick={handleLogout} aria-label="Sair" className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
             <LogOut className="h-5 w-5" />
           </button>

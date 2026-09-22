@@ -20,6 +20,8 @@ export const whatsappInstances = pgTable("whatsapp_instances", {
   ownerId: uuid("owner_id"), // dono (profiles.id)
   ownerName: text("owner_name"), // nome do dono (denormalizado)
   active: boolean("active").notNull().default(true),
+  // Fase 5A: segredo aleatório da URL do webhook de entrada (POST /whatsapp/webhook/:secret)
+  webhookSecret: text("webhook_secret"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

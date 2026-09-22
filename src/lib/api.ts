@@ -1,7 +1,14 @@
 import { Device, Accessory, Customer, Sale, CartItem, PaymentEntry, PaymentMethod, Seller } from "@/types/inventory";
-import { ServiceOrder } from "@/types/serviceOrder";
+import { ServiceOrder, OSEvent, NotificationStatus } from "@/types/serviceOrder";
+import type { OsMessagesSettings } from "@/lib/osMessages";
 import { Lead, FunnelColumn, MessageLog, LeadTask } from "@/types/crm";
 import { Expense, Sangria, SellerCommissionConfig } from "@/types/financial";
+import { Quote, QuoteInput, QuoteItem, QuoteStatus } from "@/types/quote";
+import type { Role } from "@/lib/permissions";
+import type { AuditStatus, ReconciliationFilters, ReconciliationRow, StatusSummary } from "@/lib/reconciliation";
+import { cleanFilters, filtersToQuery } from "@/lib/reconciliation";
+import type { PlanningTask } from "@/lib/planningView";
+import type { KeywordRule, RuleAction } from "@/lib/keywordRules";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
 const TOKEN_KEY = "pp_token";
@@ -57,7 +64,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 // ---- Tipos de usuário ----
-export type UserRole = "admin" | "vendedor" | "tecnico";
+export type UserRole = Role;
 
 export interface AuthUser {
   id: string;
@@ -72,14 +79,16 @@ export interface ManagedUser {
   email: string;
   role: UserRole;
   active: boolean;
+  phone?: string | null; // WhatsApp (lembretes do planejamento)
   createdAt?: string;
 }
 
 // ---- Mapeamento de dados (banco → tipos do front) ----
-type DeviceRow = Omit<Device, "cost" | "salePrice" | "createdAt" | "entryDate"> & {
+type DeviceRow = Omit<Device, "cost" | "salePrice" | "createdAt" | "entryDate" | "checkedAt"> & {
   cost: string;
   salePrice: string | null;
   entryDate: string | null;
+  checkedAt: string | null;
   createdAt: string;
 };
 type AccessoryRow = Omit<Accessory, "cost" | "price" | "createdAt"> & {
@@ -100,7 +109,10 @@ function mapDevice(r: DeviceRow): Device {
     serial: r.serial ?? "",
     internalSerial: r.internalSerial ?? "",
     supplier: r.supplier ?? "",
+    brand: r.brand || "Apple",
+    location: r.location || "Estoque",
     entryDate: r.entryDate ? new Date(r.entryDate) : undefined,
+    checkedAt: r.checkedAt ? new Date(r.checkedAt) : undefined,
     notes: r.notes ?? "",
     createdAt: new Date(r.createdAt),
   };
@@ -144,9 +156,44 @@ interface ServiceOrderRow {
   stockAccessoryId: string | null;
   chargedAmount: string;
   taxes: string;
+  origin?: ServiceOrder["origin"] | null;
+  deviceId?: string | null;
+  costResponsibility?: ServiceOrder["costResponsibility"] | null;
+  sentEvents?: OSEvent[] | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+}
+
+export interface OsNotifyResult {
+  id: string;
+  status: NotificationStatus;
+  error: string | null;
+  event: OSEvent;
+}
+export interface OsNotification {
+  id: string;
+  osId: string;
+  event: OSEvent;
+  phone: string;
+  message: string;
+  status: NotificationStatus;
+  error: string | null;
+  createdAt: Date;
+  createdByName: string | null;
+  customerName?: string;
+  model?: string;
+}
+interface OsNotificationRaw extends Omit<OsNotification, "createdAt"> {
+  createdAt: string;
+}
+function mapOsNotification(r: OsNotificationRaw): OsNotification {
+  return { ...r, createdAt: new Date(r.createdAt) };
+}
+// Resultado de criar/editar OS: a OS + o que aconteceu com o aviso por WhatsApp (se houve)
+export interface OsMutationResult {
+  order: ServiceOrder;
+  notification: OsNotifyResult | null;
 }
 
 function mapServiceOrder(r: ServiceOrderRow): ServiceOrder {
@@ -178,6 +225,10 @@ function mapServiceOrder(r: ServiceOrderRow): ServiceOrder {
     stockAccessoryId: r.stockAccessoryId ?? undefined,
     chargedAmount: Number(r.chargedAmount),
     taxes: Number(r.taxes),
+    origin: r.origin ?? "Cliente",
+    deviceId: r.deviceId ?? undefined,
+    costResponsibility: r.costResponsibility ?? "Cliente",
+    sentEvents: r.sentEvents ?? [],
     createdAt: new Date(r.createdAt),
     updatedAt: new Date(r.updatedAt),
     completedAt: r.completedAt ? new Date(r.completedAt) : undefined,
@@ -198,6 +249,7 @@ function serviceOrderToWire(o: Partial<ServiceOrder>): Record<string, unknown> {
   delete wire.createdAt;
   delete wire.updatedAt;
   delete wire.completedAt;
+  delete wire.sentEvents;
   return wire;
 }
 function mapAccessory(r: AccessoryRow): Accessory {
@@ -212,6 +264,37 @@ function mapAccessory(r: AccessoryRow): Accessory {
   };
 }
 
+export interface DeviceHistory {
+  movements: Array<{
+    id: string;
+    movementType: "entrada" | "saida";
+    quantity: number;
+    reason: string | null;
+    createdAt: Date;
+    userName: string | null;
+  }>;
+  sales: Array<{
+    saleId: string;
+    createdAt: Date;
+    returnedAt: Date | null;
+    sellerName: string | null;
+    price: number;
+    warrantyDays: number;
+    customerName: string | null;
+  }>;
+}
+// Formato cru da API (datas e numeric como string)
+interface DeviceHistoryRaw {
+  movements: Array<Omit<DeviceHistory["movements"][number], "createdAt"> & { createdAt: string }>;
+  sales: Array<
+    Omit<DeviceHistory["sales"][number], "createdAt" | "returnedAt" | "price"> & {
+      createdAt: string;
+      returnedAt: string | null;
+      price: string;
+    }
+  >;
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
@@ -220,17 +303,100 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   me: () => request<{ user: AuthUser }>("/auth/me"),
+  getBranding: () => request<{ name: string; slogan: string; logoDataUrl: string }>("/auth/branding"),
+  // Conta: trocar a própria senha / conferir a senha (desbloqueio de tela)
+  changePassword: (input: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+    request<{ ok: true }>("/auth/change-password", { method: "POST", body: JSON.stringify(input) }),
+  verifyPassword: (password: string) =>
+    request<{ ok: true }>("/auth/verify-password", { method: "POST", body: JSON.stringify({ password }) }),
+
+  // Notificações (contadores de eventos acionáveis; conteúdo por cargo)
+  notificationsSummary: () => request<NotificationsSummary>("/notifications/summary"),
+
+  // Conferência financeira (conciliação de pagamentos)
+  listReconciliation: (f: ReconciliationFilters, page: { limit: number; offset: number }) =>
+    request<{ payments: ReconciliationRowWire[]; total: number; totalAmount: number; summary: StatusSummary; sellers: string[] }>(
+      `/reconciliation${filtersToQuery(f, page)}`
+    ).then((d) => ({ ...d, payments: d.payments.map(mapReconciliationRow) })),
+  reconciliationSummary: (f: ReconciliationFilters) =>
+    request<{ summary: StatusSummary }>(`/reconciliation/summary${filtersToQuery(f)}`).then((d) => d.summary),
+  exportReconciliation: (f: ReconciliationFilters) =>
+    request<{ payments: ReconciliationRowWire[] }>(`/reconciliation/export${filtersToQuery(f)}`).then((d) => d.payments.map(mapReconciliationRow)),
+  setPaymentAudit: (id: string, patch: { status?: AuditStatus; note?: string }) =>
+    request<{ ok: true; changed: boolean }>(`/reconciliation/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  bulkPaymentAudit: (input: { status: AuditStatus; ids?: string[]; filter?: ReconciliationFilters; note?: string }) =>
+    request<{ ok: true; updated: number; matched: number; unchanged: number }>("/reconciliation/bulk", { method: "POST", body: JSON.stringify({ ...input, ...(input.filter ? { filter: cleanFilters(input.filter) } : {}) }) }),
+
+  // Planejamento semanal
+  listPlanningTasks: (weekStart: string) =>
+    request<{ tasks: PlanningTaskWire[]; canManage: boolean }>(`/planning/tasks?weekStart=${weekStart}`).then((d) => ({ canManage: d.canManage, tasks: d.tasks.map(mapPlanningTask) })),
+  planningAssignees: () =>
+    request<{ assignees: { id: string; name: string; role: UserRole; hasPhone: boolean }[] }>("/planning/assignees").then((d) => d.assignees),
+  createPlanningTask: (input: PlanningTaskInput) =>
+    request<{ task: PlanningTaskWire; whatsapp: WhatsappOutcome | null }>("/planning/tasks", { method: "POST", body: JSON.stringify(input) }).then((d) => ({ task: mapPlanningTask(d.task), whatsapp: d.whatsapp })),
+  updatePlanningTask: (id: string, patch: Partial<PlanningTaskInput> & { done?: boolean }) =>
+    request<{ task: PlanningTaskWire; whatsapp: WhatsappOutcome | null }>(`/planning/tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => ({ task: mapPlanningTask(d.task), whatsapp: d.whatsapp })),
+  remindPlanningTask: (id: string) =>
+    request<{ task: PlanningTaskWire; whatsapp: WhatsappOutcome | null }>(`/planning/tasks/${id}/remind`, { method: "POST", body: JSON.stringify({}) }).then((d) => ({ task: mapPlanningTask(d.task), whatsapp: d.whatsapp })),
+  deletePlanningTask: (id: string) => request<{ ok: true }>(`/planning/tasks/${id}`, { method: "DELETE" }),
+
+  // Fornecedores
+  listSuppliers: (params: { q?: string; active?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.active !== undefined) qs.set("active", String(params.active));
+    const q = qs.toString();
+    return request<{ suppliers: Supplier[] }>(`/suppliers${q ? `?${q}` : ""}`).then((d) => d.suppliers);
+  },
+  getSupplier: (id: string) => request<SupplierDetailRaw>(`/suppliers/${id}`),
+  createSupplier: (input: SupplierInput) =>
+    request<{ supplier: Supplier }>("/suppliers", { method: "POST", body: JSON.stringify(input) }).then((d) => d.supplier),
+  updateSupplier: (id: string, patch: Partial<SupplierInput>) =>
+    request<{ supplier: Supplier }>(`/suppliers/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.supplier),
+  deleteSupplier: (id: string) => request<{ ok: true }>(`/suppliers/${id}`, { method: "DELETE" }),
+
+  // Auditoria (somente leitura)
+  listAuditLogs: (f: AuditFilters) =>
+    request<{ logs: AuditLogRow[]; total: number; limit: number; offset: number }>(`/audit-logs?${auditQuery(f)}`),
+  auditFilters: () => request<{ users: { id: string; name: string }[]; actions: string[]; entities: string[] }>("/audit-logs/filters"),
+  exportAuditCsv: async (f: AuditFilters): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/audit-logs/export?${auditQuery({ ...f, limit: undefined, offset: undefined })}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new ApiError(res.status, "Não foi possível exportar.");
+    return res.blob();
+  },
+
+  // Variáveis customizadas (admin) e backup
+  listCustomVars: () => request<{ variables: CustomVarRow[] }>("/custom-vars").then((d) => d.variables),
+  saveCustomVar: (name: string, value: string) =>
+    request<{ ok: true }>(`/custom-vars/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ value }) }),
+  deleteCustomVar: (name: string) => request<{ ok: true }>(`/custom-vars/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  revealCustomVar: (name: string) =>
+    request<{ name: string; value: string }>(`/custom-vars/${encodeURIComponent(name)}/reveal`, { method: "POST" }).then((d) => d.value),
+  exportBackup: async (): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/backup/export`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "Não foi possível exportar o backup.");
+    return res.blob();
+  },
+  restoreSettings: (settings: Record<string, unknown>) =>
+    request<{ restored: string[]; ignored: string[]; invalid: { key: string; error: string }[] }>("/backup/restore-settings", {
+      method: "POST",
+      body: JSON.stringify({ settings }),
+    }),
 
   // Usuários (admin)
   listUsers: () => request<{ users: ManagedUser[] }>("/users").then((d) => d.users),
-  createUser: (input: { name: string; email: string; password: string; role: UserRole }) =>
+  createUser: (input: { name: string; email: string; password: string; role: UserRole; phone?: string }) =>
     request<{ user: AuthUser }>("/users", {
       method: "POST",
       body: JSON.stringify(input),
     }).then((d) => d.user),
   updateUser: (
     id: string,
-    patch: { name?: string; role?: UserRole; active?: boolean; password?: string }
+    patch: { name?: string; role?: UserRole; active?: boolean; password?: string; phone?: string }
   ) =>
     request<{ user: ManagedUser }>(`/users/${id}`, {
       method: "PATCH",
@@ -252,6 +418,35 @@ export const api = {
     }).then((d) => mapDevice(d.device)),
   deleteDevice: (id: string) =>
     request<{ ok: true }>(`/devices/${id}`, { method: "DELETE" }),
+  importDevices: (devices: Array<Omit<Device, "id" | "createdAt" | "checkedAt">>, replaceStock: boolean) =>
+    request<{ created: number; removed: number; suppliersCreated: number; skipped: { index: number; reason: string }[] }>(
+      "/devices/import",
+      { method: "POST", body: JSON.stringify({ devices, replaceStock }) }
+    ),
+  clearDeviceSalePrices: () =>
+    request<{ updated: number }>("/devices/bulk/clear-sale-price", { method: "POST" }),
+  moveDevices: (ids: string[], location: string) =>
+    request<{ updated: number }>("/devices/bulk/move-location", {
+      method: "POST",
+      body: JSON.stringify({ ids, location }),
+    }),
+  stockCheck: (ids: string[]) =>
+    request<{ updated: number }>("/devices/stock-check", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
+  stockCheckReset: () =>
+    request<{ cleared: number }>("/devices/stock-check/reset", { method: "POST" }),
+  deviceHistory: (id: string) =>
+    request<DeviceHistoryRaw>(`/devices/${id}/history`).then((d): DeviceHistory => ({
+      movements: d.movements.map((m) => ({ ...m, createdAt: new Date(m.createdAt) })),
+      sales: d.sales.map((v) => ({
+        ...v,
+        price: Number(v.price),
+        createdAt: new Date(v.createdAt),
+        returnedAt: v.returnedAt ? new Date(v.returnedAt) : null,
+      })),
+    })),
 
   // Fotos do aparelho
   listDevicePhotos: (deviceId: string) =>
@@ -309,6 +504,17 @@ export const api = {
       body: JSON.stringify({ customers: rows }),
     }),
 
+  // Orçamentos
+  listQuotes: () => request<{ quotes: QuoteRow[] }>("/quotes").then((d) => d.quotes.map(mapQuote)),
+  getQuote: (id: string) => request<{ quote: QuoteRow }>(`/quotes/${id}`).then((d) => mapQuote(d.quote)),
+  createQuote: (input: QuoteInput) =>
+    request<{ quote: QuoteRow }>("/quotes", { method: "POST", body: JSON.stringify(quoteToWire(input)) }).then((d) => mapQuote(d.quote)),
+  updateQuote: (id: string, input: QuoteInput) =>
+    request<{ quote: QuoteRow }>(`/quotes/${id}`, { method: "PATCH", body: JSON.stringify(quoteToWire(input)) }).then((d) => mapQuote(d.quote)),
+  setQuoteStatus: (id: string, status: Exclude<QuoteStatus, "Convertido">) =>
+    request<{ quote: QuoteRow }>(`/quotes/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }).then((d) => mapQuote(d.quote)),
+  deleteQuote: (id: string) => request<{ ok: true }>(`/quotes/${id}`, { method: "DELETE" }),
+
   // Sales
   createSale: (input: SalePayload) =>
     request<{ saleId: string }>("/sales", {
@@ -343,17 +549,54 @@ export const api = {
       d.serviceOrders.map(mapServiceOrder)
     ),
   createServiceOrder: (input: Omit<ServiceOrder, "id" | "createdAt" | "updatedAt">) =>
-    request<{ serviceOrder: ServiceOrderRow }>("/service-orders", {
+    request<{ serviceOrder: ServiceOrderRow; notification?: OsNotifyResult | null }>("/service-orders", {
       method: "POST",
       body: JSON.stringify(serviceOrderToWire(input)),
-    }).then((d) => mapServiceOrder(d.serviceOrder)),
+    }).then((d): OsMutationResult => ({ order: mapServiceOrder(d.serviceOrder), notification: d.notification ?? null })),
   updateServiceOrder: (id: string, patch: Partial<ServiceOrder>) =>
-    request<{ serviceOrder: ServiceOrderRow }>(`/service-orders/${id}`, {
+    request<{ serviceOrder: ServiceOrderRow; notification?: OsNotifyResult | null }>(`/service-orders/${id}`, {
       method: "PATCH",
       body: JSON.stringify(serviceOrderToWire(patch)),
-    }).then((d) => mapServiceOrder(d.serviceOrder)),
+    }).then((d): OsMutationResult => ({ order: mapServiceOrder(d.serviceOrder), notification: d.notification ?? null })),
   deleteServiceOrder: (id: string) =>
     request<{ ok: true }>(`/service-orders/${id}`, { method: "DELETE" }),
+  // Notificações de WhatsApp da OS
+  listOsNotifications: (params: { status?: NotificationStatus; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.limit) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return request<{ notifications: OsNotificationRaw[] }>(`/os-notifications${q ? `?${q}` : ""}`).then((d) =>
+      d.notifications.map(mapOsNotification)
+    );
+  },
+  listOrderNotifications: (osId: string) =>
+    request<{ notifications: OsNotificationRaw[] }>(`/service-orders/${osId}/notifications`).then((d) =>
+      d.notifications.map(mapOsNotification)
+    ),
+  notifyServiceOrder: (osId: string, event?: OSEvent) =>
+    request<{ notification: OsNotifyResult; sentEvents: OSEvent[] }>(`/service-orders/${osId}/notify`, {
+      method: "POST",
+      body: JSON.stringify(event ? { event } : {}),
+    }),
+  // Configurações da loja (genérico): só chaves registradas no servidor
+  getSettingsBundle: () =>
+    request<{
+      store: import("@/lib/storeSettings").StoreSettings;
+      logo: { dataUrl: string };
+      warranty_terms: import("@/lib/warrantyTerms").WarrantyTerms;
+      security: { autoLockMinutes: number };
+    }>("/settings-bundle"),
+  getSetting: <T>(key: string) => request<{ key: string; value: T }>(`/settings/${key}`).then((d) => d.value),
+  saveSetting: <T>(key: string, value: T) =>
+    request<{ key: string; value: T }>(`/settings/${key}`, { method: "PUT", body: JSON.stringify(value) }).then((d) => d.value),
+  getOsMessages: () =>
+    request<{ key: string; value: OsMessagesSettings }>("/settings/os_messages").then((d) => d.value),
+  saveOsMessages: (v: OsMessagesSettings) =>
+    request<{ key: string; value: OsMessagesSettings }>("/settings/os_messages", {
+      method: "PUT",
+      body: JSON.stringify(v),
+    }).then((d) => d.value),
 
   // Fotos da OS (antes/depois)
   listOrderPhotos: (osId: string) =>
@@ -390,6 +633,10 @@ export const api = {
     }).then((d) => d.funnelColumn),
   deleteFunnelColumn: (id: string) =>
     request<{ ok: true }>(`/funnel-columns/${id}`, { method: "DELETE" }),
+  restoreFunnelDefaults: () =>
+    request<{ created: string[]; funnelColumns: FunnelColumn[] }>("/funnel-columns/restore-defaults", { method: "POST", body: JSON.stringify({}) }),
+  reorderFunnelColumns: (ids: string[]) =>
+    request<{ funnelColumns: FunnelColumn[] }>("/funnel-columns/reorder", { method: "POST", body: JSON.stringify({ ids }) }).then((d) => d.funnelColumns),
 
   // ===== CRM: leads =====
   listLeads: () =>
@@ -412,7 +659,18 @@ export const api = {
     request<{ tasks: LeadTaskRow[] }>("/lead-tasks").then((d) => d.tasks.map(mapLeadTask)),
   createLeadTask: (input: { leadId: string; title: string; dueDate?: string }) =>
     request<{ task: LeadTaskRow }>("/lead-tasks", { method: "POST", body: JSON.stringify(input) }).then((d) => mapLeadTask(d.task)),
-  updateLeadTask: (id: string, patch: { done?: boolean; title?: string }) =>
+  // Tarefa a partir de um contato (sugestão da Agenda): o servidor acha o lead pelo telefone ou cria um
+  createTaskFromContact: (input: {
+    contact: { name: string; phone: string; origin?: string; stage?: string };
+    title: string;
+    dueDate?: string;
+    sourceKey?: string;
+    done?: boolean;
+  }) =>
+    request<{ task: LeadTaskRow; leadId: string; leadCreated: boolean }>("/lead-tasks", { method: "POST", body: JSON.stringify(input) }).then((d) => ({
+      task: mapLeadTask(d.task), leadId: d.leadId, leadCreated: d.leadCreated,
+    })),
+  updateLeadTask: (id: string, patch: { done?: boolean; title?: string; dueDate?: string | null }) =>
     request<{ task: LeadTaskRow }>(`/lead-tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => mapLeadTask(d.task)),
   deleteLeadTask: (id: string) =>
     request<{ ok: true }>(`/lead-tasks/${id}`, { method: "DELETE" }),
@@ -422,6 +680,8 @@ export const api = {
     request<{ messageLogs: MessageLogRow[] }>("/message-logs").then((d) =>
       d.messageLogs.map(mapMessageLog)
     ),
+  markLeadMessagesRead: (leadId: string) =>
+    request<{ marked: number }>(`/leads/${leadId}/messages/read`, { method: "POST", body: JSON.stringify({}) }).then((d) => d.marked),
   createMessageLog: (input: Omit<MessageLog, "id" | "sentAt">) =>
     request<{ messageLog: MessageLogRow }>("/message-logs", {
       method: "POST",
@@ -441,6 +701,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }).then((d) => d.instance),
+  regenerateWebhookSecret: (id: string) =>
+    request<{ instance: WhatsappInstance }>(`/whatsapp/instances/${id}/webhook-secret`, { method: "POST", body: JSON.stringify({}) }).then((d) => d.instance),
   deleteWhatsappInstance: (id: string) =>
     request<{ ok: true }>(`/whatsapp/instances/${id}`, { method: "DELETE" }),
   whatsappStatus: (id: string) =>
@@ -466,6 +728,54 @@ export const api = {
     fd.append("file", file);
     return request<{ url: string }>("/whatsapp/campaign-image", { method: "POST", body: fd }).then((d) => d.url);
   },
+
+  // ===== CRM: respostas rápidas =====
+  listQuickReplies: () => request<{ quickReplies: QuickReply[] }>("/quick-replies").then((d) => d.quickReplies),
+  createQuickReply: (input: QuickReplyInput) =>
+    request<{ quickReply: QuickReply }>("/quick-replies", { method: "POST", body: JSON.stringify(input) }).then((d) => d.quickReply),
+  updateQuickReply: (id: string, patch: Partial<QuickReplyInput>) =>
+    request<{ quickReply: QuickReply }>(`/quick-replies/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.quickReply),
+  deleteQuickReply: (id: string) => request<{ ok: true }>(`/quick-replies/${id}`, { method: "DELETE" }),
+
+  // ===== CRM: respostas automáticas por palavra-chave =====
+  listKeywordRules: () => request<{ rules: KeywordRuleView[] }>("/keyword-rules").then((d) => d.rules),
+  createKeywordRule: (input: KeywordRuleInput) =>
+    request<{ rule: KeywordRule }>("/keyword-rules", { method: "POST", body: JSON.stringify(input) }).then((d) => d.rule),
+  updateKeywordRule: (id: string, patch: Partial<KeywordRuleInput>) =>
+    request<{ rule: KeywordRule }>(`/keyword-rules/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.rule),
+  deleteKeywordRule: (id: string) => request<{ ok: true }>(`/keyword-rules/${id}`, { method: "DELETE" }),
+  reorderKeywordRules: (ids: string[]) =>
+    request<{ ok: true }>("/keyword-rules/reorder", { method: "POST", body: JSON.stringify({ ids }) }),
+  simulateKeywordRule: (input: { text: string; phone?: string; at?: string }) =>
+    request<{ result: KeywordSimulation }>("/keyword-rules/simulate", { method: "POST", body: JSON.stringify(input) }).then((d) => d.result),
+  keywordRuleStats: (days = 30) => request<KeywordRuleStats>(`/keyword-rules/stats?days=${days}`),
+  keywordRuleHits: (limit = 30) =>
+    request<{ hits: KeywordHit[] }>(`/keyword-rules/hits?limit=${limit}`).then((d) => d.hits),
+
+  // ===== IA no atendimento (Fase 5B) =====
+  aiStatus: () => request<AiStatus>("/ai/status"),
+  aiConfig: () => request<{ config: AiSettingsView; defaults: AiSettingsView; status: AiStatus }>("/ai/config"),
+  saveAiConfig: (config: AiSettingsView) =>
+    request<{ config: AiSettingsView; status: AiStatus }>("/ai/config", { method: "PUT", body: JSON.stringify(config) }),
+  listAiDocuments: () =>
+    request<{ documents: AiDocumentRow[] }>("/ai/documents").then((d) => d.documents),
+  createAiDocument: (input: AiDocumentInput) =>
+    request<{ document: AiDocumentRow }>("/ai/documents", { method: "POST", body: JSON.stringify(input) }).then((d) => d.document),
+  updateAiDocument: (id: string, patch: Partial<AiDocumentInput>) =>
+    request<{ document: AiDocumentRow }>(`/ai/documents/${id}`, { method: "PATCH", body: JSON.stringify(patch) }).then((d) => d.document),
+  deleteAiDocument: (id: string) => request<{ ok: true }>(`/ai/documents/${id}`, { method: "DELETE" }),
+  aiSuggest: (input: { leadId: string; message?: string; kind?: AiKind }) =>
+    request<{ suggestion: AiSuggestion }>("/ai/suggest", { method: "POST", body: JSON.stringify(input) }).then((d) => d.suggestion),
+  aiPlayground: (input: { message: string; kind?: AiKind; phone?: string }) =>
+    request<{ result: AiPlaygroundResult }>("/ai/playground", { method: "POST", body: JSON.stringify(input) }).then((d) => d.result),
+  aiEventOutcome: (id: string, outcome: "usada" | "enviada_humano" | "descartada") =>
+    request<{ ok: true }>(`/ai/events/${id}/outcome`, { method: "POST", body: JSON.stringify({ outcome }) }),
+  listAiReviews: (status: "pendente" | "resolvidas" | "todas" = "pendente", limit = 50) =>
+    request<{ reviews: AiReviewRow[]; pending: number }>(`/ai/reviews?status=${status}&limit=${limit}`),
+  approveAiReview: (id: string, text?: string) =>
+    request<{ ok: true; status: "aprovado" | "editado" }>(`/ai/reviews/${id}/approve`, { method: "POST", body: JSON.stringify(text !== undefined ? { text } : {}) }),
+  discardAiReview: (id: string) => request<{ ok: true }>(`/ai/reviews/${id}/discard`, { method: "POST", body: JSON.stringify({}) }),
+  aiMetrics: (days = 30) => request<AiMetrics>(`/ai/metrics?days=${days}`),
 
   // ===== CRM automático =====
   listAutomations: () =>
@@ -531,7 +841,7 @@ export const api = {
 
   listPayables: () =>
     request<{ payables: PayableRow[] }>("/payables").then((d) => d.payables.map(mapPayable)),
-  createPayable: (input: { description: string; category?: string; amount: number; dueDate?: string; recurring?: boolean }) =>
+  createPayable: (input: { description: string; category?: string; amount: number; dueDate?: string; recurring?: boolean; supplierId?: string | null }) =>
     request<{ payable: PayableRow }>("/payables", {
       method: "POST",
       body: JSON.stringify(input),
@@ -596,6 +906,8 @@ export interface Payable {
   status: "pendente" | "pago" | "atrasado";
   paidAt: Date | null;
   recurring: boolean;
+  supplierId: string | null;
+  supplierName: string | null;
   createdAt: Date;
 }
 interface PayableRow {
@@ -607,11 +919,15 @@ interface PayableRow {
   status: "pendente" | "pago" | "atrasado";
   paidAt: string | null;
   recurring: boolean;
+  supplierId?: string | null;
+  supplierName?: string | null;
   createdAt: string;
 }
 function mapPayable(r: PayableRow): Payable {
   return {
     ...r,
+    supplierId: r.supplierId ?? null,
+    supplierName: r.supplierName ?? null,
     amount: Number(r.amount),
     dueDate: r.dueDate ? new Date(r.dueDate) : null,
     paidAt: r.paidAt ? new Date(r.paidAt) : null,
@@ -629,7 +945,153 @@ function mapReceivable(r: ReceivableRow): Receivable {
   };
 }
 
+export interface QuickReply {
+  id: string;
+  title: string;
+  body: string;
+  category: string;
+  active: boolean;
+  createdAt: string;
+}
+export type QuickReplyInput = { title: string; body: string; category: string; active: boolean };
+
+// ----- IA no atendimento (Fase 5B) -----
+export type AiKind = "preco" | "troca" | "os" | "geral";
+export interface AiStatus {
+  enabled: boolean;
+  configured: boolean; // existe a chave GEMINI_API_KEY (variável ou ambiente)
+  keySource: "variavel" | "ambiente" | null;
+  autoSend: boolean;
+  model: string;
+  confidenceThreshold: number;
+  pendingReviews?: number;
+}
+export interface AiSettingsView {
+  enabled: boolean;
+  model: string;
+  temperature: number;
+  maxOutputTokens: number;
+  confidenceThreshold: number;
+  autoSend: boolean;
+  maxAutoPerHour: number;
+  historyMessages: number;
+  tone: string;
+  guardrails: string[];
+}
+export interface AiDocumentRow {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+  tags: string[];
+  active: boolean;
+  fileName: string | null;
+  tokenEstimate: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AiDocumentInput {
+  title: string;
+  category: string;
+  content: string;
+  tags: string[];
+  active: boolean;
+  fileName?: string | null;
+}
+export interface AiSource {
+  docId: string;
+  title: string;
+}
+export interface AiSuggestion {
+  eventId: string;
+  kind: AiKind;
+  reply: string;
+  confidence: number;
+  needsHuman: boolean;
+  reason: string;
+  sources: AiSource[];
+  usedContext: { stock: number; os: boolean; knowledge: number };
+  tokens: number | null;
+  latencyMs: number;
+  model: string;
+  lowConfidence: boolean;
+}
+export interface AiPlaygroundResult extends Omit<AiSuggestion, "lowConfidence"> {
+  prompt: { system: string; contents: { role: string; parts: { text: string }[] }[] };
+  question: string;
+  decision: { action: "auto" | "review"; reason: string };
+}
+export interface AiReviewRow {
+  id: string;
+  eventId: string | null;
+  phone: string;
+  leadId: string | null;
+  leadName: string | null;
+  kind: AiKind;
+  question: string;
+  suggestedReply: string;
+  confidence: number | null;
+  reason: string;
+  sources: AiSource[];
+  status: "pendente" | "aprovado" | "editado" | "descartado";
+  finalReply: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  sent: boolean;
+  sendError: string | null;
+  createdAt: string;
+}
+export interface AiMetrics {
+  days: number;
+  totals: { questions: number; auto: number; reviewed: number; agent: number; discarded: number; inReview: number; errors: number; pendingReviews: number; tokens: number };
+  rates: { auto: number; reviewed: number; discarded: number; errors: number };
+  avgConfidence: number | null;
+  avgLatencyMs: number | null;
+  daily: { date: string; total: number; auto: number; reviewed: number; discarded: number; errors: number }[];
+  byKind: { kind: AiKind; total: number }[];
+}
+
+export interface KeywordRuleView extends KeywordRule {
+  createdAt: string;
+  stats: { total: number; replied: number; lastAt: string | null; rate: number };
+}
+export type KeywordRuleInput = Omit<KeywordRule, "id" | "priority"> & { priority?: number };
+export interface KeywordSimulation {
+  status: "fire" | "cooldown" | "outside_schedule" | "no_match" | "no_rules";
+  wouldSend: boolean;
+  action: RuleAction | null;
+  rule: { id: string; name: string; category: string; priority: number; action: RuleAction; cooldownMinutes: number } | null;
+  matchedKeywords: string[];
+  scheduleOk: boolean | null;
+  scheduleReason: string | null;
+  cooldown: { active: boolean; until: string | null };
+  replyText: string | null;
+  businessOpen: boolean;
+  leadFound: boolean;
+  considered: { id: string; name: string; priority: number; matchedKeywords: string[]; scheduleOk: boolean; scheduleReason: string }[];
+  message: string;
+}
+export interface KeywordRuleStats {
+  days: number;
+  daily: { date: string; total: number; replied: number }[];
+  byCategory: { category: string; total: number; replied: number }[];
+}
+export interface KeywordHit {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  phone: string;
+  leadId: string | null;
+  inboundText: string;
+  matched: string;
+  replied: boolean;
+  error: string | null;
+  reviewId?: string | null; // resposta da IA que foi para a fila de revisão
+  createdAt: string;
+}
+
 export interface WhatsappInstance {
+  webhookPath?: string | null; // caminho do webhook de entrada (só para o dono do número e quem gerencia WhatsApp)
   id: string;
   name: string;
   instanceUrl: string;
@@ -658,12 +1120,12 @@ export interface AutomationRunSummary {
 
 // ----- Mapeamento CRM (datas como string → Date) -----
 type LeadRow = Omit<Lead, "createdAt"> & { createdAt: string };
-type MessageLogRow = Omit<MessageLog, "sentAt"> & { sentAt: string };
+type MessageLogRow = Omit<MessageLog, "sentAt" | "readAt"> & { sentAt: string; readAt?: string | null };
 
-type LeadTaskRow = { id: string; leadId: string; title: string; dueDate: string | null; done: boolean; createdAt: string };
+type LeadTaskRow = { id: string; leadId: string; title: string; dueDate: string | null; done: boolean; sourceKey?: string | null; createdAt: string };
 function mapLeadTask(r: LeadTaskRow): LeadTask {
   return {
-    id: r.id, leadId: r.leadId, title: r.title, done: r.done,
+    id: r.id, leadId: r.leadId, title: r.title, done: r.done, sourceKey: r.sourceKey ?? undefined,
     dueDate: r.dueDate ? new Date(r.dueDate) : null,
     createdAt: new Date(r.createdAt),
   };
@@ -690,7 +1152,14 @@ function mapMessageLog(r: MessageLogRow): MessageLog {
     templateType: r.templateType ?? "",
     message: r.message ?? "",
     sentAt: new Date(r.sentAt),
+    direction: r.direction === "in" ? "in" : "out",
+    readAt: r.readAt ? new Date(r.readAt) : null,
   };
+}
+
+// URL completa do webhook para colar no painel do Uazapi
+export function webhookUrl(path: string): string {
+  return `${API_URL.replace(/\/$/, "")}${path}`;
 }
 
 export interface OrderPhoto {
@@ -706,6 +1175,81 @@ export interface DevicePhoto {
   createdAt: string;
 }
 
+// ----- Orçamentos: banco (numeric/datas como string) → tipos do front -----
+interface QuoteRow {
+  id: string;
+  number: number;
+  customerId: string | null;
+  customerName: string;
+  customerPhone: string;
+  sellerId: string | null;
+  sellerName: string;
+  status: QuoteStatus;
+  validUntil: string | null;
+  subtotal: string;
+  discount: string;
+  total: string;
+  paymentTerms: string;
+  notes: string;
+  convertedSaleId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number }[];
+}
+
+function mapQuote(r: QuoteRow): Quote {
+  const items: QuoteItem[] = (r.items ?? []).map((i) => ({
+    id: i.id,
+    type: i.productType,
+    productId: i.productId ?? undefined,
+    name: i.name,
+    serial: i.serial ?? undefined,
+    price: Number(i.price),
+    quantity: i.quantity,
+  }));
+  return {
+    id: r.id,
+    number: r.number,
+    customerId: r.customerId ?? undefined,
+    customerName: r.customerName,
+    customerPhone: r.customerPhone,
+    sellerId: r.sellerId ?? undefined,
+    sellerName: r.sellerName,
+    status: r.status,
+    validUntil: r.validUntil ? new Date(r.validUntil) : undefined,
+    subtotal: Number(r.subtotal),
+    discount: Number(r.discount),
+    total: Number(r.total),
+    paymentTerms: r.paymentTerms,
+    notes: r.notes,
+    convertedSaleId: r.convertedSaleId ?? undefined,
+    createdAt: new Date(r.createdAt),
+    updatedAt: new Date(r.updatedAt),
+    items,
+  };
+}
+
+function quoteToWire(q: QuoteInput) {
+  return {
+    customerId: q.customerId ?? null,
+    customerName: q.customerName,
+    customerPhone: q.customerPhone,
+    sellerName: q.sellerName,
+    validUntil: q.validUntil?.toISOString(),
+    discount: q.discount,
+    paymentTerms: q.paymentTerms,
+    notes: q.notes,
+    items: q.items.map((i) => ({
+      productType: i.type,
+      productId: i.productId ?? null,
+      name: i.name,
+      serial: i.serial ?? null,
+      price: i.price,
+      quantity: i.quantity,
+    })),
+  };
+}
+
 // Payload enviado ao finalizar uma venda
 export interface SalePayload {
   customerId: string;
@@ -717,6 +1261,7 @@ export interface SalePayload {
   giftsCost: number;
   requiresInvoice: boolean;
   notes?: string;
+  quoteId?: string; // venda gerada a partir de um orçamento
   items: {
     productType: "device" | "accessory";
     productId: string;
@@ -754,7 +1299,7 @@ export interface SaleUpdate {
   giftsCost?: number;
   requiresInvoice?: boolean;
   notes?: string;
-  paymentMethod?: "PIX" | "Dinheiro" | "Cartão de Crédito" | "Cartão de Débito";
+  paymentMethod?: PaymentMethod;
   installments?: number;
 }
 
@@ -771,11 +1316,13 @@ interface SaleFullRow {
   giftsCost: string;
   requiresInvoice: boolean;
   notes: string | null;
+  origin?: string | null;
+  quoteId?: string | null;
   createdAt: string;
   returnedAt: string | null;
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
   items: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number; warrantyDays?: number }[];
-  payments: { id: string; method: string; amount: string; installments: number | null }[];
+  payments: { id: string; method: string; amount: string; installments: number | null; auditStatus?: AuditStatus; auditNote?: string; auditedByName?: string; auditedAt?: string | null }[];
   tradeIn: { imei: string | null; model: string | null; healthDescription: string | null; value: string } | null;
 }
 
@@ -801,6 +1348,10 @@ function mapSaleFull(r: SaleFullRow): Sale {
     method: p.method as PaymentMethod,
     amount: Number(p.amount),
     installments: p.installments ?? undefined,
+    auditStatus: p.auditStatus ?? "Aguardando",
+    auditNote: p.auditNote ?? "",
+    auditedByName: p.auditedByName ?? "",
+    auditedAt: p.auditedAt ? new Date(p.auditedAt) : undefined,
   }));
 
   return {
@@ -824,7 +1375,138 @@ function mapSaleFull(r: SaleFullRow): Sale {
     giftsCost: Number(r.giftsCost),
     requiresInvoice: r.requiresInvoice,
     notes: r.notes ?? "",
+    origin: r.origin === "Orçamento" ? "Orçamento" : "Balcão",
+    quoteId: r.quoteId ?? undefined,
     createdAt: new Date(r.createdAt),
     returnedAt: r.returnedAt ? new Date(r.returnedAt) : undefined,
   };
+}
+
+// ----- Notificações -----
+export interface NotificationCounts {
+  osReady: number;
+  tasksDue: number;
+  quotesToday: number;
+  lowStock: number;
+  staleDevices: number;
+  taskReminders: number; // lembretes de tarefa entregues NESTA consulta (uma vez só)
+  newMessages: number; // mensagens de WhatsApp recebidas que ninguém abriu ainda
+  aiReviews: number; // respostas da IA aguardando revisão (Fase 5B)
+}
+
+export interface TaskReminderNotice {
+  id: string;
+  title: string;
+  dayLabel: string;
+}
+
+export interface NotificationsSummary {
+  counts: Partial<NotificationCounts>;
+  reminders?: TaskReminderNotice[];
+}
+
+// ----- Conferência financeira -----
+interface ReconciliationRowWire extends Omit<ReconciliationRow, "createdAt" | "auditedAt"> {
+  createdAt: string;
+  auditedAt: string | null;
+}
+function mapReconciliationRow(r: ReconciliationRowWire): ReconciliationRow {
+  return { ...r, createdAt: new Date(r.createdAt), auditedAt: r.auditedAt ? new Date(r.auditedAt) : null };
+}
+
+// ----- Planejamento -----
+type PlanningTaskWire = Omit<PlanningTask, "doneAt" | "remindAt" | "remindedAt" | "whatsappAt" | "createdAt"> & {
+  doneAt: string | null;
+  remindAt: string | null;
+  remindedAt: string | null;
+  whatsappAt: string | null;
+  createdAt: string;
+};
+export interface PlanningTaskInput {
+  weekStart: string;
+  weekday: number;
+  title: string;
+  description?: string;
+  assigneeId?: string | null;
+  remindAt?: string | null; // ISO
+  reminderMessage?: string;
+}
+export interface WhatsappOutcome {
+  status: "sent" | "failed" | "no_phone" | "no_instance";
+  error: string | null;
+}
+const optDate = (v: string | null) => (v ? new Date(v) : null);
+function mapPlanningTask(t: PlanningTaskWire): PlanningTask {
+  return { ...t, doneAt: optDate(t.doneAt), remindAt: optDate(t.remindAt), remindedAt: optDate(t.remindedAt), whatsappAt: optDate(t.whatsappAt), createdAt: new Date(t.createdAt) };
+}
+
+// ----- Fornecedores -----
+export interface Supplier {
+  id: string;
+  name: string;
+  document: string;
+  phone: string;
+  email: string;
+  address: string;
+  notes: string;
+  active: boolean;
+  createdAt: string;
+  deviceCount?: number;
+  payableCount?: number;
+}
+export interface SupplierInput {
+  name: string;
+  document?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  active?: boolean;
+}
+export interface SupplierDetailRaw {
+  supplier: Supplier;
+  devices: Array<{
+    id: string; model: string; capacity: string; color: string; condition: string; status: string;
+    serialImei: string | null; entryDate: string | null; createdAt: string; cost?: string;
+  }>;
+  payables: Array<{ id: string; description: string; category: string; amount: string; dueDate: string | null; status: string }>;
+  deviceCount: number;
+  totalPurchased?: number; // só quem pode ver custo
+  payablesOpen?: number; // só quem gerencia o financeiro
+}
+
+// ----- Auditoria -----
+export interface AuditLogRow {
+  id: string;
+  userId: string | null;
+  userName: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  description: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+export interface AuditFilters {
+  from?: string;
+  to?: string;
+  userId?: string;
+  action?: string;
+  entity?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+function auditQuery(f: AuditFilters): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== "" && v !== null) qs.set(k, String(v));
+  return qs.toString();
+}
+
+// ----- Variáveis customizadas -----
+export interface CustomVarRow {
+  name: string;
+  masked: string;
+  createdAt: string;
+  updatedAt: string;
 }
