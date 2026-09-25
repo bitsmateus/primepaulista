@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { Search, Smartphone, Package, Download } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
@@ -7,6 +7,8 @@ import { can } from "@/lib/permissions";
 import { DeviceStatus } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
 import { daysInStock, deviceMargin, deviceMarginPct } from "@/lib/devices";
+import { sortDevices, splitByCondition } from "@/lib/deviceView";
+import { canonicalModel } from "@/lib/modelName";
 import { accessoryStockStatus, accessoryMargin, accessoryMarginPct } from "@/lib/accessories";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,18 +42,27 @@ export default function EstoqueGeralPage() {
   const canCost = can(user?.role, "viewCost");
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("devices");
+  // Vendidos saem do estoque: ficam de fora dos totais e da lista, a menos que se peça para ver
+  const [showSold, setShowSold] = useState(false);
 
   const q = search.trim().toLowerCase();
 
+  const inStockDevices = useMemo(() => devices.filter((d) => d.status !== "Vendido"), [devices]);
+
   const filteredDevices = useMemo(() => {
+    const base = showSold ? devices : inStockDevices;
     const list = q
-      ? devices.filter((d) => {
-          const hay = `${d.category} ${d.model} ${d.capacity} ${d.color} ${d.serial} ${d.internalSerial} ${d.serialImei} ${d.imei2} ${d.supplier}`.toLowerCase();
+      ? base.filter((d) => {
+          const hay = `${d.category} ${d.model} ${canonicalModel(d.category, d.model)} ${d.capacity} ${d.color} ${d.serial} ${d.internalSerial} ${d.serialImei} ${d.imei2} ${d.supplier}`.toLowerCase();
           return hay.includes(q);
         })
-      : devices;
-    return [...list].sort((a, b) => a.model.localeCompare(b.model));
-  }, [devices, q]);
+      : base;
+    // nome padronizado + capacidade: "14" e "16 PM" ficam junto de "iPhone 14" e "iPhone 16 Pro Max"
+    return sortDevices(list, "alphabetical");
+  }, [devices, inStockDevices, showSold, q]);
+
+  // Lacrados e seminovos em blocos separados
+  const deviceSections = useMemo(() => splitByCondition(filteredDevices), [filteredDevices]);
 
   const filteredAccessories = useMemo(() => {
     const list = q
@@ -64,18 +75,26 @@ export default function EstoqueGeralPage() {
   }, [accessories, q]);
 
   const available = devices.filter((d) => d.status === "Disponível").length;
-  const stockValue = canCost
-    ? devices.reduce((s, d) => s + (d.cost || 0), 0) +
-      accessories.reduce((s, a) => s + (a.cost || 0) * a.quantity, 0)
-    : 0;
+  // Valores de aparelhos e de acessórios sempre separados (e sem contar aparelho já vendido)
+  const deviceCost = inStockDevices.reduce((s, d) => s + (d.cost || 0), 0);
+  const accessoryCost = accessories.reduce((s, a) => s + (a.cost || 0) * a.quantity, 0);
+  const deviceSale = inStockDevices.reduce((s, d) => s + (d.salePrice ?? 0), 0);
+  const accessorySale = accessories.reduce((s, a) => s + (a.price ?? 0) * a.quantity, 0);
   const accessoryUnits = accessories.reduce((s, a) => s + a.quantity, 0);
 
   const summary = [
-    { label: "Aparelhos", value: devices.length },
+    { label: "Aparelhos em estoque", value: inStockDevices.length },
     { label: "Disponíveis", value: available },
     { label: "Acessórios (itens)", value: accessories.length },
     { label: "Acessórios (unidades)", value: accessoryUnits },
-    ...(canCost ? [{ label: "Valor em estoque (custo)", value: fmt(stockValue) }] : []),
+    { label: "Aparelhos — valor de venda", value: fmt(deviceSale) },
+    { label: "Acessórios — valor de venda", value: fmt(accessorySale) },
+    ...(canCost
+      ? [
+          { label: "Aparelhos — valor em custo", value: fmt(deviceCost) },
+          { label: "Acessórios — valor em custo", value: fmt(accessoryCost) },
+        ]
+      : []),
   ];
 
   // ----- Exportar CSV da aba ativa -----
@@ -98,7 +117,8 @@ export default function EstoqueGeralPage() {
       ...(canCost ? ["Custo", "Margem"] : []), "Preço de venda",
       "Status", "Dias em estoque",
     ];
-    const rows = filteredDevices.map((d) => [
+    // lacrados primeiro, depois seminovos (mesma separação da tela)
+    const rows = deviceSections.flatMap((s) => s.devices).map((d) => [
       d.category || "iPhone", d.model, d.capacity, d.color, d.condition, d.batteryHealth,
       d.serial || d.internalSerial, d.serialImei || "", d.imei2 || "", d.supplier || "",
       ...(canCost ? [d.cost.toFixed(2), deviceMargin(d) != null ? deviceMargin(d)!.toFixed(2) : ""] : []),
@@ -157,6 +177,11 @@ export default function EstoqueGeralPage() {
               className="pl-9"
             />
           </div>
+          {tab === "devices" && (
+            <Button variant={showSold ? "secondary" : "outline"} onClick={() => setShowSold((v) => !v)} className="shrink-0" aria-pressed={showSold}>
+              {showSold ? "Ocultar vendidos" : "Mostrar vendidos"}
+            </Button>
+          )}
           <Button variant="outline" onClick={exportCurrent} className="gap-2 shrink-0">
             <Download className="h-4 w-4" />
             Exportar CSV
@@ -198,10 +223,17 @@ export default function EstoqueGeralPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredDevices.map((d, i) => (
+                      {deviceSections.map((sec) => (
+                        <Fragment key={sec.key}>
+                          <TableRow className="bg-muted hover:bg-muted" data-testid="condition-header">
+                            <TableCell colSpan={canCost ? 14 : 12} className="py-2 text-sm font-semibold">
+                              {sec.title} <span className="ml-2 text-xs font-normal text-muted-foreground">{sec.devices.length} un</span>
+                            </TableCell>
+                          </TableRow>
+                          {sec.devices.map((d, i) => (
                         <TableRow key={d.id} className={i % 2 ? "bg-muted/30" : ""}>
                           <TableCell className="text-muted-foreground">{d.category || "iPhone"}</TableCell>
-                          <TableCell className="font-medium">{d.model}</TableCell>
+                          <TableCell className="font-medium">{canonicalModel(d.category, d.model) || d.model}</TableCell>
                           <TableCell>{formatCapacity(d.capacity)}</TableCell>
                           <TableCell>{d.color}</TableCell>
                           <TableCell>{d.condition}</TableCell>
@@ -233,6 +265,8 @@ export default function EstoqueGeralPage() {
                             <Badge variant={statusVariantMap[d.status]}>{d.status}</Badge>
                           </TableCell>
                         </TableRow>
+                          ))}
+                        </Fragment>
                       ))}
                       {filteredDevices.length === 0 && (
                         <TableRow>

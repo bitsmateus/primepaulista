@@ -247,6 +247,39 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
   );
 
+  // POST /devices/bulk/rename-model — padroniza o nome de um modelo (ex.: "16 PM" -> "iPhone 16 Pro Max")
+  // em todos os aparelhos daquela categoria com o nome antigo. Não mexe em aparelhos de outras categorias.
+  app.post(
+    "/devices/bulk/rename-model",
+    { preHandler: requireCapability("bulkStockActions") },
+    async (req, reply) => {
+      const parsed = z
+        .object({
+          category: z.string().trim().min(1).max(50).default("iPhone"),
+          from: z.string().min(1).max(100),
+          to: z.string().trim().min(1).max(100),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) return reply.code(400).send({ error: "Dados inválidos" });
+      const { category, from, to } = parsed.data;
+      if (from === to) return reply.code(400).send({ error: "O nome novo é igual ao atual." });
+      const rows = await db
+        .update(devices)
+        .set({ model: to })
+        .where(and(eq(devices.category, category), eq(devices.model, from)))
+        .returning({ id: devices.id });
+      if (rows.length > 0) {
+        await logAudit(req, {
+          action: "device.rename_model",
+          entity: "device",
+          description: `Padronizou o modelo "${from}" para "${to}" em ${rows.length} aparelho(s)`,
+          details: { category, from, to, count: rows.length },
+        });
+      }
+      return { updated: rows.length };
+    }
+  );
+
   // POST /devices/bulk/move-location — muda a localização de vários aparelhos
   app.post("/devices/bulk/move-location", { preHandler: requireCapability("editStock") }, async (req, reply) => {
     const parsed = z

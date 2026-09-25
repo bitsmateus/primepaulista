@@ -79,7 +79,40 @@ describe("relatório de estoque", () => {
   });
   it("status do acessório: Disponível / Estoque baixo / Sem estoque", () => {
     const r = buildStockReport([], accessories, { ...DEFAULT_STOCK_FILTERS, status: "todos" }, ME);
-    expect(r.rows.map((x) => x[8])).toEqual(["Disponível", "Sem estoque", "Estoque baixo"]);
+    // acessórios saem por categoria: Cabos e Fontes, Capas, Películas
+    expect(r.rows.map((x) => x[8])).toEqual(["Estoque baixo", "Disponível", "Sem estoque"]);
+  });
+  it("ordem: lacrados, seminovos e, por último, acessórios", () => {
+    const r = buildStockReport(devices, accessories, { ...DEFAULT_STOCK_FILTERS, status: "todos" }, ME);
+    expect(r.rows.map((x) => [x[0], x[6]])).toEqual([
+      ["Aparelho", "Lacrado"], ["Aparelho", "Lacrado"], ["Aparelho", "Seminovo"],
+      ["Acessório", ""], ["Acessório", ""], ["Acessório", ""],
+    ]);
+  });
+  it("nomes de modelo digitados diferente ficam juntos e padronizados", () => {
+    const messy = [
+      dev({ id: "m1", model: "16 PM", serialImei: "1" }),
+      dev({ id: "m2", model: "iPhone 14", serialImei: "2" }),
+      dev({ id: "m3", model: "iphone 16 pro max", serialImei: "3" }),
+      dev({ id: "m4", model: "14", serialImei: "4" }),
+    ];
+    const r = buildStockReport(messy, [], DEFAULT_STOCK_FILTERS, ME);
+    expect(r.rows.map((x) => x[3])).toEqual(["iPhone 14", "iPhone 14", "iPhone 16 Pro Max", "iPhone 16 Pro Max"]);
+  });
+  it("totais separados: lacrados, seminovos e acessórios (venda e custo)", () => {
+    const r = buildStockReport(devices, accessories, DEFAULT_STOCK_FILTERS, ME);
+    const get = (l: string) => r.summary.find((s) => s.label.startsWith(l))?.value;
+    expect(get("Lacrados — 1 un — valor de venda")).toBe("R$ 5.000,00");
+    expect(get("Lacrados — valor em custo")).toBe("R$ 4.000,00");
+    expect(get("Seminovos — 1 un — valor de venda")).toBe("R$ 2.800,00");
+    expect(get("Seminovos — valor em custo")).toBe("R$ 2.000,00");
+    expect(get("Acessórios — 12 un — valor de venda")).toBe("R$ 800,00"); // 10 capas x 80 (película sem estoque, cabo sem preço)
+    expect(get("Acessórios — valor em custo")).toBe("R$ 220,00"); // 10x20 + 2x10
+  });
+  it("vendido não entra nos totais por condição", () => {
+    const r = buildStockReport(devices, [], DEFAULT_STOCK_FILTERS, ME);
+    expect(r.summary.some((s) => s.label.startsWith("Acessórios"))).toBe(false);
+    expect(r.rows).toHaveLength(2);
   });
   it("filtros: condição, local, marca, categoria, status e tipo", () => {
     expect(buildStockReport(devices, accessories, { ...DEFAULT_STOCK_FILTERS, condition: "Seminovo" }, ME).rows).toHaveLength(1);

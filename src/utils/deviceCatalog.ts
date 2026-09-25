@@ -1,6 +1,6 @@
 import { Device } from "@/types/inventory";
 import { formatCapacity } from "@/lib/utils";
-import { capacityInGB } from "@/lib/devices";
+import { groupDevicesByModel, splitByCondition } from "@/lib/deviceView";
 import { getLogoPrintUrl, getStoreSettings } from "@/lib/storeSettings";
 import { escapeHtml as esc } from "@/utils/html";
 
@@ -22,21 +22,6 @@ const statusColor: Record<string, string> = {
   "Em Manutenção": "#ff9f0a",
 };
 
-// Agrupa os aparelhos por modelo (ordem alfabética) e, dentro de cada
-// modelo, ordena por capacidade — para poder separar visualmente os
-// aparelhos de capacidades diferentes com uma linha em branco.
-function groupByModel(devices: Device[]): [string, Device[]][] {
-  const groups = new Map<string, Device[]>();
-  for (const d of devices) {
-    const key = d.model || "Sem modelo";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(d);
-  }
-  return [...groups.keys()]
-    .sort((a, b) => a.localeCompare(b, "pt-BR"))
-    .map((k) => [k, [...groups.get(k)!].sort((a, b) => capacityInGB(a.capacity) - capacityInGB(b.capacity))] as [string, Device[]]);
-}
-
 // Linha em branco (sem borda) para separar visualmente aparelhos de
 // capacidade/variante diferente dentro da tabela do mesmo modelo.
 function spacerRow(colSpan: number): string {
@@ -46,262 +31,260 @@ function spacerRow(colSpan: number): string {
 const sumPrice = (list: Device[]) => list.reduce((s, d) => s + (d.salePrice ?? 0), 0);
 const sumCost = (list: Device[]) => list.reduce((s, d) => s + (d.cost ?? 0), 0);
 
+const nowText = () =>
+  new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// CSS comum dos dois documentos internos (catálogo e relatório de conferência)
+const INTERNAL_CSS = `
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 11px; padding: 14px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
+  .head h1 { font-size: 18px; }
+  .head .meta { font-size: 11px; color: #555; text-align: right; }
+  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .sumcard { flex: 1; min-width: 120px; border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; }
+  .sumcard .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .3px; color: #777; }
+  .sumcard .val { font-size: 14px; font-weight: 700; }
+  .cond { margin-bottom: 18px; }
+  .cond + .cond { break-before: page; page-break-before: always; }
+  .condhead { display: flex; justify-content: space-between; align-items: baseline; background: #111; color: #fff; border-radius: 6px; padding: 7px 12px; margin-bottom: 10px; }
+  .condhead h2 { font-size: 14px; }
+  .condhead .n { font-size: 11px; color: #ddd; }
+  .condtotal { border: 2px solid #111; border-radius: 6px; padding: 7px 12px; display: flex; justify-content: space-between; font-weight: 700; font-size: 12px; margin-top: 6px; }
+  .group { margin-bottom: 14px; break-inside: avoid; }
+  h3 { font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .count { font-size: 10px; font-weight: 600; color: #555; background: #eee; border-radius: 10px; padding: 1px 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+  th { background: #f2f2f2; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
+  thead { display: table-header-group; }
+  td.c { text-align: center; }
+  td.r { text-align: right; font-weight: 600; }
+  td.mono { font-family: monospace; font-size: 10px; }
+  tr.subtotal td { background: #fafafa; font-weight: 600; font-size: 10px; color: #444; }
+  tr.spacer td { border: none; padding: 0; height: 10px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .foot { margin-top: 14px; text-align: center; font-size: 10px; color: #777; }
+  @page { size: A4; margin: 12mm; }
+  @media print { body { padding: 0; } }
+`;
+
+const openPrint = (html: string, width = 900, height = 1000) => {
+  const win = window.open("", "_blank", `width=${width},height=${height}`);
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 400);
+  }
+};
+
 // ---------------------------------------------------------------------------
-// 1) Catálogo A4 — uso interno de controle (com preço, status e totais)
+// 1) Catálogo A4 — uso interno de controle (com preço, status e totais).
+//    Lacrados e seminovos saem em seções (e páginas) separadas, cada uma com o seu valor.
 // ---------------------------------------------------------------------------
 export function generateCatalogHTML(devices: Device[], showCost = false): string {
-  const grouped = groupByModel(devices);
+  const conditionSections = splitByCondition(devices);
 
-  const sections = grouped
-    .map(([model, list]) => {
-      const rows = list
-        .map((d, idx) => {
-          const serial = d.serialImei || d.serial || d.internalSerial || "—";
-          const spacer = idx > 0 && list[idx - 1].capacity !== d.capacity ? spacerRow(7) : "";
-          return `${spacer}
+  const body = conditionSections
+    .map((sec) => {
+      const models = groupDevicesByModel(sec.devices)
+        .map(({ model, devices: list }) => {
+          const rows = list
+            .map((d, idx) => {
+              const serial = d.serialImei || d.serial || d.internalSerial || "—";
+              const spacer = idx > 0 && list[idx - 1].capacity !== d.capacity ? spacerRow(6) : "";
+              return `${spacer}
           <tr>
-            <td>${formatCapacity(d.capacity) || "—"}</td>
-            <td>${d.color || "—"}</td>
-            <td>${d.condition || "—"}</td>
+            <td>${esc(formatCapacity(d.capacity) || "—")}</td>
+            <td>${esc(d.color || "—")}</td>
             <td class="c">${d.batteryHealth != null ? d.batteryHealth + "%" : "—"}</td>
-            <td class="mono">${serial}</td>
+            <td class="mono">${esc(serial)}</td>
             <td class="r">${money(d.salePrice)}</td>
-            <td><span class="dot" style="background:${statusColor[d.status] || "#8e8e93"}"></span>${d.status}</td>
+            <td><span class="dot" style="background:${statusColor[d.status] || "#8e8e93"}"></span>${esc(d.status)}</td>
           </tr>`;
-        })
-        .join("");
-      const subtotal = `
-        <tr class="subtotal">
-          <td colspan="5">Subtotal — ${list.length} un</td>
-          <td class="r">${money(sumPrice(list))}</td>
-          <td></td>
-        </tr>`;
-      return `
+            })
+            .join("");
+          return `
         <div class="group">
-          <h2>${model} <span class="count">${list.length} un</span></h2>
+          <h3>${esc(model)} <span class="count">${list.length} un</span></h3>
           <table>
             <thead>
-              <tr><th>Capac.</th><th>Cor</th><th>Condição</th><th>Bateria</th><th>Serial/IMEI</th><th>Preço</th><th>Status</th></tr>
+              <tr><th>Capac.</th><th>Cor</th><th>Bateria</th><th>Serial/IMEI</th><th>Preço</th><th>Status</th></tr>
             </thead>
-            <tbody>${rows}${subtotal}</tbody>
+            <tbody>${rows}
+              <tr class="subtotal"><td colspan="4">Subtotal — ${list.length} un</td><td class="r">${money(sumPrice(list))}</td><td></td></tr>
+            </tbody>
           </table>
         </div>`;
+        })
+        .join("");
+      const cost = showCost ? ` · custo ${money(sumCost(sec.devices))}` : "";
+      return `
+      <section class="cond">
+        <div class="condhead"><h2>${esc(sec.title)}</h2><span class="n">${sec.devices.length} un · venda ${money(sumPrice(sec.devices))}${cost}</span></div>
+        ${models}
+        <div class="condtotal"><span>Total ${esc(sec.short.toLowerCase())} — ${sec.devices.length} un</span><span>${money(sumPrice(sec.devices))}</span></div>
+      </section>`;
     })
     .join("");
 
-  // Resumo/totais gerais
-  const totalUnits = devices.length;
-  const totalPrice = sumPrice(devices);
-  const totalCost = sumCost(devices);
   const summaryCards = [
-    { label: "Aparelhos", value: String(totalUnits) },
-    { label: "Valor em venda", value: money(totalPrice) },
+    { label: "Aparelhos", value: String(devices.length) },
+    ...conditionSections.map((s) => ({ label: `${s.short} (venda)`, value: `${s.devices.length} un · ${money(sumPrice(s.devices))}` })),
+    { label: "Valor em venda (total)", value: money(sumPrice(devices)) },
     ...(showCost
       ? [
-          { label: "Valor em custo", value: money(totalCost) },
-          { label: "Margem potencial", value: money(totalPrice - totalCost) },
+          { label: "Valor em custo", value: money(sumCost(devices)) },
+          { label: "Margem potencial", value: money(sumPrice(devices) - sumCost(devices)) },
         ]
       : []),
   ]
-    .map((c) => `<div class="sumcard"><span class="lbl">${c.label}</span><span class="val">${c.value}</span></div>`)
+    .map((c) => `<div class="sumcard"><span class="lbl">${esc(c.label)}</span><span class="val">${esc(c.value)}</span></div>`)
     .join("");
-
-  const now = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <title>Catálogo de Estoque – ${STORE.name}</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 11px; padding: 14px; }
-  .head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
-  .head h1 { font-size: 18px; }
-  .head .meta { font-size: 11px; color: #555; text-align: right; }
-  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-  .sumcard { flex: 1; min-width: 120px; border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; }
-  .sumcard .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .3px; color: #777; }
-  .sumcard .val { font-size: 14px; font-weight: 700; }
-  .group { margin-bottom: 14px; break-inside: avoid; }
-  h2 { font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
-  .count { font-size: 10px; font-weight: 600; color: #555; background: #eee; border-radius: 10px; padding: 1px 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
-  th { background: #f2f2f2; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
-  thead { display: table-header-group; }
-  td.c { text-align: center; }
-  td.r { text-align: right; font-weight: 600; }
-  td.mono { font-family: monospace; font-size: 10px; }
-  tr.subtotal td { background: #fafafa; font-weight: 600; font-size: 10px; color: #444; }
-  tr.spacer td { border: none; padding: 0; height: 10px; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
-  .foot { margin-top: 14px; text-align: center; font-size: 10px; color: #777; }
-  @page { size: A4; margin: 12mm; }
-  @media print { body { padding: 0; } }
-</style>
+<style>${INTERNAL_CSS}</style>
 </head>
 <body>
   <div class="head">
     <h1>Estoque de Aparelhos — ${STORE.name}</h1>
-    <div class="meta">${totalUnits} aparelho(s)<br/>${now}</div>
+    <div class="meta">${devices.length} aparelho(s)<br/>${nowText()}</div>
   </div>
   <div class="summary">${summaryCards}</div>
-  ${sections || "<p>Nenhum aparelho para exibir.</p>"}
+  ${body || "<p>Nenhum aparelho para exibir.</p>"}
   <div class="foot">${STORE.name} · documento interno de controle de estoque</div>
 </body>
 </html>`;
 }
 
 export function printDeviceCatalog(devices: Device[], showCost = false) {
-  const html = generateCatalogHTML(devices, showCost);
-  const win = window.open("", "_blank", "width=900,height=1000");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 400);
-  }
+  openPrint(generateCatalogHTML(devices, showCost));
 }
 
 // ---------------------------------------------------------------------------
 // 1b) Relatório de estoque — conferência física (custo, serial e IMEI
 //     separados). Uso interno/admin, para bater com a planilha da loja.
+//     Também separado em lacrados e seminovos.
 // ---------------------------------------------------------------------------
 export function generateStockReportHTML(devices: Device[]): string {
-  const grouped = groupByModel(devices);
+  const conditionSections = splitByCondition(devices);
 
-  const sections = grouped
-    .map(([model, list]) => {
-      const rows = list
-        .map((d, idx) => {
-          const spacer = idx > 0 && list[idx - 1].capacity !== d.capacity ? spacerRow(8) : "";
-          return `${spacer}
+  const body = conditionSections
+    .map((sec) => {
+      const models = groupDevicesByModel(sec.devices)
+        .map(({ model, devices: list }) => {
+          const rows = list
+            .map((d, idx) => {
+              const spacer = idx > 0 && list[idx - 1].capacity !== d.capacity ? spacerRow(7) : "";
+              return `${spacer}
           <tr>
-            <td>${formatCapacity(d.capacity) || "—"}</td>
-            <td>${d.color || "—"}</td>
-            <td>${d.condition || "—"}</td>
+            <td>${esc(formatCapacity(d.capacity) || "—")}</td>
+            <td>${esc(d.color || "—")}</td>
             <td class="c">${d.batteryHealth != null ? d.batteryHealth + "%" : "—"}</td>
-            <td class="mono">${d.serial || d.internalSerial || "—"}</td>
-            <td class="mono">${d.serialImei || "—"}</td>
+            <td class="mono">${esc(d.serial || d.internalSerial || "—")}</td>
+            <td class="mono">${esc(d.serialImei || "—")}</td>
             <td class="r">${money(d.cost)}</td>
-            <td><span class="dot" style="background:${statusColor[d.status] || "#8e8e93"}"></span>${d.status}</td>
+            <td><span class="dot" style="background:${statusColor[d.status] || "#8e8e93"}"></span>${esc(d.status)}</td>
           </tr>`;
-        })
-        .join("");
-      const subtotal = `
-        <tr class="subtotal">
-          <td colspan="6">Subtotal — ${list.length} un</td>
-          <td class="r">${money(sumCost(list))}</td>
-          <td></td>
-        </tr>`;
-      return `
+            })
+            .join("");
+          return `
         <div class="group">
-          <h2>${model} <span class="count">${list.length} un</span></h2>
+          <h3>${esc(model)} <span class="count">${list.length} un</span></h3>
           <table>
             <thead>
-              <tr><th>Capac.</th><th>Cor</th><th>Condição</th><th>Bateria</th><th>Serial</th><th>IMEI</th><th>Custo</th><th>Status</th></tr>
+              <tr><th>Capac.</th><th>Cor</th><th>Bateria</th><th>Serial</th><th>IMEI</th><th>Custo</th><th>Status</th></tr>
             </thead>
-            <tbody>${rows}${subtotal}</tbody>
+            <tbody>${rows}
+              <tr class="subtotal"><td colspan="5">Subtotal — ${list.length} un</td><td class="r">${money(sumCost(list))}</td><td></td></tr>
+            </tbody>
           </table>
         </div>`;
+        })
+        .join("");
+      return `
+      <section class="cond">
+        <div class="condhead"><h2>${esc(sec.title)}</h2><span class="n">${sec.devices.length} un · custo ${money(sumCost(sec.devices))}</span></div>
+        ${models}
+        <div class="condtotal"><span>Total ${esc(sec.short.toLowerCase())} — ${sec.devices.length} un</span><span>${money(sumCost(sec.devices))}</span></div>
+      </section>`;
     })
     .join("");
 
-  const totalUnits = devices.length;
-  const totalCost = sumCost(devices);
-  const now = new Date().toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const cards = [
+    `<div class="sumcard"><span class="lbl">Aparelhos</span><span class="val">${devices.length}</span></div>`,
+    ...conditionSections.map(
+      (s) => `<div class="sumcard"><span class="lbl">${esc(s.short)} (custo)</span><span class="val">${s.devices.length} un · ${money(sumCost(s.devices))}</span></div>`
+    ),
+    `<div class="sumcard"><span class="lbl">Valor em custo (total)</span><span class="val">${money(sumCost(devices))}</span></div>`,
+  ].join("");
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <title>Relatório de Estoque – ${STORE.name}</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', -apple-system, Arial, sans-serif; color: #111; font-size: 11px; padding: 14px; }
-  .head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
-  .head h1 { font-size: 18px; }
-  .head .meta { font-size: 11px; color: #555; text-align: right; }
-  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-  .sumcard { flex: 1; min-width: 120px; border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; }
-  .sumcard .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .3px; color: #777; }
-  .sumcard .val { font-size: 14px; font-weight: 700; }
-  .group { margin-bottom: 14px; break-inside: avoid; }
-  h2 { font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
-  .count { font-size: 10px; font-weight: 600; color: #555; background: #eee; border-radius: 10px; padding: 1px 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
-  th { background: #f2f2f2; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; }
-  thead { display: table-header-group; }
-  td.c { text-align: center; }
-  td.r { text-align: right; font-weight: 600; }
-  td.mono { font-family: monospace; font-size: 10px; }
-  tr.subtotal td { background: #fafafa; font-weight: 600; font-size: 10px; color: #444; }
-  tr.spacer td { border: none; padding: 0; height: 10px; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
-  .foot { margin-top: 14px; text-align: center; font-size: 10px; color: #777; }
-  @page { size: A4; margin: 12mm; }
-  @media print { body { padding: 0; } }
-</style>
+<style>${INTERNAL_CSS}</style>
 </head>
 <body>
   <div class="head">
     <h1>Relatório de Estoque — ${STORE.name}</h1>
-    <div class="meta">${totalUnits} aparelho(s)<br/>${now}</div>
+    <div class="meta">${devices.length} aparelho(s)<br/>${nowText()}</div>
   </div>
-  <div class="summary">
-    <div class="sumcard"><span class="lbl">Aparelhos</span><span class="val">${totalUnits}</span></div>
-    <div class="sumcard"><span class="lbl">Valor em custo</span><span class="val">${money(totalCost)}</span></div>
-  </div>
-  ${sections || "<p>Nenhum aparelho para exibir.</p>"}
+  <div class="summary">${cards}</div>
+  ${body || "<p>Nenhum aparelho para exibir.</p>"}
   <div class="foot">${STORE.name} · relatório de conferência de estoque (uso interno)</div>
 </body>
 </html>`;
 }
 
 export function printDeviceStockReport(devices: Device[]) {
-  const html = generateStockReportHTML(devices);
-  const win = window.open("", "_blank", "width=900,height=1000");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 400);
-  }
+  openPrint(generateStockReportHTML(devices));
 }
 
 // ---------------------------------------------------------------------------
 // 2) Vitrine para o cliente — só disponíveis, visual, para enviar no WhatsApp
-//    (sem custo, sem serial, sem margem — voltado ao cliente final)
+//    (sem custo, sem serial, sem margem — voltado ao cliente final).
+//    Novos e seminovos aparecem em blocos separados.
 // ---------------------------------------------------------------------------
 export function generateShowcaseHTML(devices: Device[]): string {
   const available = devices.filter((d) => d.status === "Disponível");
-  const grouped = groupByModel(available);
+  const conditionSections = splitByCondition(available);
 
-  const sections = grouped
-    .map(([model, list]) => {
-      const cards = list
-        .map((d) => {
-          const specs = [
-            formatCapacity(d.capacity),
-            d.color,
-            d.condition,
-            d.batteryHealth != null ? `Bateria ${d.batteryHealth}%` : "",
-          ]
-            .filter(Boolean)
-            .join(" · ");
-          return `
+  const body = conditionSections
+    .map((sec) => {
+      const models = groupDevicesByModel(sec.devices)
+        .map(({ model, devices: list }) => {
+          const cards = list
+            .map((d) => {
+              const specs = [
+                formatCapacity(d.capacity),
+                d.color,
+                d.condition,
+                d.batteryHealth != null ? `Bateria ${d.batteryHealth}%` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return `
           <div class="card">
-            <div class="card-model">${model}</div>
-            <div class="card-specs">${specs}</div>
+            <div class="card-model">${esc(model)}</div>
+            <div class="card-specs">${esc(specs)}</div>
             <div class="card-price">${d.salePrice != null ? money(d.salePrice) : "Consulte"}</div>
           </div>`;
-        })
-        .join("");
-      return `
+            })
+            .join("");
+          return `
         <section class="group">
-          <h2>${model} <span class="count">${list.length} disponíve${list.length === 1 ? "l" : "is"}</span></h2>
+          <h2>${esc(model)} <span class="count">${list.length} disponíve${list.length === 1 ? "l" : "is"}</span></h2>
           <div class="cards">${cards}</div>
         </section>`;
+        })
+        .join("");
+      return `<div class="block"><div class="blockhead">${esc(sec.short)}</div>${models}</div>`;
     })
     .join("");
 
@@ -320,6 +303,8 @@ export function generateShowcaseHTML(devices: Device[]): string {
   .head img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; }
   .head h1 { font-size: 18px; }
   .head .contacts { font-size: 11px; color: #a1a1a6; margin-top: 2px; }
+  .block + .block { margin-top: 26px; }
+  .blockhead { display: inline-block; font-size: 13px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: #1c1c1e; background: #30d158; border-radius: 999px; padding: 4px 14px; margin-bottom: 14px; }
   .group { margin-bottom: 22px; break-inside: avoid; }
   h2 { font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; color: #fff; }
   .count { font-size: 10px; font-weight: 600; color: #d1d1d6; background: #2c2c2e; border-radius: 10px; padding: 2px 9px; }
@@ -343,18 +328,12 @@ export function generateShowcaseHTML(devices: Device[]): string {
       <div class="contacts">WhatsApp ${STORE.whatsapp} · ${STORE.instagram} · ${STORE.address}</div>
     </div>
   </div>
-  ${sections || "<p>Nenhum aparelho disponível no momento.</p>"}
+  ${body || "<p>Nenhum aparelho disponível no momento.</p>"}
   <div class="foot">Preços válidos em ${now}, sujeitos a alteração e disponibilidade. Fale com a gente no WhatsApp ${STORE.whatsapp}.</div>
 </body>
 </html>`;
 }
 
 export function printDeviceShowcase(devices: Device[]) {
-  const html = generateShowcaseHTML(devices);
-  const win = window.open("", "_blank", "width=900,height=1000");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    setTimeout(() => win.print(), 400);
-  }
+  openPrint(generateShowcaseHTML(devices));
 }

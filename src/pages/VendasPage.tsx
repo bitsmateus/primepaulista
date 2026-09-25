@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, Eye, Printer, Pencil, Undo2 } from "lucide-react";
+import { Search, Eye, Printer, Pencil, Undo2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
@@ -15,6 +15,7 @@ import { isReturned, canReturn } from "@/lib/returns";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { AUDIT_STATUS_LABEL } from "@/lib/reconciliation";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
+import { DailySalesDialog } from "@/components/vendas/DailySalesDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,7 @@ export default function VendasPage() {
   const devicesById = useMemo(() => buildDeviceMap(devices), [devices]);
   const accessoriesById = useMemo(() => buildAccessoryMap(accessories), [accessories]);
 
+  const [showDaily, setShowDaily] = useState(false);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [period, setPeriod] = useState("all");
@@ -145,9 +147,14 @@ export default function VendasPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Vendas realizadas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Histórico de vendas e comprovantes: 2ª via do recibo, notas fiscais anexas e edição</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">Vendas realizadas</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Histórico de vendas e comprovantes: 2ª via do recibo, notas fiscais anexas e edição</p>
+          </div>
+          <Button onClick={() => setShowDaily(true)} className="gap-2">
+            <FileText className="h-4 w-4" /> Relatório do dia
+          </Button>
         </div>
 
         {/* Resumo */}
@@ -480,6 +487,7 @@ export default function VendasPage() {
           )}
         </DialogContent>
       </Dialog>
+      <DailySalesDialog open={showDaily} onOpenChange={setShowDaily} sales={sales} devices={devices} userName={user?.name} />
     </AppLayout>
   );
 }

@@ -425,6 +425,11 @@ export const api = {
     ),
   clearDeviceSalePrices: () =>
     request<{ updated: number }>("/devices/bulk/clear-sale-price", { method: "POST" }),
+  renameDeviceModel: (category: string, from: string, to: string) =>
+    request<{ updated: number }>("/devices/bulk/rename-model", {
+      method: "POST",
+      body: JSON.stringify({ category, from, to }),
+    }),
   moveDevices: (ids: string[], location: string) =>
     request<{ updated: number }>("/devices/bulk/move-location", {
       method: "POST",

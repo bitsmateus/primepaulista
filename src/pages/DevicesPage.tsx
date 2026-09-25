@@ -21,6 +21,8 @@ import {
   sortDevices, sortKeepsGroups, summarizeByModel,
 } from "@/lib/deviceView";
 import { downloadCsv } from "@/lib/download";
+import { canonicalModel, modelGroupKey } from "@/lib/modelName";
+import { ModelRenameDialog } from "@/components/devices/ModelRenameDialog";
 import { DevicePhotos } from "@/components/devices/DevicePhotos";
 import { DeviceDetailDialog } from "@/components/devices/DeviceDetailDialog";
 import { DeviceImportDialog } from "@/components/devices/DeviceImportDialog";
@@ -105,7 +107,10 @@ export default function DevicesPage() {
   const [filterCondition, setFilterCondition] = useState<string>("all");
   const [filterLocation, setFilterLocation] = useState<string>("all");
   const [sortKey, setSortKey] = useState<DeviceSortKey>("alphabetical");
-  const [tab, setTab] = useState<"active" | "sold">("active");
+  // Estoque separado: aba de lacrados, de seminovos e de vendidos
+  const [stockTab, setStockTab] = useState<"Lacrado" | "Seminovo" | "sold">("Lacrado");
+  const tab: "active" | "sold" = stockTab === "sold" ? "sold" : "active";
+  const [showRename, setShowRename] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [moveTo, setMoveTo] = useState("");
 
@@ -237,9 +242,9 @@ export default function DevicesPage() {
   const filters = useMemo(
     () => ({
       tab, search, category: filterCategory, brand: filterBrand,
-      condition: filterCondition, status: filterStatus, location: filterLocation,
+      condition: stockTab === "sold" ? filterCondition : stockTab, status: filterStatus, location: filterLocation,
     }),
-    [tab, search, filterCategory, filterBrand, filterCondition, filterStatus, filterLocation]
+    [tab, stockTab, search, filterCategory, filterBrand, filterCondition, filterStatus, filterLocation]
   );
   const filteredDevices = useMemo(
     () => devices.filter((d) => matchesDeviceFilters(d, filters)),
@@ -251,7 +256,10 @@ export default function DevicesPage() {
   );
   const modelCounts = useMemo(() => {
     const m = new Map<string, number>();
-    for (const d of filteredDevices) m.set(d.model, (m.get(d.model) ?? 0) + 1);
+    for (const d of filteredDevices) {
+      const k = modelGroupKey(d.category, d.model);
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
     return m;
   }, [filteredDevices]);
   const summaryGroups = useMemo(() => summarizeByModel(sortedFilteredDevices), [sortedFilteredDevices]);
@@ -267,6 +275,11 @@ export default function DevicesPage() {
   const report = useMemo(() => buildStockReport(devices), [devices]);
   const lacrados = useMemo(() => devices.filter((d) => d.status !== "Vendido" && d.condition === "Lacrado").length, [devices]);
   const seminovos = useMemo(() => devices.filter((d) => d.status !== "Vendido" && d.condition === "Seminovo").length, [devices]);
+  // Valor de venda do estoque, separado por condição (preço de venda não é sensível)
+  const saleValueOf = (cond: "Lacrado" | "Seminovo") =>
+    devices.filter((d) => d.status !== "Vendido" && d.condition === cond).reduce((s, d) => s + (d.salePrice ?? 0), 0);
+  const lacradosValue = useMemo(() => saleValueOf("Lacrado"), [devices]); // eslint-disable-line react-hooks/exhaustive-deps
+  const seminovosValue = useMemo(() => saleValueOf("Seminovo"), [devices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Categorias = padrão + as criadas manualmente (já usadas em algum aparelho)
   const allCategories = useMemo(() => {
@@ -288,7 +301,7 @@ export default function DevicesPage() {
   useEffect(() => {
     setPage(1);
     setSelected(new Set());
-  }, [search, filterStatus, filterCategory, filterBrand, filterCondition, filterLocation, sortKey, tab]);
+  }, [search, filterStatus, filterCategory, filterBrand, filterCondition, filterLocation, sortKey, stockTab]);
   const totalPages = Math.max(1, Math.ceil(sortedFilteredDevices.length / PAGE_SIZE));
   const pageDevices = sortedFilteredDevices.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const keepGroups = sortKeepsGroups(sortKey);
@@ -297,7 +310,7 @@ export default function DevicesPage() {
   const gridGroups = useMemo(() => {
     const map = new Map<string, Device[]>();
     for (const d of pageDevices) {
-      const key = d.model || "Sem modelo";
+      const key = canonicalModel(d.category, d.model) || "Sem modelo";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(d);
     }
@@ -446,6 +459,9 @@ export default function DevicesPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setShowRename(true)} className="gap-2">
+                    <Layers className="h-4 w-4" /> Padronizar nomes de modelos
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setClearPriceOpen(true)} className="gap-2 text-destructive">
                     <Eraser className="h-4 w-4" /> Zerar preço de venda de todos
                   </DropdownMenuItem>
@@ -468,6 +484,8 @@ export default function DevicesPage() {
             { label: "Em loja", value: report.inStock },
             { label: "Lacrados (em estoque)", value: lacrados },
             { label: "Seminovos (em estoque)", value: seminovos },
+            { label: "Valor de venda — lacrados", value: fmt(lacradosValue) },
+            { label: "Valor de venda — seminovos", value: fmt(seminovosValue) },
             { label: "Vendidos", value: report.sold },
             { label: "Em manutenção", value: report.maintenance },
             ...(canCost
@@ -495,12 +513,16 @@ export default function DevicesPage() {
           ))}
         </div>
 
-        {/* Aba: estoque ativo x vendidos */}
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "active" | "sold")}>
+        {/* Abas: estoque de lacrados, de seminovos e vendidos (cada um separado) */}
+        <Tabs value={stockTab} onValueChange={(v) => { setStockTab(v as "Lacrado" | "Seminovo" | "sold"); setFilterCondition("all"); setFilterStatus("all"); }}>
           <TabsList>
-            <TabsTrigger value="active" className="gap-2">
-              Estoque
-              <Badge variant="secondary">{report.total - report.sold}</Badge>
+            <TabsTrigger value="Lacrado" className="gap-2">
+              Lacrados
+              <Badge variant="secondary">{lacrados}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="Seminovo" className="gap-2">
+              Seminovos
+              <Badge variant="secondary">{seminovos}</Badge>
             </TabsTrigger>
             <TabsTrigger value="sold" className="gap-2">
               Vendidos
@@ -566,14 +588,16 @@ export default function DevicesPage() {
               {brands.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filterCondition} onValueChange={setFilterCondition}>
-            <SelectTrigger className="w-44" aria-label="Condição"><SelectValue placeholder="Condição" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as condições</SelectItem>
-              <SelectItem value="Lacrado">Novo / Lacrado</SelectItem>
-              <SelectItem value="Seminovo">Seminovo</SelectItem>
-            </SelectContent>
-          </Select>
+          {stockTab === "sold" && (
+            <Select value={filterCondition} onValueChange={setFilterCondition}>
+              <SelectTrigger className="w-44" aria-label="Condição"><SelectValue placeholder="Condição" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as condições</SelectItem>
+                <SelectItem value="Lacrado">Novo / Lacrado</SelectItem>
+                <SelectItem value="Seminovo">Seminovo</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Select value={filterLocation} onValueChange={setFilterLocation}>
             <SelectTrigger className="w-44" aria-label="Local"><SelectValue placeholder="Local" /></SelectTrigger>
             <SelectContent>
@@ -683,7 +707,7 @@ export default function DevicesPage() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <button type="button" onClick={() => setDetailId(d.id)} className="truncate text-left font-semibold text-foreground hover:underline">
-                                {d.model}
+                                {canonicalModel(d.category, d.model) || d.model}
                               </button>
                               <p className="text-xs text-muted-foreground">{formatCapacity(d.capacity)}{d.color ? ` · ${d.color}` : ""}</p>
                             </div>
@@ -766,14 +790,14 @@ export default function DevicesPage() {
                   <TableBody>
                     {pageDevices.map((d, idx) => {
                       const prev = pageDevices[idx - 1];
-                      const newModel = !prev || prev.model !== d.model;
+                      const newModel = !prev || modelGroupKey(prev.category, prev.model) !== modelGroupKey(d.category, d.model);
                       return (
                         <Fragment key={d.id}>
                           {viewMode === "byModel" && newModel && (
                             <TableRow className="bg-muted/40 hover:bg-muted/40" data-testid="model-header">
                               <TableCell colSpan={colCount} className="py-2">
-                                <span className="text-sm font-semibold text-foreground">{d.model}</span>
-                                <Badge variant="outline" className="ml-2 text-xs">{modelCounts.get(d.model) ?? 0} un</Badge>
+                                <span className="text-sm font-semibold text-foreground">{canonicalModel(d.category, d.model) || d.model}</span>
+                                <Badge variant="outline" className="ml-2 text-xs">{modelCounts.get(modelGroupKey(d.category, d.model)) ?? 0} un</Badge>
                               </TableCell>
                             </TableRow>
                           )}
@@ -794,7 +818,7 @@ export default function DevicesPage() {
                             <TableCell className="font-medium">
                               <button type="button" onClick={() => setDetailId(d.id)} className="text-left hover:underline" title="Ver ficha do aparelho">
                                 {d.brand && d.brand !== "Apple" && <span className="text-muted-foreground">{d.brand} </span>}
-                                {d.model}
+                                {canonicalModel(d.category, d.model) || d.model}
                               </button>
                             </TableCell>
                             <TableCell>{formatCapacity(d.capacity)}</TableCell>
@@ -1117,6 +1141,7 @@ export default function DevicesPage() {
       </Dialog>
 
       <DeviceImportDialog open={showImport} onOpenChange={setShowImport} devices={devices} />
+      <ModelRenameDialog open={showRename} onOpenChange={setShowRename} devices={devices} />
       <StockCountDialog open={showCount} onOpenChange={setShowCount} devices={devices} showCost={canCost} />
       <DeviceDetailDialog
         device={detailDevice}

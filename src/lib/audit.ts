@@ -22,6 +22,7 @@ export const ACTION_LABELS: Record<string, string> = {
   "device.import": "Importou aparelhos",
   "device.bulk_clear_price": "Zerou preços de venda",
   "device.move_location": "Moveu aparelhos de local",
+  "device.rename_model": "Padronizou nome de modelo",
   "device.stock_check_reset": "Iniciou novo balanço",
   "device.price_change": "Alterou custo/preço do aparelho",
   "accessory.delete": "Excluiu acessório",

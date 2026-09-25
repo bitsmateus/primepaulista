@@ -1,4 +1,5 @@
 import { Device } from "@/types/inventory";
+import { canonicalModel, modelGroupKey } from "@/lib/modelName";
 
 // Dias que o aparelho está em estoque
 export function daysInStock(createdAt: Date | string): number {
@@ -17,15 +18,16 @@ export function capacityInGB(capacity: string): number {
 
 // Chave de agrupamento visual: mesmo modelo + mesma capacidade formam um grupo
 // (usado para separar visualmente com uma linha em branco entre grupos).
-export function deviceGroupKey(d: Pick<Device, "model" | "capacity">): string {
-  return `${d.model || ""}|${d.capacity || ""}`;
+export function deviceGroupKey(d: Pick<Device, "model" | "capacity"> & Partial<Pick<Device, "category" | "condition">>): string {
+  // "14" e "iPhone 14" contam como o mesmo modelo; lacrado e seminovo ficam em grupos separados
+  return `${modelGroupKey(d.category, d.model)}|${d.capacity || ""}|${d.condition || ""}`;
 }
 
 // Ordena por modelo e depois por capacidade, para que aparelhos do mesmo
 // modelo/capacidade fiquem juntos e seja possível separar grupos visualmente.
 export function sortDevicesByModel(devices: Device[]): Device[] {
   return [...devices].sort((a, b) => {
-    const byModel = (a.model || "").localeCompare(b.model || "", "pt-BR");
+    const byModel = canonicalModel(a.category, a.model).localeCompare(canonicalModel(b.category, b.model), "pt-BR");
     if (byModel !== 0) return byModel;
     return capacityInGB(a.capacity) - capacityInGB(b.capacity);
   });

@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef } from "react";
-import { Plus, Trash2, Barcode, Pencil, Search, Minus, Tag, ScanLine } from "lucide-react";
+import { Plus, Trash2, Barcode, Pencil, Search, Minus, Tag, ScanLine, Printer } from "lucide-react";
 import { BarcodeScannerDialog } from "@/components/devices/BarcodeScannerDialog";
 import { printAccessoryLabel } from "@/utils/labelGenerator";
+import { accessoryTotals, printAccessoryCatalog, printAccessoryStockReport } from "@/utils/accessoryCatalog";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/AppLayout";
 import { useInventoryContext } from "@/contexts/InventoryContext";
@@ -179,6 +180,7 @@ export default function AccessoriesPage() {
   }, [accessories, filterCategory, filterStatus, search]);
 
   const report = useMemo(() => buildAccessoryReport(accessories), [accessories]);
+  const saleValue = useMemo(() => accessoryTotals(accessories).saleValue, [accessories]);
 
   return (
     <AppLayout>
@@ -188,16 +190,27 @@ export default function AccessoriesPage() {
             <h1 className="text-2xl font-semibold text-foreground">Acessórios</h1>
             <p className="mt-1 text-sm text-muted-foreground">Periféricos e acessórios por modelo</p>
           </div>
-          <Button onClick={openCreate} disabled={!canEdit}>
-            <Plus className="mr-2 h-4 w-4" /> Novo Acessório
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => printAccessoryCatalog(filtered)} className="gap-2" title="Catálogo só de acessórios, com preço e valor em venda (respeita os filtros)">
+              <Printer className="h-4 w-4" /> Catálogo (A4)
+            </Button>
+            {canCost && (
+              <Button variant="outline" onClick={() => printAccessoryStockReport(filtered)} className="gap-2" title="Relatório de conferência dos acessórios, com custo e valor em venda (respeita os filtros)">
+                <Printer className="h-4 w-4" /> Relatório de Estoque
+              </Button>
+            )}
+            <Button onClick={openCreate} disabled={!canEdit}>
+              <Plus className="mr-2 h-4 w-4" /> Novo Acessório
+            </Button>
+          </div>
         </div>
 
         {/* Resumo */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             { label: "Itens distintos", value: report.distinct },
             { label: "Unidades em estoque", value: report.totalUnits },
+            { label: "Valor em venda (estoque)", value: fmt(saleValue) },
             ...(canCost
               ? [
                   { label: "Valor em estoque (custo)", value: fmt(report.stockValue) },

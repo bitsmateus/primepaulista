@@ -1,6 +1,7 @@
 import { Device, DeviceCategory } from "@/types/inventory";
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY } from "@/data/appleCatalog";
 import { capacityInGB, daysInStock } from "@/lib/devices";
+import { canonicalModel, modelGroupKey } from "@/lib/modelName";
 
 // Localização, ordenação, filtros, resumo por modelo e balanço de estoque
 // da tela de Aparelhos. Só lógica pura (sem React), para ser testável.
@@ -72,7 +73,7 @@ const categoryOrder = (c: string) => {
 const entryTime = (d: Device) => new Date(d.entryDate ?? d.createdAt).getTime();
 
 const byModelThenCapacity = (a: Device, b: Device) => {
-  const m = (a.model || "").localeCompare(b.model || "", "pt-BR");
+  const m = canonicalModel(a.category, a.model).localeCompare(canonicalModel(b.category, b.model), "pt-BR");
   return m !== 0 ? m : capacityInGB(a.capacity) - capacityInGB(b.capacity);
 };
 
@@ -80,8 +81,8 @@ const byModelThenCapacity = (a: Device, b: Device) => {
 const byModelAge = (dir: 1 | -1) => (a: Device, b: Device) => {
   const c = categoryOrder(a.category) - categoryOrder(b.category);
   if (c !== 0) return c;
-  const ageA = modelAge(a.category, a.model);
-  const ageB = modelAge(b.category, b.model);
+  const ageA = modelAge(a.category, canonicalModel(a.category, a.model));
+  const ageB = modelAge(b.category, canonicalModel(b.category, b.model));
   if (ageA !== ageB) {
     if (ageA === UNKNOWN_AGE) return 1;
     if (ageB === UNKNOWN_AGE) return -1;
@@ -107,8 +108,9 @@ export function sortDevices(devices: Device[], key: DeviceSortKey): Device[] {
       return list.sort((a, b) => b.cost - a.cost || byModelThenCapacity(a, b));
     case "stock_qty_desc": {
       const qty = new Map<string, number>();
-      for (const d of list) qty.set(d.model, (qty.get(d.model) ?? 0) + 1);
-      return list.sort((a, b) => qty.get(b.model)! - qty.get(a.model)! || byModelThenCapacity(a, b));
+      const gk = (d: Device) => modelGroupKey(d.category, d.model);
+      for (const d of list) qty.set(gk(d), (qty.get(gk(d)) ?? 0) + 1);
+      return list.sort((a, b) => qty.get(gk(b))! - qty.get(gk(a))! || byModelThenCapacity(a, b));
     }
     case "battery_desc":
       return list.sort((a, b) => b.batteryHealth - a.batteryHealth || byModelThenCapacity(a, b));
@@ -190,14 +192,14 @@ export interface ModelSummary {
 export function summarizeByModel(devices: Device[]): ModelSummary[] {
   const map = new Map<string, ModelSummary>();
   for (const d of devices) {
-    const key = [d.category || "iPhone", d.brand || "Apple", d.model, d.capacity, d.condition].join("|");
+    const key = [d.category || "iPhone", d.brand || "Apple", modelGroupKey(d.category, d.model), d.capacity, d.condition].join("|");
     let g = map.get(key);
     if (!g) {
       g = {
         key,
         category: d.category || "iPhone",
         brand: d.brand || "Apple",
-        model: d.model,
+        model: canonicalModel(d.category, d.model) || d.model,
         capacity: d.capacity,
         condition: d.condition,
         qty: 0,
@@ -242,4 +244,48 @@ export function stockCountProgress(devices: Device[], location?: string): StockC
   );
   const missing = scope.filter((d) => !d.checkedAt);
   return { total: scope.length, checked: scope.length - missing.length, missing };
+}
+
+// ---------------------------------------------------------------------------
+// Estoque separado por condição (lacrado x seminovo)
+// ---------------------------------------------------------------------------
+
+export const CONDITION_SECTIONS: { key: Device["condition"]; title: string; short: string }[] = [
+  { key: "Lacrado", title: "Aparelhos lacrados (novos)", short: "Lacrados" },
+  { key: "Seminovo", title: "Aparelhos seminovos", short: "Seminovos" },
+];
+
+export interface ConditionSection {
+  key: Device["condition"];
+  title: string;
+  short: string;
+  devices: Device[];
+}
+
+// Separa os aparelhos em seções por condição (Lacrado primeiro). Só devolve seções com aparelhos.
+export function splitByCondition(devices: Device[]): ConditionSection[] {
+  return CONDITION_SECTIONS.map((s) => ({ ...s, devices: devices.filter((d) => d.condition === s.key) })).filter(
+    (s) => s.devices.length > 0
+  );
+}
+
+// Agrupa por modelo (nome padronizado: "14" e "iPhone 14" juntos), em ordem alfabética,
+// e dentro de cada modelo por capacidade numérica.
+export function groupDevicesByModel(devices: Device[]): { model: string; devices: Device[] }[] {
+  const groups = new Map<string, { model: string; devices: Device[] }>();
+  for (const d of devices) {
+    const key = modelGroupKey(d.category, d.model);
+    let g = groups.get(key);
+    if (!g) {
+      g = { model: canonicalModel(d.category, d.model) || "Sem modelo", devices: [] };
+      groups.set(key, g);
+    }
+    g.devices.push(d);
+  }
+  return [...groups.values()]
+    .sort((a, b) => a.model.localeCompare(b.model, "pt-BR"))
+    .map((g) => ({
+      model: g.model,
+      devices: [...g.devices].sort((a, b) => capacityInGB(a.capacity) - capacityInGB(b.capacity) || (a.color || "").localeCompare(b.color || "", "pt-BR")),
+    }));
 }
