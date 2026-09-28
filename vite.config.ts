@@ -18,6 +18,10 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
+      // Registro manual (src/main.tsx) para checar atualização a cada carregamento e
+      // periodicamente com a aba aberta: aplica a versão nova sozinho, sem depender do
+      // cliente limpar o cache.
+      injectRegister: false,
       includeAssets: ["favicon.ico", "logo-prime-paulista.png", "pwa-192.png", "pwa-512.png", "pwa-maskable-512.png", "robots.txt"],
       manifest: {
         name: "Prime Paulista",
