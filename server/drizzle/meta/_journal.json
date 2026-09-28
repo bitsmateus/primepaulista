@@ -211,6 +211,13 @@
       "when": 1790033325665,
       "tag": "0029_fase5b_ia",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790612863310,
+      "tag": "0030_venda_numero_sequencial",
+      "breakpoints": true
     }
   ]
 }

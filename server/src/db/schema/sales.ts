@@ -4,6 +4,7 @@ import {
   integer,
   numeric,
   pgTable,
+  serial,
   text,
   timestamp,
   uuid,
@@ -14,6 +15,7 @@ import { profiles } from "./auth";
 
 export const sales = pgTable("sales", {
   id: uuid("id").primaryKey().defaultRandom(),
+  saleNumber: serial("sale_number").notNull().unique(), // contador sequencial exibido ao usuário (nº 1, 2, 3…)
   customerId: uuid("customer_id").references(() => customers.id),
   sellerId: uuid("seller_id").references(() => profiles.id), // usuário logado que registrou
   sellerName: text("seller_name"), // vendedor selecionado no PDV (ex.: Gabriel)

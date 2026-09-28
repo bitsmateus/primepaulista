@@ -52,8 +52,8 @@ describe("splitByCondition", () => {
 
 describe("impressos de aparelhos", () => {
   const list = [
-    dev({ condition: "Seminovo", model: "iPhone 16", price: 4000, cost: 3000 }),
-    dev({ condition: "Lacrado", model: "16", price: 5000, cost: 4000 }),
+    dev({ condition: "Seminovo", model: "iPhone 16", salePrice: 4000, cost: 3000 }),
+    dev({ condition: "Lacrado", model: "16", salePrice: 5000, cost: 4000 }),
   ];
   for (const [nome, fn] of [
     ["catálogo", (d: Device[]) => generateCatalogHTML(d, true)],
@@ -78,7 +78,7 @@ describe("impressos de aparelhos", () => {
 });
 
 describe("impressos de acessórios", () => {
-  const list = [acc({}), acc({ name: "Cabo USB-C", category: "Cabos e Fontes", subcategory: "Cabo", cost: 10, price: 30, quantity: 2 })];
+  const list = [acc({}), acc({ name: "Cabo USB-C", category: "Cabos e Fontes", subcategory: "Cabo USB-C", cost: 10, price: 30, quantity: 2 })];
   it("catálogo lista as categorias e não traz aparelhos", () => {
     const h = generateAccessoryCatalogHTML(list);
     expect(h).toContain("Capas");

@@ -9,6 +9,7 @@ import { Sale, PaymentMethod } from "@/types/inventory";
 import { printReceipt } from "@/utils/receiptGenerator";
 import {
   saleMatchesSearch, saleItemsSummary, salePaymentLabel, buildSalesSummary, computeSaleTotal, saleFullValue,
+  saleNumberLabel, saleDeviceLines,
 } from "@/lib/sales";
 import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
@@ -85,7 +86,7 @@ export default function VendasPage() {
   const filtered = useMemo(
     () =>
       sales.filter((s) => {
-        if (!saleMatchesSearch(s, search)) return false;
+        if (!saleMatchesSearch(s, search, devices)) return false;
         if (status === "active" && isReturned(s)) return false;
         if (status === "returned" && !isReturned(s)) return false;
         if (sellerFilter !== "all" && s.seller !== sellerFilter) return false;
@@ -93,7 +94,7 @@ export default function VendasPage() {
         if (!inPeriod(s.createdAt, period, now)) return false;
         return true;
       }),
-    [sales, search, status, sellerFilter, originFilter, period]
+    [sales, search, status, sellerFilter, originFilter, period, devices]
   );
   const summary = buildSalesSummary(filtered);
   // Lucro líquido acumulado das vendas filtradas (devolvidas não contam) — só admin
@@ -179,7 +180,7 @@ export default function VendasPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar por cliente, vendedor, produto ou IMEI..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder="Buscar por nº da venda, cliente, vendedor, produto, serial ou IMEI..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -218,6 +219,7 @@ export default function VendasPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Nº</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Vendedor</TableHead>
@@ -233,6 +235,9 @@ export default function VendasPage() {
                 <TableBody>
                   {filtered.map((s) => (
                     <TableRow key={s.id} className={isReturned(s) ? "opacity-60" : ""}>
+                      <TableCell className="whitespace-nowrap text-xs font-medium text-muted-foreground">
+                        {saleNumberLabel(s.saleNumber)}
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(s.createdAt).toLocaleDateString("pt-BR")}
                       </TableCell>
@@ -280,7 +285,7 @@ export default function VendasPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={canCost ? 10 : 9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={canCost ? 11 : 10} className="py-8 text-center text-muted-foreground">
                         {salesLoading ? "Carregando vendas…" : "Nenhuma venda encontrada."}
                       </TableCell>
                     </TableRow>
@@ -295,7 +300,9 @@ export default function VendasPage() {
       {/* Detalhe da venda */}
       <Dialog open={!!viewSale} onOpenChange={(o) => !o && setViewSale(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Detalhes da Venda</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Detalhes da Venda {viewSale && <span className="text-muted-foreground">— {saleNumberLabel(viewSale.saleNumber)}</span>}</DialogTitle>
+          </DialogHeader>
           {viewSale && (
             <div className="space-y-4 text-sm">
               <div className="flex items-center justify-between">
@@ -303,15 +310,32 @@ export default function VendasPage() {
                   <p className="font-medium">{viewSale.customer?.name || "—"}</p>
                   <p className="text-xs text-muted-foreground">{new Date(viewSale.createdAt).toLocaleString("pt-BR")} · {viewSale.seller}</p>
                 </div>
-                {isReturned(viewSale) && <Badge variant="secondary">Devolvida</Badge>}
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{saleNumberLabel(viewSale.saleNumber)}</Badge>
+                  {isReturned(viewSale) && <Badge variant="secondary">Devolvida</Badge>}
+                </div>
               </div>
               <div className="rounded-lg border divide-y">
-                {viewSale.items.map((i) => (
-                  <div key={i.id} className="flex items-center justify-between px-3 py-2">
-                    <span>{i.quantity}× {i.name}</span>
-                    <span className="text-muted-foreground">{fmt(i.price * i.quantity)}</span>
-                  </div>
-                ))}
+                {viewSale.items.map((i) => {
+                  const dev = i.type === "device" ? saleDeviceLines(viewSale, devices).find((l) => l.itemId === i.id) : undefined;
+                  return (
+                    <div key={i.id} className="px-3 py-2">
+                      <div className="flex items-center justify-between">
+                        <span>{i.quantity}× {i.name}</span>
+                        <span className="text-muted-foreground">{fmt(i.price * i.quantity)}</span>
+                      </div>
+                      {dev && (dev.serial || dev.imei1 || dev.imei2) && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {dev.serial && <>Nº de série: {dev.serial}</>}
+                          {dev.serial && (dev.imei1 || dev.imei2) && " · "}
+                          {dev.imei1 && <>IMEI 1: {dev.imei1}</>}
+                          {dev.imei1 && dev.imei2 && " · "}
+                          {dev.imei2 && <>IMEI 2: {dev.imei2}</>}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(viewSale.subtotal)}</span></div>

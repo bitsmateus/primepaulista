@@ -112,6 +112,7 @@ export interface TradeIn {
 
 export interface Sale {
   id: string;
+  saleNumber?: number; // contador sequencial da venda, exibido como "Nº 001"
   customer: Customer;
   items: CartItem[];
   payments: PaymentEntry[];

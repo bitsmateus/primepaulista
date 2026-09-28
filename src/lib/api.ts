@@ -1313,6 +1313,7 @@ export type { Sale };
 // ----- Venda completa (aninhada) → tipo Sale do front -----
 interface SaleFullRow {
   id: string;
+  saleNumber?: number;
   sellerName: string | null;
   subtotal: string;
   tradeInDiscount: string;
@@ -1361,6 +1362,7 @@ function mapSaleFull(r: SaleFullRow): Sale {
 
   return {
     id: r.id,
+    saleNumber: r.saleNumber,
     customer,
     items,
     payments,

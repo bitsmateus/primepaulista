@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   computeSaleTotal, saleItemsSummary, salePaymentLabel, saleMatchesSearch, buildSalesSummary, saleFullValue,
+  saleNumberLabel, saleDeviceLines,
 } from "@/lib/sales";
-import { Sale, Customer } from "@/types/inventory";
+import { Sale, Customer, Device } from "@/types/inventory";
 
 const mkCustomer = (over: Partial<Customer>): Customer => ({
   id: "c1", name: "João Silva", cpf: "", whatsapp: "(11) 99999-0000", birthday: "",
@@ -70,6 +71,62 @@ describe("busca de venda", () => {
   it("acha por telefone sem formatação", () => expect(saleMatchesSearch(sale, "988887777")).toBe(true));
   it("query vazia retorna true", () => expect(saleMatchesSearch(sale, "")).toBe(true));
   it("não acha o ausente", () => expect(saleMatchesSearch(sale, "samsung")).toBe(false));
+});
+
+describe("número sequencial da venda", () => {
+  it("formata com 3 dígitos", () => {
+    expect(saleNumberLabel(1)).toBe("Nº 001");
+    expect(saleNumberLabel(23)).toBe("Nº 023");
+    expect(saleNumberLabel(1234)).toBe("Nº 1234");
+  });
+  it("sem número, string vazia", () => expect(saleNumberLabel(undefined)).toBe(""));
+
+  const sale = mkSale({ saleNumber: 12 });
+  it("acha pelo número exato", () => expect(saleMatchesSearch(sale, "12")).toBe(true));
+  it("acha pelo número com zero à esquerda", () => expect(saleMatchesSearch(sale, "012")).toBe(true));
+  it("não acha outro número", () => expect(saleMatchesSearch(sale, "13")).toBe(false));
+});
+
+describe("saleDeviceLines — serial e IMEI dos aparelhos vendidos", () => {
+  const dev = (over: Partial<Device>): Device => ({
+    id: "d1", category: "iPhone", brand: "Apple", location: "Estoque", model: "iPhone 15", capacity: "128",
+    color: "Preto", condition: "Seminovo", batteryHealth: 90, supplier: "", cost: 3000, serialImei: "350000000000041",
+    imei2: "350000000000042", serial: "F2LSERIAL01", internalSerial: "", status: "Vendido", createdAt: new Date(), ...over,
+  } as Device);
+
+  it("traz modelo, IMEI 1, IMEI 2 e serial do cadastro atual", () => {
+    const sale = mkSale({ items: [{ id: "i1", type: "device", deviceId: "d1", name: "iPhone 15", serial: "350000000000041", price: 5000, quantity: 1 }] });
+    const [line] = saleDeviceLines(sale, [dev({})]);
+    expect(line).toMatchObject({ imei1: "350000000000041", imei2: "350000000000042", serial: "F2LSERIAL01" });
+    expect(line.modelo).toContain("iPhone 15");
+  });
+  it("sem serial de fábrica, usa o interno; sem IMEI2, fica vazio", () => {
+    const sale = mkSale({ items: [{ id: "i1", type: "device", deviceId: "d1", name: "iPhone 15", price: 5000, quantity: 1 }] });
+    const [line] = saleDeviceLines(sale, [dev({ serial: "", internalSerial: "INT-01", imei2: "" })]);
+    expect(line.serial).toBe("INT-01");
+    expect(line.imei2).toBe("");
+  });
+  it("aparelho excluído: cai para o que foi salvo no item da venda", () => {
+    const sale = mkSale({ items: [{ id: "i1", type: "device", deviceId: "sumiu", name: "iPhone 15", serial: "350000000000099", price: 5000, quantity: 1 }] });
+    const [line] = saleDeviceLines(sale, []);
+    expect(line).toMatchObject({ modelo: "iPhone 15", imei1: "350000000000099", serial: "" });
+  });
+  it("acessório não entra na lista", () => {
+    const sale = mkSale({ items: [{ id: "i1", type: "accessory", accessoryId: "a1", name: "Capa", price: 100, quantity: 1 }] });
+    expect(saleDeviceLines(sale, [])).toHaveLength(0);
+  });
+});
+
+describe("busca de venda pelo serial real do aparelho (não o snapshot do item)", () => {
+  const dev: Device = {
+    id: "d1", category: "iPhone", brand: "Apple", location: "Estoque", model: "iPhone 15", capacity: "128",
+    color: "Preto", condition: "Seminovo", batteryHealth: 90, supplier: "", cost: 3000, serialImei: "350000000000041",
+    serial: "F2LSERIAL01", internalSerial: "", status: "Vendido", createdAt: new Date(),
+  } as Device;
+  const sale = mkSale({ items: [{ id: "i1", type: "device", deviceId: "d1", name: "iPhone 15", serial: "350000000000041", price: 5000, quantity: 1 }] });
+  it("acha pelo serial cadastrado no aparelho, mesmo sem estar salvo no item", () =>
+    expect(saleMatchesSearch(sale, "f2lserial01", [dev])).toBe(true));
+  it("sem o aparelho, não quebra e não acha", () => expect(saleMatchesSearch(sale, "f2lserial01", [])).toBe(false));
 });
 
 describe("resumo de vendas", () => {

@@ -1,8 +1,8 @@
 import { Sale, Device } from "@/types/inventory";
-import { formatCapacity } from "@/lib/utils";
 import { escapeHtml as esc } from "@/utils/html";
 import { getLogoPrintUrl, getStoreSettings } from "@/lib/storeSettings";
 import { warrantyFooterHTML, warrantyTermHTML } from "@/lib/warrantyTerms";
+import { saleDeviceLines } from "@/lib/sales";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -15,19 +15,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   const c = sale.customer;
 
   // Linhas de Modelo / IMEI a partir dos aparelhos da venda
-  const deviceItems = sale.items.filter((i) => i.type === "device");
-  const deviceLines = deviceItems.map((item) => {
-    const dev = devices.find((d) => d.id === item.deviceId);
-    const modelo = dev
-      ? `${dev.model} ${formatCapacity(dev.capacity)} ${dev.color}`.trim()
-      : item.name;
-    return {
-      modelo,
-      imei1: dev?.serialImei || item.serial || "",
-      imei2: dev?.imei2 || "",
-      serial: dev?.serial || dev?.internalSerial || "",
-    };
-  });
+  const deviceLines = saleDeviceLines(sale, devices);
 
   const subtotal = sale.items.reduce((s, i) => s + i.price * i.quantity, 0);
   const itemRows = sale.items

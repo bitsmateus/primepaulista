@@ -256,3 +256,8 @@ para valer:
 - Valores separados: aparelhos lacrados, seminovos e acessórios (venda e custo). Acessórios têm Catálogo e Relatório de Estoque próprios para impressão.
 - Relatório do dia (Vendas): identifica o aparelho pelo número de série (se faltar, o serial interno; nunca o IMEI). Vendas devolvidas ficam fora dos totais.
 - Baterias antigas de UI (ui-fase1, ui-import, ui-print) esperam a lista única antiga e precisam de ajuste de contagem.
+
+## Detalhes da venda: serial/IMEI, busca e número sequencial (pedido do cliente)
+- Detalhes da venda agora mostram o nº de série e o(s) IMEI do aparelho vendido (busca no cadastro atual do aparelho; se ele foi excluído, usa o que foi salvo na venda).
+- Busca em Vendas passou a aceitar: número da venda, nº de série do aparelho (além de nome, vendedor, produto e IMEI, que já existiam).
+- Nova numeração sequencial da venda ("Nº 001", "Nº 002"...), mostrada na lista e nos detalhes. As vendas já existentes receberam número na ordem cronológica (mais antiga = Nº 1); as novas seguem a sequência automaticamente (coluna `sale_number`, sequência no banco).
