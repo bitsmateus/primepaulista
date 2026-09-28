@@ -8,7 +8,9 @@ import { useLogoSrc, useStoreSnapshot } from "@/hooks/useAppSettings";
 
 const COLLAPSE_KEY = "pp_sidebar_collapsed";
 
-export function AppLayout({ children }: { children: ReactNode }) {
+// `wide`: para telas com tabelas largas (muitas colunas) — usa quase toda a largura da janela
+// em vez do limite padrão, para não precisar rolar para o lado.
+export function AppLayout({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
   const navigate = useNavigate();
@@ -66,7 +68,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         className={`min-h-screen transition-[margin] duration-200 ${collapsed ? "lg:ml-20" : "lg:ml-60"}`}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">{children}</div>
+        <div className={`mx-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8 ${wide ? "max-w-[1920px]" : "max-w-6xl"}`}>{children}</div>
       </main>
     </div>
   );
