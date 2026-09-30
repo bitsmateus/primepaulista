@@ -89,6 +89,7 @@ export default function PDVPage() {
   const [tradeIn, setTradeIn] = useState<TradeIn | null>(null);
   const [tradeCategory, setTradeCategory] = useState<DeviceCategory>("iPhone");
   const [tradeImei, setTradeImei] = useState("");
+  const [tradeSerial, setTradeSerial] = useState("");
   const [tradeModel, setTradeModel] = useState("");
   const [tradeCapacity, setTradeCapacity] = useState("");
   const [tradeColor, setTradeColor] = useState("");
@@ -98,7 +99,7 @@ export default function PDVPage() {
   const [tradeValue, setTradeValue] = useState("");
 
   const resetTradeForm = () => {
-    setTradeCategory("iPhone"); setTradeImei(""); setTradeModel("");
+    setTradeCategory("iPhone"); setTradeImei(""); setTradeSerial(""); setTradeModel("");
     setTradeCapacity(""); setTradeColor(""); setTradeCondition("Seminovo");
     setTradeBattery("100"); setTradeHealth(""); setTradeValue("");
   };
@@ -332,6 +333,7 @@ export default function PDVPage() {
     }
     setTradeIn({
       imei: tradeImei,
+      serial: tradeSerial,
       model: tradeModel.trim(),
       healthDescription: tradeHealth,
       value: val,
@@ -742,7 +744,11 @@ export default function PDVPage() {
 
                 {tradeIn && (
                   <div className="flex items-center justify-between rounded border border-dashed border-success bg-success/5 px-3 py-2 text-sm">
-                    <span>Trade-in: {tradeIn.model} (IMEI: {tradeIn.imei})</span>
+                    <span>
+                      Trade-in: {tradeIn.model}
+                      {tradeIn.serial && ` (Serial: ${tradeIn.serial})`}
+                      {tradeIn.imei && ` (IMEI: ${tradeIn.imei})`}
+                    </span>
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-success">-{fmt(tradeIn.value)}</span>
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTradeIn(null)}>
@@ -1062,8 +1068,12 @@ export default function PDVPage() {
               <Input type="number" min={0} max={100} value={tradeBattery} onChange={(e) => setTradeBattery(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label>IMEI / Serial</Label>
-              <Input value={tradeImei} onChange={(e) => setTradeImei(e.target.value)} placeholder="IMEI ou serial" />
+              <Label>IMEI</Label>
+              <Input value={tradeImei} onChange={(e) => setTradeImei(e.target.value)} placeholder="IMEI do aparelho" />
+            </div>
+            <div className="space-y-1">
+              <Label>Serial</Label>
+              <Input value={tradeSerial} onChange={(e) => setTradeSerial(e.target.value)} placeholder="Nº de série do aparelho" />
             </div>
             <div className="space-y-1">
               <Label>Valor da Troca (R$)</Label>

@@ -337,6 +337,18 @@ export default function VendasPage() {
                   );
                 })}
               </div>
+              {viewSale.tradeIn && (
+                <div className="rounded-lg border border-dashed p-3 text-xs">
+                  <p className="mb-1 font-medium text-foreground">Aparelho recebido como parte de pagamento</p>
+                  <p className="text-muted-foreground">{viewSale.tradeIn.model}</p>
+                  <p className="text-muted-foreground">
+                    {viewSale.tradeIn.serial && <>Nº de série: {viewSale.tradeIn.serial}</>}
+                    {viewSale.tradeIn.serial && viewSale.tradeIn.imei && " · "}
+                    {viewSale.tradeIn.imei && <>IMEI: {viewSale.tradeIn.imei}</>}
+                  </p>
+                  <p className="mt-1 font-medium text-success">Entrou por {fmt(viewSale.tradeIn.value)}</p>
+                </div>
+              )}
               <div className="space-y-1">
                 <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(viewSale.subtotal)}</span></div>
                 {viewSale.tradeInDiscount > 0 && <div className="flex justify-between text-muted-foreground"><span>Troca</span><span>− {fmt(viewSale.tradeInDiscount)}</span></div>}

@@ -1279,6 +1279,7 @@ export interface SalePayload {
   payments: { method: string; amount: number; installments?: number }[];
   tradeIn?: {
     imei: string;
+    serial?: string;
     model: string;
     healthDescription: string;
     value: number;
@@ -1329,7 +1330,7 @@ interface SaleFullRow {
   customer: (Omit<Customer, "createdAt"> & { createdAt: string; leadOrigin: string | null }) | null;
   items: { id: string; productType: "device" | "accessory"; productId: string | null; name: string; serial: string | null; price: string; quantity: number; warrantyDays?: number }[];
   payments: { id: string; method: string; amount: string; installments: number | null; auditStatus?: AuditStatus; auditNote?: string; auditedByName?: string; auditedAt?: string | null }[];
-  tradeIn: { imei: string | null; model: string | null; healthDescription: string | null; value: string } | null;
+  tradeIn: { imei: string | null; serial?: string | null; model: string | null; healthDescription: string | null; value: string } | null;
 }
 
 function mapSaleFull(r: SaleFullRow): Sale {
@@ -1369,6 +1370,7 @@ function mapSaleFull(r: SaleFullRow): Sale {
     tradeIn: r.tradeIn
       ? {
           imei: r.tradeIn.imei ?? "",
+          serial: r.tradeIn.serial ?? "",
           model: r.tradeIn.model ?? "",
           healthDescription: r.tradeIn.healthDescription ?? "",
           value: Number(r.tradeIn.value),

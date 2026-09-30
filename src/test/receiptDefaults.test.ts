@@ -58,6 +58,33 @@ const os = {
   reportedIssue: "Tela quebrada", partDescription: "Tela", technicalNotes: "", origin: "Cliente", laborCost: 100, partCost: 0, chargedAmount: 100, costResponsibility: "Cliente",
 } as unknown as ServiceOrder;
 
+describe("recibo com aparelho de troca (parte de pagamento)", () => {
+  const saleWithTradeIn: Sale = {
+    ...sale,
+    tradeIn: { imei: "861234567890123", serial: "TRADE-SN-01", model: "iPhone 12", healthDescription: "tela ok", value: 300 },
+  };
+  it("mostra modelo, serial, IMEI e por quanto entrou", () => {
+    const html = generateReceiptHTML(saleWithTradeIn, devices);
+    expect(html).toContain("Aparelho recebido como parte de pagamento");
+    expect(html).toContain("iPhone 12");
+    expect(html).toContain("TRADE-SN-01");
+    expect(html).toContain("861234567890123");
+    expect(html).toContain("300,00");
+  });
+  it("sem troca, não mostra a seção", () => {
+    expect(generateReceiptHTML(sale, devices)).not.toContain("Aparelho recebido como parte de pagamento");
+  });
+  it("escapa HTML do modelo/serial/IMEI da troca", () => {
+    const html = generateReceiptHTML(
+      { ...sale, tradeIn: { imei: "<x>", serial: "<y>", model: "<b>Malicioso</b>", healthDescription: "", value: 100 } },
+      devices
+    );
+    expect(html).not.toContain("<b>Malicioso</b>");
+    expect(html).not.toContain("<x>");
+    expect(html).not.toContain("<y>");
+  });
+});
+
 describe("documentos impressos com os padroes da loja", () => {
   it("recibo de venda identico ao anterior", () => {
     resetStoreSettings();

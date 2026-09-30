@@ -79,6 +79,7 @@ export const tradeIns = pgTable("trade_ins", {
     .notNull()
     .references(() => sales.id, { onDelete: "cascade" }),
   imei: text("imei"),
+  serial: text("serial"), // número de série do aparelho recebido (distinto do IMEI)
   model: text("model"),
   healthDescription: text("health_description"),
   value: numeric("value", { precision: 12, scale: 2 }).notNull().default("0"),

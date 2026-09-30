@@ -122,6 +122,19 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
       .join("")}
   </div>
 
+  ${
+    sale.tradeIn
+      ? `
+  <div class="fields">
+    <div class="field"><span class="lbl" style="min-width:100%">Aparelho recebido como parte de pagamento:</span></div>
+    ${fieldRow("Modelo", esc(sale.tradeIn.model))}
+    ${sale.tradeIn.serial ? fieldRow("Serial", esc(sale.tradeIn.serial)) : ""}
+    ${sale.tradeIn.imei ? fieldRow("IMEI", esc(sale.tradeIn.imei)) : ""}
+    ${fieldRow("Entrou por", fmt(sale.tradeIn.value))}
+  </div>`
+      : ""
+  }
+
   <table>
     <thead>
       <tr><th style="width:48px">Quant.</th><th>Discriminação</th><th style="width:90px">Preço Unit.</th><th style="width:90px">Preço Total</th></tr>

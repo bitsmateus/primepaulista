@@ -261,3 +261,8 @@ para valer:
 - Detalhes da venda agora mostram o nº de série e o(s) IMEI do aparelho vendido (busca no cadastro atual do aparelho; se ele foi excluído, usa o que foi salvo na venda).
 - Busca em Vendas passou a aceitar: número da venda, nº de série do aparelho (além de nome, vendedor, produto e IMEI, que já existiam).
 - Nova numeração sequencial da venda ("Nº 001", "Nº 002"...), mostrada na lista e nos detalhes. As vendas já existentes receberam número na ordem cronológica (mais antiga = Nº 1); as novas seguem a sequência automaticamente (coluna `sale_number`, sequência no banco).
+
+## Aparelho de troca (parte de pagamento) no recibo
+- O diálogo "Aparelho de Troca" no PDV agora tem campos separados de IMEI e Serial (antes era um campo único "IMEI / Serial").
+- O recibo de venda e os "Detalhes da Venda" mostram, quando há troca: modelo, nº de série, IMEI e por quanto o aparelho entrou (valor da troca).
+- Trocas registradas antes desta mudança só têm o campo antigo (que foi salvo como IMEI); não têm serial retroativo.

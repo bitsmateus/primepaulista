@@ -1,0 +1,1 @@
+ALTER TABLE "trade_ins" ADD COLUMN "serial" text;

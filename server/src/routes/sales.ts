@@ -59,6 +59,7 @@ const saleInput = z.object({
   tradeIn: z
     .object({
       imei: z.string().max(60).optional().default(""),
+      serial: z.string().max(60).optional().default(""),
       model: z.string().max(100),
       healthDescription: z.string().max(300).optional().default(""),
       value: z.coerce.number().min(0),
@@ -234,6 +235,7 @@ export async function saleRoutes(app: FastifyInstance) {
           await tx.insert(tradeIns).values({
             saleId: sale.id,
             imei: s.tradeIn.imei,
+            serial: s.tradeIn.serial || null,
             model: s.tradeIn.model,
             healthDescription: s.tradeIn.healthDescription,
             value: String(s.tradeIn.value),
@@ -250,6 +252,7 @@ export async function saleRoutes(app: FastifyInstance) {
               batteryHealth: s.tradeIn.batteryHealth,
               cost: String(s.tradeIn.value),
               serialImei: s.tradeIn.imei,
+              serial: s.tradeIn.serial || null,
               supplier: "Troca (PDV)",
               status: "Disponível",
             })

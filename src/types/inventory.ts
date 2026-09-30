@@ -99,6 +99,7 @@ export interface PaymentEntry {
 
 export interface TradeIn {
   imei: string;
+  serial?: string; // número de série do aparelho recebido (distinto do IMEI)
   model: string;
   healthDescription: string;
   value: number;
