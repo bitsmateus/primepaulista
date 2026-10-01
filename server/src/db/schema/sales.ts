@@ -81,6 +81,8 @@ export const tradeIns = pgTable("trade_ins", {
   imei: text("imei"),
   serial: text("serial"), // número de série do aparelho recebido (distinto do IMEI)
   model: text("model"),
+  capacity: text("capacity"), // armazenamento do aparelho recebido
+  color: text("color"),
   healthDescription: text("health_description"),
   value: numeric("value", { precision: 12, scale: 2 }).notNull().default("0"),
 }, (t) => ({

@@ -2,7 +2,7 @@ import { Sale, Device } from "@/types/inventory";
 import { escapeHtml as esc } from "@/utils/html";
 import { getLogoPrintUrl, getStoreSettings } from "@/lib/storeSettings";
 import { warrantyFooterHTML, warrantyTermHTML } from "@/lib/warrantyTerms";
-import { saleDeviceLines } from "@/lib/sales";
+import { saleDeviceLines, tradeInModelLine } from "@/lib/sales";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -127,7 +127,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
       ? `
   <div class="fields">
     <div class="field"><span class="lbl" style="min-width:100%">Aparelho recebido como parte de pagamento:</span></div>
-    ${fieldRow("Modelo", esc(sale.tradeIn.model))}
+    ${fieldRow("Modelo", esc(tradeInModelLine(sale.tradeIn)))}
     ${sale.tradeIn.serial ? fieldRow("Serial", esc(sale.tradeIn.serial)) : ""}
     ${sale.tradeIn.imei ? fieldRow("IMEI", esc(sale.tradeIn.imei)) : ""}
     ${fieldRow("Entrou por", fmt(sale.tradeIn.value))}

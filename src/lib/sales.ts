@@ -1,10 +1,15 @@
-import { Device, Sale } from "@/types/inventory";
+import { Device, Sale, TradeIn } from "@/types/inventory";
 import { onlyDigits } from "@/lib/customers";
 import { formatCapacity } from "@/lib/utils";
 
 // Número da venda formatado para exibição, ex.: "Nº 001".
 export function saleNumberLabel(n: number | undefined): string {
   return n != null ? `Nº ${String(n).padStart(3, "0")}` : "";
+}
+
+// Modelo do aparelho de troca com armazenamento e cor, ex.: "iPhone 12 128GB Preto".
+export function tradeInModelLine(tradeIn: TradeIn): string {
+  return [tradeIn.model, formatCapacity(tradeIn.capacity || ""), tradeIn.color].filter(Boolean).join(" ");
 }
 
 export interface SaleDeviceLine {

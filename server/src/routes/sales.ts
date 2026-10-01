@@ -237,6 +237,8 @@ export async function saleRoutes(app: FastifyInstance) {
             imei: s.tradeIn.imei,
             serial: s.tradeIn.serial || null,
             model: s.tradeIn.model,
+            capacity: s.tradeIn.capacity || null,
+            color: s.tradeIn.color || null,
             healthDescription: s.tradeIn.healthDescription,
             value: String(s.tradeIn.value),
           });

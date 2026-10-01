@@ -9,7 +9,7 @@ import { Sale, PaymentMethod } from "@/types/inventory";
 import { printReceipt } from "@/utils/receiptGenerator";
 import {
   saleMatchesSearch, saleItemsSummary, salePaymentLabel, buildSalesSummary, computeSaleTotal, saleFullValue,
-  saleNumberLabel, saleDeviceLines,
+  saleNumberLabel, saleDeviceLines, tradeInModelLine,
 } from "@/lib/sales";
 import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
@@ -340,7 +340,7 @@ export default function VendasPage() {
               {viewSale.tradeIn && (
                 <div className="rounded-lg border border-dashed p-3 text-xs">
                   <p className="mb-1 font-medium text-foreground">Aparelho recebido como parte de pagamento</p>
-                  <p className="text-muted-foreground">{viewSale.tradeIn.model}</p>
+                  <p className="text-muted-foreground">{tradeInModelLine(viewSale.tradeIn)}</p>
                   <p className="text-muted-foreground">
                     {viewSale.tradeIn.serial && <>Nº de série: {viewSale.tradeIn.serial}</>}
                     {viewSale.tradeIn.serial && viewSale.tradeIn.imei && " · "}

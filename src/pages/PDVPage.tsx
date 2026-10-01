@@ -13,6 +13,7 @@ import { printReceipt } from "@/utils/receiptGenerator";
 import { api, ApiError } from "@/lib/api";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { resolveQuoteForSale } from "@/lib/quotes";
+import { tradeInModelLine } from "@/lib/sales";
 import { formatCapacity } from "@/lib/utils";
 import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue, resolveDiscount } from "@/lib/pdv";
 import { warrantyDaysForCondition } from "@/lib/warranty";
@@ -745,7 +746,7 @@ export default function PDVPage() {
                 {tradeIn && (
                   <div className="flex items-center justify-between rounded border border-dashed border-success bg-success/5 px-3 py-2 text-sm">
                     <span>
-                      Trade-in: {tradeIn.model}
+                      Trade-in: {tradeInModelLine(tradeIn)}
                       {tradeIn.serial && ` (Serial: ${tradeIn.serial})`}
                       {tradeIn.imei && ` (IMEI: ${tradeIn.imei})`}
                     </span>

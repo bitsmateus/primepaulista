@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeSaleTotal, saleItemsSummary, salePaymentLabel, saleMatchesSearch, buildSalesSummary, saleFullValue,
-  saleNumberLabel, saleDeviceLines,
+  saleNumberLabel, saleDeviceLines, tradeInModelLine,
 } from "@/lib/sales";
 import { Sale, Customer, Device } from "@/types/inventory";
 
@@ -71,6 +71,20 @@ describe("busca de venda", () => {
   it("acha por telefone sem formatação", () => expect(saleMatchesSearch(sale, "988887777")).toBe(true));
   it("query vazia retorna true", () => expect(saleMatchesSearch(sale, "")).toBe(true));
   it("não acha o ausente", () => expect(saleMatchesSearch(sale, "samsung")).toBe(false));
+});
+
+describe("tradeInModelLine — modelo do aparelho de troca com armazenamento e cor", () => {
+  it("junta modelo, armazenamento (formatado) e cor", () => {
+    expect(tradeInModelLine({ model: "iPhone 12", capacity: "128", color: "Preto", imei: "", value: 300, healthDescription: "" }))
+      .toBe("iPhone 12 128GB Preto");
+  });
+  it("sem capacidade/cor, só o modelo", () => {
+    expect(tradeInModelLine({ model: "iPhone 12", imei: "", value: 300, healthDescription: "" })).toBe("iPhone 12");
+  });
+  it("capacidade não numérica não ganha GB (ex.: relógio)", () => {
+    expect(tradeInModelLine({ model: "Apple Watch", capacity: "45mm", color: "Rosa", imei: "", value: 300, healthDescription: "" }))
+      .toBe("Apple Watch 45mm Rosa");
+  });
 });
 
 describe("número sequencial da venda", () => {

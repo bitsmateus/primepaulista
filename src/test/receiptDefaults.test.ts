@@ -74,6 +74,13 @@ describe("recibo com aparelho de troca (parte de pagamento)", () => {
   it("sem troca, não mostra a seção", () => {
     expect(generateReceiptHTML(sale, devices)).not.toContain("Aparelho recebido como parte de pagamento");
   });
+  it("mostra armazenamento e cor junto do modelo", () => {
+    const html = generateReceiptHTML(
+      { ...sale, tradeIn: { imei: "861234567890123", model: "iPhone 12", capacity: "128", color: "Preto", healthDescription: "", value: 300 } },
+      devices
+    );
+    expect(html).toContain("iPhone 12 128GB Preto");
+  });
   it("escapa HTML do modelo/serial/IMEI da troca", () => {
     const html = generateReceiptHTML(
       { ...sale, tradeIn: { imei: "<x>", serial: "<y>", model: "<b>Malicioso</b>", healthDescription: "", value: 100 } },

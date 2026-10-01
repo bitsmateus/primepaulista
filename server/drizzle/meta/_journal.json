@@ -225,6 +225,13 @@
       "when": 1790807153109,
       "tag": "0031_troca_serial",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790888459359,
+      "tag": "0032_troca_capacidade_cor",
+      "breakpoints": true
     }
   ]
 }
