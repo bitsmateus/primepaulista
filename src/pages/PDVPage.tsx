@@ -732,7 +732,7 @@ export default function PDVPage() {
                       onCheckedChange={(v) => setRequiresInvoice(v === true)}
                     />
                     <Label htmlFor="requiresInvoice" className="text-sm font-normal cursor-pointer">
-                      Cliente exigiu nota fiscal (custo de 0,5% s/ o aparelho)
+                      Cliente exigiu nota fiscal (custo de 0,7% s/ o aparelho)
                     </Label>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildDeviceMap, buildAccessoryMap, itemCost, saleCogs, saleGrossProfit, salesGrossProfit,
-  saleDeviceSaleValue, saleNetProfit,
+  saleDeviceSaleValue, saleNetProfit, INVOICE_COST_RATE,
 } from "@/lib/profit";
 import { Sale, Device, Accessory, Customer, CartItem } from "@/types/inventory";
 
@@ -80,10 +80,11 @@ describe("lucro líquido da venda", () => {
     expect(saleNetProfit(sale, devById, accById)).toBe(5200 - 3040);
   });
 
-  it("nota fiscal exigida: desconta 0,5% do valor do aparelho (não do acessório)", () => {
+  it("nota fiscal exigida: desconta 0,7% do valor do aparelho (não do acessório)", () => {
+    expect(INVOICE_COST_RATE).toBe(0.007);
     const sale = mkSale({ items: [deviceItem, accItem], subtotal: 5200, total: 5200, requiresInvoice: true });
     expect(saleDeviceSaleValue(sale)).toBe(5000);
-    expect(saleNetProfit(sale, devById, accById)).toBe(5200 - 3040 - 5000 * 0.005);
+    expect(saleNetProfit(sale, devById, accById)).toBe(5200 - 3040 - 5000 * INVOICE_COST_RATE);
   });
 
   it("venda devolvida não gera lucro líquido", () => {

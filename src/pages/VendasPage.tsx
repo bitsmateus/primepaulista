@@ -11,7 +11,7 @@ import {
   saleMatchesSearch, saleItemsSummary, salePaymentLabel, buildSalesSummary, computeSaleTotal, saleFullValue,
   saleNumberLabel, saleDeviceLines, tradeInModelLine,
 } from "@/lib/sales";
-import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue } from "@/lib/profit";
+import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue, INVOICE_COST_RATE } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { AUDIT_STATUS_LABEL } from "@/lib/reconciliation";
@@ -365,8 +365,8 @@ export default function VendasPage() {
                   )}
                   {viewSale.requiresInvoice && (
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Custo de nota fiscal (0,5%)</span>
-                      <span>− {fmt(saleDeviceSaleValue(viewSale) * 0.005)}</span>
+                      <span>Custo de nota fiscal (0,7%)</span>
+                      <span>− {fmt(saleDeviceSaleValue(viewSale) * INVOICE_COST_RATE)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-semibold text-success">

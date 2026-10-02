@@ -1,9 +1,9 @@
 import { Sale, Device, Accessory, CartItem } from "@/types/inventory";
 import { saleFullValue } from "@/lib/sales";
 
-// Custo de emissão de nota fiscal quando o cliente exige: 0,5% sobre o valor
+// Custo de emissão de nota fiscal quando o cliente exige: 0,7% sobre o valor
 // de venda do(s) aparelho(s) (não incide sobre acessórios/brindes).
-const INVOICE_COST_RATE = 0.005;
+export const INVOICE_COST_RATE = 0.007;
 
 // Mapas de custo por id (custo real cadastrado em devices/accessories).
 export type DeviceMap = Record<string, Device>;
@@ -55,7 +55,7 @@ export function saleDeviceSaleValue(sale: Sale): number {
 // (sem descontar a troca, que é forma de pagamento e não custo — o aparelho
 // recebido na troca já entra no estoque com seu próprio custo, gerando lucro
 // quando revendido), menos o custo dos produtos, o custo dos brindes dados
-// junto e, se o cliente exigiu nota fiscal, 0,5% sobre o valor do aparelho.
+// junto e, se o cliente exigiu nota fiscal, 0,7% sobre o valor do aparelho.
 export function saleNetProfit(sale: Sale, devicesById: DeviceMap, accessoriesById: AccessoryMap): number {
   if (sale.returnedAt) return 0;
   const invoiceCost = sale.requiresInvoice ? saleDeviceSaleValue(sale) * INVOICE_COST_RATE : 0;
