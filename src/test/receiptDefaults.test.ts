@@ -97,6 +97,11 @@ describe("documentos impressos com os padroes da loja", () => {
     resetStoreSettings();
     compare("receipt-default.html", generateReceiptHTML(sale, devices));
   });
+  it("recibo mostra o numero da venda quando existe", () => {
+    resetStoreSettings();
+    expect(generateReceiptHTML({ ...sale, saleNumber: 150 }, devices)).toContain("Nº 150");
+    expect(generateReceiptHTML(sale, devices)).not.toContain("Venda:");
+  });
   it("orcamento identico ao anterior", () => {
     resetStoreSettings();
     compare("quote-default.html", generateQuoteHTML(quote));

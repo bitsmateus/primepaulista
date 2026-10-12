@@ -2,7 +2,7 @@ import { Sale, Device } from "@/types/inventory";
 import { escapeHtml as esc } from "@/utils/html";
 import { getLogoPrintUrl, getStoreSettings } from "@/lib/storeSettings";
 import { warrantyFooterHTML, warrantyTermHTML } from "@/lib/warrantyTerms";
-import { saleDeviceLines, tradeInModelLine } from "@/lib/sales";
+import { saleDeviceLines, saleNumberLabel, tradeInModelLine } from "@/lib/sales";
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -104,7 +104,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   <div class="cnpj">CNPJ: ${esc(store.cnpj)}</div>
 
   <div class="fields">
-    ${fieldRow("Data", formatDate(sale.createdAt))}
+    ${sale.saleNumber != null ? fieldRow("Venda", saleNumberLabel(sale.saleNumber)) + "\n    " : ""}${fieldRow("Data", formatDate(sale.createdAt))}
     ${fieldRow("Cliente", c?.name ?? "")}
     <div class="two">
       ${fieldRow("CPF", c?.cpf ?? "")}

@@ -13,6 +13,7 @@ import { printReceipt } from "@/utils/receiptGenerator";
 import { api, ApiError } from "@/lib/api";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { resolveQuoteForSale } from "@/lib/quotes";
+import { customerMatchesSearch } from "@/lib/customers";
 import { tradeInModelLine } from "@/lib/sales";
 import { formatCapacity } from "@/lib/utils";
 import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue, resolveDiscount } from "@/lib/pdv";
@@ -138,14 +139,7 @@ export default function PDVPage() {
   const [showCustomerResults, setShowCustomerResults] = useState(false);
 
   const filteredCustomers = customerQuery.trim().length >= 2
-    ? customers.filter((c) => {
-        const q = customerQuery.trim().toLowerCase();
-        return (
-          c.name.toLowerCase().includes(q) ||
-          c.cpf.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
-          c.whatsapp.replace(/\D/g, "").includes(q.replace(/\D/g, ""))
-        );
-      })
+    ? customers.filter((c) => customerMatchesSearch(c, customerQuery))
     : [];
 
   const selectCustomer = (c: Customer) => {

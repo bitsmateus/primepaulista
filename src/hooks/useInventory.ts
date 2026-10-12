@@ -171,7 +171,7 @@ export function useInventory() {
 
   // ----- Finalizar venda: persiste no banco (transacional) e atualiza estoque -----
   const finalizeSale = async (sale: Omit<Sale, "id" | "createdAt">): Promise<Sale> => {
-    const saleId = await api.createSale({
+    const { saleId, saleNumber } = await api.createSale({
       customerId: sale.customer.id,
       sellerName: sale.seller,
       subtotal: sale.subtotal,
@@ -205,7 +205,7 @@ export function useInventory() {
     qc.invalidateQueries({ queryKey: ["sales"] });
     if (sale.quoteId) qc.invalidateQueries({ queryKey: ["quotes"] });
 
-    const newSale: Sale = { ...sale, id: saleId, createdAt: new Date() };
+    const newSale: Sale = { ...sale, id: saleId, saleNumber, createdAt: new Date() };
     return newSale;
   };
 

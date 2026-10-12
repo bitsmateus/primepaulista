@@ -522,10 +522,10 @@ export const api = {
 
   // Sales
   createSale: (input: SalePayload) =>
-    request<{ saleId: string }>("/sales", {
+    request<{ saleId: string; saleNumber?: number }>("/sales", {
       method: "POST",
       body: JSON.stringify(input),
-    }).then((d) => d.saleId),
+    }).then((d) => ({ saleId: d.saleId, saleNumber: d.saleNumber })),
   listSalesFull: () =>
     request<{ sales: SaleFullRow[] }>("/sales/full").then((d) => d.sales.map(mapSaleFull)),
   returnSale: (id: string, reason: string) =>
