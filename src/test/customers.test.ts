@@ -40,6 +40,9 @@ describe("busca de cliente", () => {
   it("acha por CPF ignorando formatação", () => expect(customerMatchesSearch(c, "52998224725")).toBe(true));
   it("acha por telefone ignorando formatação", () => expect(customerMatchesSearch(c, "988887777")).toBe(true));
   it("não acha o que não existe", () => expect(customerMatchesSearch(c, "pedro")).toBe(false));
+  it("ignora acentos e maiúsculas", () => expect(customerMatchesSearch({ ...c, name: "Marco Aurélio Sousa Silva" }, "aurelio")).toBe(true));
+  it("aceita palavras fora de ordem", () => expect(customerMatchesSearch({ ...c, name: "Marco Aurélio Sousa Silva" }, "silva marco")).toBe(true));
+  it("busca por nome não casa cliente sem relação (sem dígitos)", () => expect(customerMatchesSearch(c, "zzz")).toBe(false));
   it("query vazia retorna true", () => expect(customerMatchesSearch(c, "")).toBe(true));
 });
 

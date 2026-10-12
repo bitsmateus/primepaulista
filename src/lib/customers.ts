@@ -29,11 +29,16 @@ export function formatPhone(phone: string): string {
 }
 
 // Busca por nome (texto) ou CPF/telefone (ignorando formatação)
+const fold = (s: string) =>
+  (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+// Ignora acentos/maiúsculas e aceita palavras fora de ordem no nome ("marco silva").
 export function customerMatchesSearch(c: Customer, query: string): boolean {
-  const q = query.trim().toLowerCase();
+  const q = fold(query).trim();
   if (!q) return true;
+  const name = fold(c.name);
+  if (q.split(/\s+/).every((t) => name.includes(t))) return true;
   const qDigits = onlyDigits(q);
-  if (c.name.toLowerCase().includes(q)) return true;
   if (qDigits && (onlyDigits(c.cpf).includes(qDigits) || onlyDigits(c.whatsapp).includes(qDigits)))
     return true;
   return false;

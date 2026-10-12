@@ -139,7 +139,7 @@ export async function saleRoutes(app: FastifyInstance) {
     const total = Math.max(0, subtotal - s.tradeInDiscount - s.discount);
 
     try {
-      const saleId = await db.transaction(async (tx) => {
+      const { id: saleId, saleNumber } = await db.transaction(async (tx) => {
         // 0) Trava e valida disponibilidade/estoque (evita venda dupla / estoque negativo)
         for (const it of s.items) {
           if (it.productType === "device") {
@@ -197,7 +197,7 @@ export async function saleRoutes(app: FastifyInstance) {
             origin: s.quoteId ? "Orçamento" : "Balcão",
             quoteId: s.quoteId ?? null,
           })
-          .returning({ id: sales.id });
+          .returning({ id: sales.id, saleNumber: sales.saleNumber });
 
         if (s.quoteId) {
           await tx
@@ -299,7 +299,7 @@ export async function saleRoutes(app: FastifyInstance) {
           });
         }
 
-        return sale.id;
+        return { id: sale.id, saleNumber: sale.saleNumber };
       });
 
       const [cust] = await db.select({ name: customers.name, whatsapp: customers.whatsapp }).from(customers).where(eq(customers.id, s.customerId)).limit(1);
@@ -312,7 +312,7 @@ export async function saleRoutes(app: FastifyInstance) {
         description: `Registrou a venda de ${brl(total)} para ${cust?.name ?? "cliente"}`,
         details: { total, discount: s.discount, items: s.items.length, seller: s.sellerName || null },
       });
-      return reply.code(201).send({ saleId });
+      return reply.code(201).send({ saleId, saleNumber });
     } catch (err) {
       const code = (err as { statusCode?: number }).statusCode;
       if (code === 409) {
