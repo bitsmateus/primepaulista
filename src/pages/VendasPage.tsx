@@ -145,6 +145,13 @@ export default function VendasPage() {
     ? computeSaleTotal(editSale.subtotal, editSale.tradeInDiscount, Number(eDiscount) || 0)
     : 0;
 
+  // Editar o valor final recalcula o desconto (pode ficar negativo = acréscimo)
+  const setEditFinalValue = (v: string) => {
+    if (!editSale || v.trim() === "" || !Number.isFinite(Number(v))) return;
+    const base = editSale.subtotal - editSale.tradeInDiscount;
+    setEDiscount(String(Math.round((base - Number(v)) * 100) / 100));
+  };
+
   return (
     <AppLayout wide>
       <div className="space-y-6">
@@ -437,7 +444,11 @@ export default function VendasPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Desconto (R$)</Label>
-                  <Input type="number" min={0} value={eDiscount} onChange={(e) => setEDiscount(e.target.value)} />
+                  <Input type="number" value={eDiscount} onChange={(e) => setEDiscount(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Valor final (R$)</Label>
+                  <Input type="number" key={editTotalPreview} defaultValue={editTotalPreview} onBlur={(e) => setEditFinalValue(e.target.value)} />
                 </div>
                 <div>
                   <Label>Forma de pagamento</Label>

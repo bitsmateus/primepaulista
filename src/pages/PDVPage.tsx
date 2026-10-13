@@ -76,6 +76,7 @@ export default function PDVPage() {
   const [discountValue, setDiscountValue] = useState("");
   const [saleNotes, setSaleNotes] = useState("");
   const [discountMode, setDiscountMode] = useState<"R$" | "%">("R$");
+  const [finalValue, setFinalValue] = useState("");
   const [giftsCost, setGiftsCost] = useState("");
   const [requiresInvoice, setRequiresInvoice] = useState(false);
 
@@ -347,7 +348,11 @@ export default function PDVPage() {
   const subtotal = cartSubtotal(cart);
   const tradeInDiscount = tradeIn?.value || 0;
   const baseAfterTrade = Math.max(0, subtotal - tradeInDiscount);
-  const discount = resolveDiscount(baseAfterTrade, Number(discountValue) || 0, discountMode);
+  // "Valor final" manual sobrepõe o desconto: a diferença vira desconto (ou acréscimo, se negativa)
+  const hasFinalValue = finalValue.trim() !== "" && Number.isFinite(Number(finalValue));
+  const discount = hasFinalValue
+    ? baseAfterTrade - Math.max(0, Number(finalValue))
+    : resolveDiscount(baseAfterTrade, Number(discountValue) || 0, discountMode);
   const total = saleTotal(subtotal, tradeInDiscount, discount);
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const remaining = remainingToPay(total, totalPaid);
@@ -384,7 +389,7 @@ export default function PDVPage() {
       toast.success("Venda finalizada com sucesso!");
       // Reset
       setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
-      setCustomerQuery(""); setImeiQuery(""); setDiscountValue(""); setSaleNotes("");
+      setCustomerQuery(""); setImeiQuery(""); setDiscountValue(""); setFinalValue(""); setSaleNotes("");
       setGiftsCost(""); setRequiresInvoice(false);
       if (fromQuote) { setFromQuote(null); setSearchParams({}, { replace: true }); }
     } catch (err) {
@@ -704,6 +709,16 @@ export default function PDVPage() {
                       </SelectContent>
                     </Select>
                     {discount > 0 && <span className="text-sm font-medium text-success">-{fmt(discount)}</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm">Valor final (R$)</Label>
+                    <Input
+                      type="number"
+                      value={finalValue}
+                      onChange={(e) => setFinalValue(e.target.value)}
+                      placeholder={String(baseAfterTrade)}
+                      className="h-9 w-28"
+                    />
                   </div>
                 </div>
 

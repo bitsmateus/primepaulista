@@ -29,7 +29,7 @@ const saleInput = z.object({
   sellerName: z.string().optional().default(""),
   subtotal: z.coerce.number().min(0),
   tradeInDiscount: z.coerce.number().min(0).default(0),
-  discount: z.coerce.number().min(0).default(0),
+  discount: z.coerce.number().default(0),
   total: z.coerce.number().min(0),
   giftsCost: z.coerce.number().min(0).default(0),
   requiresInvoice: z.coerce.boolean().default(false),
@@ -330,7 +330,7 @@ export async function saleRoutes(app: FastifyInstance) {
       .object({
         customerId: z.string().uuid().optional(),
         sellerName: z.string().max(120).optional(),
-        discount: z.coerce.number().min(0).optional(),
+        discount: z.coerce.number().optional(),
         giftsCost: z.coerce.number().min(0).optional(),
         requiresInvoice: z.coerce.boolean().optional(),
         notes: z.string().max(2000).optional(),
