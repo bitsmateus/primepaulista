@@ -1,6 +1,7 @@
 import { Device, DeviceCategory } from "@/types/inventory";
 import { DEVICE_CATEGORIES, MODELS_BY_CATEGORY } from "@/data/appleCatalog";
 import { capacityInGB, daysInStock } from "@/lib/devices";
+import { formatCapacity } from "@/lib/utils";
 import { canonicalModel, modelGroupKey } from "@/lib/modelName";
 
 // Localização, ordenação, filtros, resumo por modelo e balanço de estoque
@@ -149,12 +150,16 @@ export function matchesDeviceFilters(d: Device, f: DeviceFilters): boolean {
   const q = (f.search ?? "").trim().toLowerCase();
   if (q) {
     const hay = [
-      d.model, d.brand, d.color, d.capacity, d.location, d.supplier,
+      d.model, d.brand, d.color, d.capacity, formatCapacity(d.capacity || ""), d.location, d.supplier,
       d.serialImei, d.imei2, d.serial, d.internalSerial,
     ]
       .join(" ")
       .toLowerCase();
-    if (!hay.includes(q) && !hay.replace(/\s+/g, "").includes(normCode(q))) return false;
+    // cada palavra da busca precisa aparecer, em qualquer ordem ("iphone 15 128gb azul")
+    const tokens = q.split(/\s+/);
+    const hayCompact = hay.replace(/\s+/g, "");
+    const ok = tokens.every((t) => hay.includes(t)) || hayCompact.includes(normCode(q));
+    if (!ok) return false;
   }
   return true;
 }

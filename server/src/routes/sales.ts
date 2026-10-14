@@ -336,6 +336,8 @@ export async function saleRoutes(app: FastifyInstance) {
         notes: z.string().max(2000).optional(),
         paymentMethod: paymentMethod.optional(),
         installments: z.coerce.number().int().min(1).optional(),
+        // novo valor de venda por item (aparelhos e acessórios); não mexe no estoque
+        items: z.array(z.object({ id: z.string().uuid(), price: z.coerce.number().min(0) })).optional(),
       })
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
@@ -355,9 +357,33 @@ export async function saleRoutes(app: FastifyInstance) {
         if (p.data.requiresInvoice !== undefined && p.data.requiresInvoice !== sale.requiresInvoice) changes.nota = { de: sale.requiresInvoice, para: p.data.requiresInvoice };
         if (p.data.notes !== undefined && p.data.notes !== (sale.notes ?? "")) changes.observacao = true;
         if (p.data.paymentMethod) changes.formaPagamento = p.data.paymentMethod;
-        audit = { desc: `Editou a venda de ${brl(sale.total)} de ${cust?.name ?? "cliente"} (${Object.keys(changes).join(", ") || "sem mudanças"})`, details: changes };
 
         const update: Record<string, unknown> = {};
+        // Valores dos itens: atualiza o preço e recalcula o subtotal
+        let subtotal = Number(sale.subtotal);
+        let itemsChanged = false;
+        if (p.data.items?.length) {
+          const current = await tx.select().from(saleItems).where(eq(saleItems.saleId, id));
+          const byId = new Map(current.map((i) => [i.id, i]));
+          const priceChanges: Record<string, unknown> = {};
+          for (const it of p.data.items) {
+            const row = byId.get(it.id);
+            if (!row) throw saleError("Item não pertence a esta venda.");
+            if (Number(row.price) === it.price) continue;
+            priceChanges[row.name] = { de: Number(row.price), para: it.price };
+            await tx.update(saleItems).set({ price: String(it.price) }).where(eq(saleItems.id, it.id));
+            row.price = String(it.price);
+            itemsChanged = true;
+          }
+          if (itemsChanged) {
+            changes.valorItens = priceChanges;
+            subtotal = current.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0);
+            update.subtotal = String(subtotal);
+          }
+        }
+
+        audit = { desc: `Editou a venda de ${brl(sale.total)} de ${cust?.name ?? "cliente"} (${Object.keys(changes).join(", ") || "sem mudanças"})`, details: changes };
+
         if (p.data.customerId !== undefined) update.customerId = p.data.customerId;
         if (p.data.sellerName !== undefined) update.sellerName = p.data.sellerName;
         if (p.data.notes !== undefined) update.notes = p.data.notes;
@@ -365,9 +391,10 @@ export async function saleRoutes(app: FastifyInstance) {
         if (p.data.requiresInvoice !== undefined) update.requiresInvoice = p.data.requiresInvoice;
 
         let total = Number(sale.total);
-        if (p.data.discount !== undefined) {
-          total = Math.max(0, Number(sale.subtotal) - Number(sale.tradeInDiscount) - p.data.discount);
-          update.discount = String(p.data.discount);
+        if (p.data.discount !== undefined || itemsChanged) {
+          const newDiscount = p.data.discount ?? Number(sale.discount);
+          total = Math.max(0, subtotal - Number(sale.tradeInDiscount) - newDiscount);
+          if (p.data.discount !== undefined) update.discount = String(p.data.discount);
           update.total = String(total);
         }
         if (Object.keys(update).length) {
@@ -377,6 +404,13 @@ export async function saleRoutes(app: FastifyInstance) {
         // Forma de pagamento: substitui os pagamentos por um único do total.
         // Se já era exatamente esse pagamento, mantém (preserva a conferência financeira);
         // se mudou, o novo pagamento volta a "Aguardando" conferência.
+        if (!p.data.paymentMethod && itemsChanged) {
+          // sem trocar a forma de pagamento: acompanha o novo total quando há pagamento único
+          const existing = await tx.select().from(payments).where(eq(payments.saleId, id));
+          if (existing.length === 1) {
+            await tx.update(payments).set({ amount: String(total) }).where(eq(payments.id, existing[0].id));
+          }
+        }
         if (p.data.paymentMethod) {
           const existing = await tx.select().from(payments).where(eq(payments.saleId, id));
           const newInst = p.data.installments ?? 1;
