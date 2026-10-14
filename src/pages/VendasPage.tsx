@@ -73,6 +73,7 @@ export default function VendasPage() {
   // Form de edição
   const [eCustomer, setECustomer] = useState("");
   const [eSeller, setESeller] = useState("");
+  const [ePrices, setEPrices] = useState<Record<string, string>>({});
   const [eDiscount, setEDiscount] = useState("");
   const [ePayment, setEPayment] = useState<PaymentMethod>("PIX");
   const [eInstallments, setEInstallments] = useState("1");
@@ -115,6 +116,7 @@ export default function VendasPage() {
     setEPayment((s.payments[0]?.method as PaymentMethod) || "PIX");
     setEInstallments(String(s.payments[0]?.installments ?? 1));
     setEGiftsCost(String(s.giftsCost ?? 0));
+    setEPrices(Object.fromEntries(s.items.map((i) => [i.id, String(i.price)])));
     setERequiresInvoice(s.requiresInvoice ?? false);
   };
 
@@ -127,6 +129,7 @@ export default function VendasPage() {
         sellerName: eSeller,
         discount: Number(eDiscount) || 0,
         giftsCost: Number(eGiftsCost) || 0,
+        items: editSale.items.map((i) => ({ id: i.id, price: Number(ePrices[i.id]) || 0 })),
         requiresInvoice: eRequiresInvoice,
         notes: eNotes,
         paymentMethod: ePayment,
@@ -141,14 +144,17 @@ export default function VendasPage() {
     }
   };
 
+  const editSubtotal = editSale
+    ? editSale.items.reduce((sum, i) => sum + (Number(ePrices[i.id]) || 0) * i.quantity, 0)
+    : 0;
   const editTotalPreview = editSale
-    ? computeSaleTotal(editSale.subtotal, editSale.tradeInDiscount, Number(eDiscount) || 0)
+    ? computeSaleTotal(editSubtotal, editSale.tradeInDiscount, Number(eDiscount) || 0)
     : 0;
 
   // Editar o valor final recalcula o desconto (pode ficar negativo = acréscimo)
   const setEditFinalValue = (v: string) => {
     if (!editSale || v.trim() === "" || !Number.isFinite(Number(v))) return;
-    const base = editSale.subtotal - editSale.tradeInDiscount;
+    const base = editSubtotal - editSale.tradeInDiscount;
     setEDiscount(String(Math.round((base - Number(v)) * 100) / 100));
   };
 
@@ -419,7 +425,7 @@ export default function VendasPage() {
 
       {/* Editar venda (admin) */}
       <Dialog open={!!editSale} onOpenChange={(o) => !o && setEditSale(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Venda</DialogTitle></DialogHeader>
           {editSale && (
             <div className="space-y-3">
@@ -440,6 +446,25 @@ export default function VendasPage() {
                     {[...new Set([...sellers, eSeller].filter(Boolean))].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label>Itens (valor de venda)</Label>
+                <div className="mt-1 space-y-2 rounded-lg border p-2">
+                  {editSale.items.map((i) => (
+                    <div key={i.id} className="flex items-center gap-2">
+                      <span className="flex-1 text-sm">{i.quantity}× {i.name}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="w-28"
+                        aria-label={`Valor de ${i.name}`}
+                        value={ePrices[i.id] ?? ""}
+                        onChange={(e) => setEPrices((p) => ({ ...p, [i.id]: e.target.value }))}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -486,7 +511,7 @@ export default function VendasPage() {
                 <span className="font-medium">Novo total</span>
                 <span className="font-semibold">{fmt(editTotalPreview)}</span>
               </div>
-              <p className="text-xs text-muted-foreground">A edição não altera os itens nem o estoque. Para trocar produtos, faça a devolução e uma nova venda.</p>
+              <p className="text-xs text-muted-foreground">A edição altera os valores, mas não o estoque e nem os produtos. Para trocar produtos, faça a devolução e uma nova venda.</p>
               <div className="flex justify-end gap-2 pt-1">
                 <Button variant="outline" onClick={() => setEditSale(null)}>Cancelar</Button>
                 <Button onClick={handleSaveEdit} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>

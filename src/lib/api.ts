@@ -1307,6 +1307,7 @@ export interface SaleUpdate {
   notes?: string;
   paymentMethod?: PaymentMethod;
   installments?: number;
+  items?: { id: string; price: number }[];
 }
 
 export type { Sale };

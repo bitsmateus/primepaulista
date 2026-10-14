@@ -105,6 +105,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
 
   <div class="fields">
     ${sale.saleNumber != null ? fieldRow("Venda", saleNumberLabel(sale.saleNumber)) + "\n    " : ""}${fieldRow("Data", formatDate(sale.createdAt))}
+    ${sale.seller ? fieldRow("Vendedor", esc(sale.seller)) : ""}
     ${fieldRow("Cliente", c?.name ?? "")}
     <div class="two">
       ${fieldRow("CPF", c?.cpf ?? "")}

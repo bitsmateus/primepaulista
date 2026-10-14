@@ -514,7 +514,7 @@ export default function DevicesPage() {
         </div>
 
         {/* Abas: estoque de lacrados, de seminovos e vendidos (cada um separado) */}
-        <Tabs value={stockTab} onValueChange={(v) => { setStockTab(v as "Lacrado" | "Seminovo" | "sold"); setFilterCondition("all"); setFilterStatus("all"); }}>
+        <Tabs value={stockTab} onValueChange={(v) => { setStockTab(v as "Lacrado" | "Seminovo" | "sold"); setFilterCondition("all"); setFilterStatus("all"); setFilterCategory("all"); setFilterBrand("all"); setFilterLocation("all"); }}>
           <TabsList>
             <TabsTrigger value="Lacrado" className="gap-2">
               Lacrados
