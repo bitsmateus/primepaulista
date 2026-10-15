@@ -5,9 +5,10 @@ import { db } from "../db/index";
 import { customers } from "../db/schema/index";
 import { authenticate, requireCapability } from "../plugins/auth";
 import { logAudit } from "../services/audit";
+import { capitalizeName } from "../lib/names";
 
 const customerInput = z.object({
-  name: z.string().min(1).max(200),
+  name: z.string().min(1).max(200).transform(capitalizeName),
   cpf: z.string().max(20).optional().default(""),
   whatsapp: z.string().max(30).optional().default(""),
   birthday: z.string().max(20).optional().default(""),

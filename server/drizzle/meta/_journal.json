@@ -232,6 +232,13 @@
       "when": 1790888459359,
       "tag": "0032_troca_capacidade_cor",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0033_nomes_capitalizados",
+      "breakpoints": true
     }
   ]
 }

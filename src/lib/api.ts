@@ -1308,6 +1308,8 @@ export interface SaleUpdate {
   paymentMethod?: PaymentMethod;
   installments?: number;
   items?: { id: string; price: number }[];
+  total?: number;
+  payments?: { method: PaymentMethod; amount: number; installments: number }[];
 }
 
 export type { Sale };

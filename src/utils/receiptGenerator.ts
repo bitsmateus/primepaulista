@@ -6,7 +6,8 @@ import { saleDeviceLines, saleNumberLabel, tradeInModelLine } from "@/lib/sales"
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
+// internal = via de controle interno da loja (pagamentos discriminados, sem termo de garantia)
+export function generateReceiptHTML(sale: Sale, devices: Device[], internal = false): string {
   const formatDate = (d: Date) =>
     new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
@@ -22,8 +23,8 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   const conditions = sale.items
     .filter((i) => i.type === "device")
     .map((i) => devices.find((d) => d.id === i.deviceId)?.condition ?? "Seminovo");
-  const hasSeminovo = conditions.includes("Seminovo");
-  const hasLacrado = conditions.includes("Lacrado");
+  const hasSeminovo = !internal && conditions.includes("Seminovo");
+  const hasLacrado = !internal && conditions.includes("Lacrado");
   const terms = getWarrantyTerms();
   const footerHtml = hasSeminovo
     ? warrantyFooterHTML()
@@ -34,7 +35,18 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
   // O recibo mostra só o que o cliente leva: o aparelho de troca aparece no quadro
   // próprio e não abate o total.
   const subtotal = sale.items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const receiptTotal = Math.max(0, subtotal - sale.discount);
+  // total líquido + troca = valor dos itens após desconto (respeita ajuste manual do valor final)
+  const receiptTotal = Math.max(0, sale.total + sale.tradeInDiscount);
+
+  const payRows = sale.payments.length
+    ? sale.payments
+        .map(
+          (p) =>
+            `<tr><td>${esc(p.method)}</td><td class="c">${p.installments && p.installments > 1 ? p.installments + "x" : "à vista"}</td><td class="r">${fmt(p.amount)}</td></tr>`
+        )
+        .join("")
+    : `<tr><td colspan="3" class="c">Nenhum pagamento registrado</td></tr>`;
+  const totalPaid = sale.payments.reduce((a, p) => a + p.amount, 0);
 
   const itemRows = sale.items
     .map(
@@ -126,6 +138,7 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
       ${sale.saleNumber != null ? fieldRow("Venda", saleNumberLabel(sale.saleNumber)) : ""}
       ${fieldRow("Data", formatDate(sale.createdAt))}
     </div>
+    ${sale.seller ? fieldRow("Vendedor", esc(sale.seller)) : ""}
     ${fieldRow("Cliente", c?.name ?? "")}
     <div class="two">
       ${fieldRow("CPF", c?.cpf ?? "")}
@@ -176,6 +189,30 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
     </tbody>
   </table>
 
+  ${internal ? `<div class="fields">
+    <div class="field"><span class="lbl" style="min-width:100%">VIA DE CONTROLE INTERNO — não entregar ao cliente</span></div>
+    <table>
+      <thead><tr><th>Forma de pagamento</th><th style="width:70px">Parcelas</th><th style="width:100px">Valor</th></tr></thead>
+      <tbody>
+        ${payRows}
+        <tr class="totrow"><td colspan="2" class="r">Total pago</td><td class="r">${fmt(totalPaid)}</td></tr>
+      </tbody>
+    </table>
+    <div class="two">
+      ${fieldRow("Subtotal", fmt(subtotal))}
+      ${fieldRow("Desconto", fmt(sale.discount))}
+    </div>
+    <div class="two">
+      ${fieldRow("Troca", fmt(sale.tradeInDiscount))}
+      ${fieldRow("Total líquido", fmt(sale.total))}
+    </div>
+    <div class="two">
+      ${fieldRow("Brindes (custo)", fmt(sale.giftsCost))}
+      ${fieldRow("Nota fiscal", sale.requiresInvoice ? "Sim" : "Não")}
+    </div>
+    ${sale.notes ? fieldRow("Obs.", esc(sale.notes)) : ""}
+  </div>` : ""}
+
   ${footerHtml ? `<div class="warranty-foot">
     ${footerHtml}
   </div>` : ""}
@@ -190,8 +227,19 @@ export function generateReceiptHTML(sale: Sale, devices: Device[]): string {
 </html>`;
 }
 
+// Impressão com 3 vias: 1ª e 2ª para o cliente, 3ª de controle interno (pagamentos discriminados).
+export function generateReceiptCopiesHTML(sale: Sale, devices: Device[]): string {
+  const customerHtml = generateReceiptHTML(sale, devices);
+  const internalHtml = generateReceiptHTML(sale, devices, true);
+  const bodyOf = (html: string) => /<body>([\s\S]*)<\/body>/.exec(html)?.[1] ?? "";
+  const pages = [bodyOf(customerHtml), bodyOf(customerHtml), bodyOf(internalHtml)]
+    .map((b, i, all) => `<div${i < all.length - 1 ? ' style="page-break-after: always"' : ""}>${b}</div>`)
+    .join("\n");
+  return customerHtml.replace(/<body>[\s\S]*<\/body>/, () => `<body>\n${pages}\n</body>`);
+}
+
 export function printReceipt(sale: Sale, devices: Device[]) {
-  const html = generateReceiptHTML(sale, devices);
+  const html = generateReceiptCopiesHTML(sale, devices);
   const win = window.open("", "_blank", "width=720,height=900");
   if (win) {
     win.document.write(html);

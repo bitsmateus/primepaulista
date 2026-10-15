@@ -74,8 +74,8 @@ export default function VendasPage() {
   const [eCustomer, setECustomer] = useState("");
   const [eSeller, setESeller] = useState("");
   const [eDiscount, setEDiscount] = useState("");
-  const [ePayment, setEPayment] = useState<PaymentMethod>("PIX");
-  const [eInstallments, setEInstallments] = useState("1");
+  const [ePays, setEPays] = useState<{ method: PaymentMethod; amount: string; installments: string }[]>([]);
+  const [eFinal, setEFinal] = useState<string | null>(null); // valor final manual (null = calculado)
   const [eNotes, setENotes] = useState("");
   const [eGiftsCost, setEGiftsCost] = useState("");
   const [eItemPrices, setEItemPrices] = useState<Record<string, string>>({});
@@ -113,8 +113,13 @@ export default function VendasPage() {
     setESeller(s.seller || "");
     setEDiscount(String(s.discount ?? 0));
     setENotes(s.notes ?? "");
-    setEPayment((s.payments[0]?.method as PaymentMethod) || "PIX");
-    setEInstallments(String(s.payments[0]?.installments ?? 1));
+    setEPays(
+      s.payments.length
+        ? s.payments.map((p) => ({ method: p.method, amount: String(p.amount), installments: String(p.installments ?? 1) }))
+        : [{ method: "PIX", amount: String(s.total), installments: "1" }]
+    );
+    // se o total salvo foi ajustado à mão (≠ cálculo), mantém como valor final manual
+    setEFinal(Math.abs(computeSaleTotal(s.subtotal, s.tradeInDiscount, s.discount ?? 0) - s.total) > 0.005 ? String(s.total) : null);
     setEGiftsCost(String(s.giftsCost ?? 0));
     setEItemPrices(Object.fromEntries(s.items.map((i) => [i.id, String(i.price)])));
     setERequiresInvoice(s.requiresInvoice ?? false);
@@ -134,8 +139,12 @@ export default function VendasPage() {
         giftsCost: Number(eGiftsCost) || 0,
         requiresInvoice: eRequiresInvoice,
         notes: eNotes,
-        paymentMethod: ePayment,
-        installments: allowsInstallments(ePayment) ? Number(eInstallments) || 1 : 1,
+        total: editFinal,
+        payments: editPayRows.map((r) => ({
+          method: r.method,
+          amount: r.amount,
+          installments: allowsInstallments(r.method) ? Number(r.installments) || 1 : 1,
+        })),
       });
       toast.success("Venda atualizada!");
       setEditSale(null);
@@ -157,12 +166,17 @@ export default function VendasPage() {
     ? computeSaleTotal(editSubtotal, editSale.tradeInDiscount, Number(eDiscount) || 0)
     : 0;
 
-  // Editar o valor final recalcula o desconto (pode ficar negativo = acréscimo)
-  const setEditFinalValue = (v: string) => {
-    if (!editSale || v.trim() === "" || !Number.isFinite(Number(v))) return;
-    const base = editSubtotal - editSale.tradeInDiscount;
-    setEDiscount(String(Math.round((base - Number(v)) * 100) / 100));
-  };
+  // Valor final: manual (não altera o desconto); se não for digitado, vale o cálculo
+  const editFinal = eFinal !== null && eFinal.trim() !== "" && Number.isFinite(Number(eFinal)) ? Number(eFinal) : editTotalPreview;
+  // Com uma única forma de pagamento, o valor acompanha o valor final
+  const editPayRows = ePays.map((r) => ({
+    ...r,
+    amount: ePays.length === 1 ? editFinal : Number(r.amount) || 0,
+  }));
+  const editPaidSum = editPayRows.reduce((sum, r) => sum + r.amount, 0);
+  const editPayDiff = Math.round((editFinal - editPaidSum) * 100) / 100;
+  const updateEPay = (idx: number, patch: Partial<{ method: PaymentMethod; amount: string; installments: string }>) =>
+    setEPays((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
 
   return (
     <AppLayout wide>
@@ -474,22 +488,61 @@ export default function VendasPage() {
                 </div>
                 <div>
                   <Label>Valor final (R$)</Label>
-                  <Input type="number" key={editTotalPreview} defaultValue={editTotalPreview} onBlur={(e) => setEditFinalValue(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Forma de pagamento</Label>
-                  <Select value={ePayment} onValueChange={(v) => setEPayment(v as PaymentMethod)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Input type="number" value={eFinal ?? String(editTotalPreview)} onChange={(e) => setEFinal(e.target.value)} />
                 </div>
               </div>
-              {allowsInstallments(ePayment) && (
-                <div>
-                  <Label>Parcelas</Label>
-                  <Input type="number" min={1} value={eInstallments} onChange={(e) => setEInstallments(e.target.value)} />
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <Label>Formas de pagamento</Label>
+                {ePays.map((r, idx) => (
+                  <div key={idx} className="flex flex-wrap items-center gap-2">
+                    <Select value={r.method} onValueChange={(v) => updateEPay(idx, { method: v as PaymentMethod })}>
+                      <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
+                      <SelectContent>{PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                    {allowsInstallments(r.method) && (
+                      <Input
+                        type="number"
+                        min={1}
+                        className="h-8 w-16"
+                        title="Parcelas"
+                        value={r.installments}
+                        onChange={(e) => updateEPay(idx, { installments: e.target.value })}
+                      />
+                    )}
+                    <Input
+                      type="number"
+                      className="h-8 w-28"
+                      title="Valor pago nesta forma"
+                      value={ePays.length === 1 ? String(editFinal) : r.amount}
+                      disabled={ePays.length === 1}
+                      onChange={(e) => updateEPay(idx, { amount: e.target.value })}
+                    />
+                    {ePays.length > 1 && (
+                      <Button variant="ghost" size="sm" onClick={() => setEPays((prev) => prev.filter((_, i) => i !== idx))}>
+                        Remover
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setEPays((prev) => [
+                      ...(prev.length === 1 ? [{ ...prev[0], amount: String(editFinal) }] : prev),
+                      { method: "PIX", amount: "0", installments: "1" },
+                    ])
+                  }
+                >
+                  + Adicionar forma de pagamento
+                </Button>
+                {ePays.length > 1 && (
+                  <p className={"text-xs " + (Math.abs(editPayDiff) > 0.01 ? "text-destructive" : "text-muted-foreground")}>
+                    Soma dos pagamentos: {fmt(editPaidSum)}
+                    {Math.abs(editPayDiff) > 0.01 ? " · " + (editPayDiff > 0 ? "faltam " : "sobram ") + fmt(Math.abs(editPayDiff)) : " · confere com o valor final"}
+                  </p>
+                )}
+              </div>
               <div>
                 <Label>Descrição / Observação</Label>
                 <Textarea value={eNotes} onChange={(e) => setENotes(e.target.value)} rows={2} placeholder="Observações da venda" />
@@ -510,7 +563,7 @@ export default function VendasPage() {
               </div>
               <div className="rounded-lg bg-muted p-3 flex justify-between text-sm">
                 <span className="font-medium">Novo total</span>
-                <span className="font-semibold">{fmt(editTotalPreview)}</span>
+                <span className="font-semibold">{fmt(editFinal)}</span>
               </div>
               <p className="text-xs text-muted-foreground">A edição de valores não altera o estoque. Para trocar produtos, faça a devolução e uma nova venda.</p>
               <div className="flex justify-end gap-2 pt-1">

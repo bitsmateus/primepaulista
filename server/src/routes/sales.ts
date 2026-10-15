@@ -337,6 +337,13 @@ export async function saleRoutes(app: FastifyInstance) {
         paymentMethod: paymentMethod.optional(),
         installments: z.coerce.number().int().min(1).optional(),
         items: z.array(z.object({ id: z.string().uuid(), price: z.coerce.number() })).optional(),
+        // valor final manual (não mexe no desconto)
+        total: z.coerce.number().min(0).optional(),
+        // várias formas de pagamento (ex.: parte no Pix, parte no cartão)
+        payments: z
+          .array(z.object({ method: paymentMethod, amount: z.coerce.number().min(0), installments: z.coerce.number().int().min(1).default(1) }))
+          .min(1)
+          .optional(),
       })
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
@@ -356,6 +363,8 @@ export async function saleRoutes(app: FastifyInstance) {
         if (p.data.requiresInvoice !== undefined && p.data.requiresInvoice !== sale.requiresInvoice) changes.nota = { de: sale.requiresInvoice, para: p.data.requiresInvoice };
         if (p.data.notes !== undefined && p.data.notes !== (sale.notes ?? "")) changes.observacao = true;
         if (p.data.paymentMethod) changes.formaPagamento = p.data.paymentMethod;
+        if (p.data.payments) changes.pagamentos = p.data.payments;
+        if (p.data.total !== undefined && p.data.total !== Number(sale.total)) changes.valorFinal = { de: Number(sale.total), para: p.data.total };
         audit = { desc: `Editou a venda de ${brl(sale.total)} de ${cust?.name ?? "cliente"} (${Object.keys(changes).join(", ") || "sem mudanças"})`, details: changes };
 
         const update: Record<string, unknown> = {};
@@ -394,14 +403,33 @@ export async function saleRoutes(app: FastifyInstance) {
           update.discount = String(discount);
           update.total = String(total);
         }
+        if (p.data.total !== undefined) {
+          total = p.data.total;
+          update.total = String(total);
+        }
         if (Object.keys(update).length) {
           await tx.update(sales).set(update).where(eq(sales.id, id));
+        }
+
+        // Pagamentos informados (um ou mais): mantém se já eram exatamente estes (preserva a
+        // conferência financeira); se mudou, os novos voltam a "Aguardando" conferência.
+        if (p.data.payments) {
+          const existing = await tx.select().from(payments).where(eq(payments.saleId, id));
+          const key = (m: string, a: number, i: number) => m + "|" + a.toFixed(2) + "|" + i;
+          const oldKeys = existing.map((e) => key(e.method, Number(e.amount), e.installments ?? 1)).sort();
+          const newKeys = p.data.payments.map((e) => key(e.method, e.amount, e.installments)).sort();
+          if (JSON.stringify(oldKeys) !== JSON.stringify(newKeys)) {
+            await tx.delete(payments).where(eq(payments.saleId, id));
+            await tx.insert(payments).values(
+              p.data.payments.map((e) => ({ saleId: id, method: e.method, amount: String(e.amount), installments: e.installments }))
+            );
+          }
         }
 
         // Forma de pagamento: substitui os pagamentos por um único do total.
         // Se já era exatamente esse pagamento, mantém (preserva a conferência financeira);
         // se mudou, o novo pagamento volta a "Aguardando" conferência.
-        if (p.data.paymentMethod) {
+        if (!p.data.payments && p.data.paymentMethod) {
           const existing = await tx.select().from(payments).where(eq(payments.saleId, id));
           const newInst = p.data.installments ?? 1;
           const same =

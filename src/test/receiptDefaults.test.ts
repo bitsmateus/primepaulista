@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
-import { generateReceiptHTML } from "@/utils/receiptGenerator";
+import { generateReceiptHTML, generateReceiptCopiesHTML } from "@/utils/receiptGenerator";
 import { generateQuoteHTML } from "@/utils/quotePrint";
 import { generateOSReceiptHTML } from "@/utils/osReceiptGenerator";
 import { setStoreSettings, resetStoreSettings } from "@/lib/storeSettings";
@@ -127,7 +127,7 @@ describe("documentos impressos com os padroes da loja", () => {
 
 describe("recibo: total e termo de garantia", () => {
   it("total soma só os itens (troca não abate)", () => {
-    const html = generateReceiptHTML({ ...sale, discount: 0, tradeInDiscount: 300, tradeIn: { imei: "1", model: "iPhone 12", healthDescription: "", value: 300 } }, devices);
+    const html = generateReceiptHTML({ ...sale, discount: 0, total: 8358, tradeInDiscount: 300, tradeIn: { imei: "1", model: "iPhone 12", healthDescription: "", value: 300 } }, devices);
     expect(html).toContain("8.658,00");
     expect(html).not.toContain("Entrada (aparelho de troca)");
   });
@@ -140,5 +140,18 @@ describe("recibo: total e termo de garantia", () => {
   it("aparelho seminovo: imprime o termo completo", () => {
     const html = generateReceiptHTML(sale, [{ ...devices[0], condition: "Seminovo" }]);
     expect(html).toContain("TERMO DE GARANTIA");
+  });
+  it("mostra o vendedor", () => {
+    expect(generateReceiptHTML(sale, devices)).toContain("Vendedor:");
+  });
+  it("3 vias: a 3ª é de controle interno com pagamentos discriminados", () => {
+    const html = generateReceiptCopiesHTML(
+      { ...sale, payments: [{ id: "p1", method: "PIX", amount: 4000 }, { id: "p2", method: "Cartão de Crédito", amount: 4258, installments: 3 }] },
+      devices
+    );
+    expect(html.split("page-break-after").length - 1).toBe(2);
+    expect(html.split("VIA DE CONTROLE INTERNO").length - 1).toBe(1);
+    expect(html).toContain("4.258,00");
+    expect(html).toContain("3x");
   });
 });
