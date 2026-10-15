@@ -50,6 +50,12 @@ export default function PDVPage() {
   // Customer
   const [customerQuery, setCustomerQuery] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
+  // 2º cliente: mesma compra/pagamento, mas recibo e venda separados
+  const [showSecond, setShowSecond] = useState(false);
+  const [customer2, setCustomer2] = useState<Customer | null>(null);
+  const [customer2Query, setCustomer2Query] = useState("");
+  const [secondIds, setSecondIds] = useState<string[]>([]);
+  const [lastSale2, setLastSale2] = useState<Sale | null>(null);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newCpf, setNewCpf] = useState("");
@@ -149,6 +155,10 @@ export default function PDVPage() {
     setShowCustomerResults(false);
     toast.success(`Cliente selecionado: ${c.name}`);
   };
+
+  const filteredCustomers2 = customer2Query.trim().length >= 2
+    ? customers.filter((c) => customerMatchesSearch(c, customer2Query))
+    : [];
 
   const handleCustomerSearch = () => {
     if (filteredCustomers.length === 1) {
@@ -366,36 +376,108 @@ export default function PDVPage() {
     if (cart.length === 0) { toast.error("Carrinho vazio."); return; }
     if (remaining > 0.01) { toast.error("Pagamento insuficiente."); return; }
 
+    const itemsSecond = customer2 ? cart.filter((i) => secondIds.includes(i.id)) : [];
+    const split = itemsSecond.length > 0 && itemsSecond.length < cart.length;
+    if (customer2 && secondIds.length > 0 && !split) {
+      toast.error("Deixe ao menos um item para cada cliente, ou remova o 2º cliente.");
+      return;
+    }
+
     setFinalizing(true);
+    let firstDone = false;
     try {
-      const sale = await finalizeSale({
-        customer,
-        items: cart,
-        payments,
-        tradeIn: tradeIn || undefined,
-        seller: seller as Seller,
-        subtotal,
-        tradeInDiscount,
-        discount,
-        total,
-        giftsCost: Number(giftsCost) || 0,
-        requiresInvoice,
-        notes: saleNotes.trim() || undefined,
-        quoteId: fromQuote?.id,
-      });
+      let sale: Sale;
+      let sale2: Sale | null = null;
+      if (!split || !customer2) {
+        sale = await finalizeSale({
+          customer,
+          items: cart,
+          payments,
+          tradeIn: tradeIn || undefined,
+          seller: seller as Seller,
+          subtotal,
+          tradeInDiscount,
+          discount,
+          total,
+          giftsCost: Number(giftsCost) || 0,
+          requiresInvoice,
+          notes: saleNotes.trim() || undefined,
+          quoteId: fromQuote?.id,
+        });
+      } else {
+        // Duas vendas, um único pagamento: troca/desconto/brindes ficam na venda do 1º cliente
+        // e cada forma de pagamento é dividida proporcionalmente ao total de cada venda.
+        const itemsFirst = cart.filter((i) => !secondIds.includes(i.id));
+        const subFirst = cartSubtotal(itemsFirst);
+        const subSecond = cartSubtotal(itemsSecond);
+        const totalFirst = saleTotal(subFirst, tradeInDiscount, discount);
+        const totalSecond = subSecond;
+        const grand = totalFirst + totalSecond;
+        const ratio = grand > 0 ? totalFirst / grand : 1;
+        const round2 = (n: number) => Math.round(n * 100) / 100;
+        const payFirst: PaymentEntry[] = [];
+        const paySecond: PaymentEntry[] = [];
+        for (const p of payments) {
+          const a = round2(p.amount * ratio);
+          if (a > 0) payFirst.push({ ...p, id: `${p.id}-a`, amount: a });
+          const b = round2(p.amount - a);
+          if (b > 0) paySecond.push({ ...p, id: `${p.id}-b`, amount: b });
+        }
+        sale = await finalizeSale({
+          customer,
+          items: itemsFirst,
+          payments: payFirst,
+          tradeIn: tradeIn || undefined,
+          seller: seller as Seller,
+          subtotal: subFirst,
+          tradeInDiscount,
+          discount,
+          total: totalFirst,
+          giftsCost: Number(giftsCost) || 0,
+          requiresInvoice,
+          notes: saleNotes.trim() || undefined,
+          quoteId: fromQuote?.id,
+        });
+        firstDone = true;
+        sale2 = await finalizeSale({
+          customer: customer2,
+          items: itemsSecond,
+          payments: paySecond,
+          seller: seller as Seller,
+          subtotal: subSecond,
+          tradeInDiscount: 0,
+          discount: 0,
+          total: totalSecond,
+          giftsCost: 0,
+          requiresInvoice: false,
+          notes: saleNotes.trim() || undefined,
+        });
+      }
 
       printReceipt(sale, devices);
+      if (sale2) {
+        const s2 = sale2;
+        setTimeout(() => printReceipt(s2, devices), 1500);
+      }
       setLastSale(sale);
-      toast.success("Venda finalizada com sucesso!");
+      setLastSale2(sale2);
+      toast.success(sale2 ? "Duas vendas finalizadas com sucesso!" : "Venda finalizada com sucesso!");
       // Reset
+      setShowSecond(false); setCustomer2(null); setCustomer2Query(""); setSecondIds([]);
       setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
       setCustomerQuery(""); setImeiQuery(""); setDiscountValue(""); setFinalValue(""); setSaleNotes("");
       setGiftsCost(""); setRequiresInvoice(false);
       if (fromQuote) { setFromQuote(null); setSearchParams({}, { replace: true }); }
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : "Falha ao registrar a venda. Tente novamente."
+        firstDone
+          ? "A venda do 1º cliente foi registrada, mas a do 2º falhou. Registre a do 2º cliente separadamente (veja Vendas)."
+          : err instanceof ApiError ? err.message : "Falha ao registrar a venda. Tente novamente."
       );
+      if (firstDone) {
+        setCart([]); setPayments([]); setTradeIn(null); setCustomer(null);
+        setShowSecond(false); setCustomer2(null); setSecondIds([]);
+      }
     } finally {
       setFinalizing(false);
     }
@@ -527,6 +609,64 @@ export default function PDVPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* 2º cliente (mesma compra e pagamento, recibo separado) */}
+                {customer && !showSecond && (
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowSecond(true)}>
+                    <UserPlus className="h-4 w-4" /> Adicionar 2º cliente (mesmo pagamento)
+                  </Button>
+                )}
+                {customer && showSecond && (
+                  <div className="space-y-2 rounded-lg border border-dashed p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">2º cliente</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setShowSecond(false); setCustomer2(null); setCustomer2Query(""); setSecondIds([]); }}
+                      >
+                        Remover
+                      </Button>
+                    </div>
+                    {customer2 ? (
+                      <div className="flex items-center justify-between rounded-lg bg-muted p-3">
+                        <div>
+                          <p className="font-medium text-foreground">{customer2.name}</p>
+                          <p className="text-xs text-muted-foreground">CPF: {customer2.cpf} · WhatsApp: {customer2.whatsapp}</p>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setCustomer2(null)}>Trocar</Button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Input
+                          placeholder="Buscar 2º cliente por nome, CPF ou WhatsApp..."
+                          value={customer2Query}
+                          onChange={(e) => setCustomer2Query(e.target.value)}
+                        />
+                        {filteredCustomers2.length > 0 && (
+                          <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg">
+                            {filteredCustomers2.map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted"
+                                onClick={() => { setCustomer2(c); setCustomer2Query(""); }}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-foreground truncate">{c.name}</p>
+                                  <p className="text-xs text-muted-foreground">CPF: {c.cpf} · {c.whatsapp}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      No carrinho, marque quais itens vão para o 2º cliente. Troca, desconto e brindes ficam na venda do 1º; o pagamento é dividido proporcionalmente.
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -789,6 +929,11 @@ export default function PDVPage() {
                     <RotateCcw className="h-4 w-4" /> 2ª via
                   </Button>
                 )}
+                {lastSale2 && (
+                  <Button variant="outline" className="gap-2" onClick={() => printReceipt(lastSale2, devices)}>
+                    <RotateCcw className="h-4 w-4" /> 2ª via ({lastSale2.customer.name.split(" ")[0]})
+                  </Button>
+                )}
                 {lastSale && (
                   <Button variant="outline" className="gap-2" onClick={() => setShowNf(true)}>
                     <Paperclip className="h-4 w-4" /> Anexar NF
@@ -866,6 +1011,18 @@ export default function PDVPage() {
                           </div>
                           <span className="whitespace-nowrap text-sm font-semibold">{fmt(item.price * item.quantity)}</span>
                         </div>
+                        {customer2 && (
+                          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={secondIds.includes(item.id)}
+                              onChange={(e) =>
+                                setSecondIds((prev) => e.target.checked ? [...prev, item.id] : prev.filter((x) => x !== item.id))
+                              }
+                            />
+                            Vai para {customer2.name.split(" ")[0]} (2º cliente)
+                          </label>
+                        )}
                       </div>
                     ))}
                   </>

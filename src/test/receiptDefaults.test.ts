@@ -124,3 +124,21 @@ describe("documentos impressos com os padroes da loja", () => {
     resetStoreSettings();
   });
 });
+
+describe("recibo: total e termo de garantia", () => {
+  it("total soma só os itens (troca não abate)", () => {
+    const html = generateReceiptHTML({ ...sale, discount: 0, tradeInDiscount: 300, tradeIn: { imei: "1", model: "iPhone 12", healthDescription: "", value: 300 } }, devices);
+    expect(html).toContain("8.658,00");
+    expect(html).not.toContain("Entrada (aparelho de troca)");
+  });
+  it("aparelho lacrado: sem termo de garantia, só a faixa do fabricante", () => {
+    const html = generateReceiptHTML(sale, devices);
+    expect(html).not.toContain("TERMO DE GARANTIA");
+    expect(html).toContain("APARELHO LACRADO");
+    expect(html).not.toContain("SEMI NOVOS");
+  });
+  it("aparelho seminovo: imprime o termo completo", () => {
+    const html = generateReceiptHTML(sale, [{ ...devices[0], condition: "Seminovo" }]);
+    expect(html).toContain("TERMO DE GARANTIA");
+  });
+});

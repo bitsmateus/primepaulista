@@ -74,7 +74,7 @@ describe("termos de garantia editáveis", () => {
     setWarrantyTerms(t);
     const sale = {
       id: "s", customer: { id: "c", name: "Ana", cpf: "", whatsapp: "", birthday: "", leadOrigin: "Instagram", createdAt: new Date() },
-      items: [{ id: "i", type: "accessory", name: "Capa", price: 10, quantity: 1 }], payments: [], seller: "x", subtotal: 10,
+      items: [{ id: "i", type: "device", deviceId: "dx", name: "iPhone", price: 10, quantity: 1 }], payments: [], seller: "x", subtotal: 10,
       tradeInDiscount: 0, discount: 0, total: 10, giftsCost: 0, requiresInvoice: false, createdAt: new Date(),
     } as unknown as Sale;
     const html = generateReceiptHTML(sale, []);
