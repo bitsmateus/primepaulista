@@ -78,6 +78,7 @@ export default function VendasPage() {
   const [eInstallments, setEInstallments] = useState("1");
   const [eNotes, setENotes] = useState("");
   const [eGiftsCost, setEGiftsCost] = useState("");
+  const [eItemPrices, setEItemPrices] = useState<Record<string, string>>({});
   const [eRequiresInvoice, setERequiresInvoice] = useState(false);
 
   const sellers = useMemo(() => [...new Set(sales.map((s) => s.seller).filter(Boolean))], [sales]);
@@ -115,6 +116,7 @@ export default function VendasPage() {
     setEPayment((s.payments[0]?.method as PaymentMethod) || "PIX");
     setEInstallments(String(s.payments[0]?.installments ?? 1));
     setEGiftsCost(String(s.giftsCost ?? 0));
+    setEItemPrices(Object.fromEntries(s.items.map((i) => [i.id, String(i.price)])));
     setERequiresInvoice(s.requiresInvoice ?? false);
   };
 
@@ -126,6 +128,9 @@ export default function VendasPage() {
         customerId: eCustomer || undefined,
         sellerName: eSeller,
         discount: Number(eDiscount) || 0,
+        items: editSale.items
+          .filter((i) => eItemPrices[i.id] !== undefined && eItemPrices[i.id] !== "" && Number(eItemPrices[i.id]) !== i.price)
+          .map((i) => ({ id: i.id, price: Number(eItemPrices[i.id]) })),
         giftsCost: Number(eGiftsCost) || 0,
         requiresInvoice: eRequiresInvoice,
         notes: eNotes,
@@ -141,14 +146,21 @@ export default function VendasPage() {
     }
   };
 
+  const editSubtotal = editSale
+    ? editSale.items.reduce((sum, i) => {
+        const raw = eItemPrices[i.id];
+        const price = raw === undefined || raw === "" || !Number.isFinite(Number(raw)) ? i.price : Number(raw);
+        return sum + price * i.quantity;
+      }, 0)
+    : 0;
   const editTotalPreview = editSale
-    ? computeSaleTotal(editSale.subtotal, editSale.tradeInDiscount, Number(eDiscount) || 0)
+    ? computeSaleTotal(editSubtotal, editSale.tradeInDiscount, Number(eDiscount) || 0)
     : 0;
 
   // Editar o valor final recalcula o desconto (pode ficar negativo = acréscimo)
   const setEditFinalValue = (v: string) => {
     if (!editSale || v.trim() === "" || !Number.isFinite(Number(v))) return;
-    const base = editSale.subtotal - editSale.tradeInDiscount;
+    const base = editSubtotal - editSale.tradeInDiscount;
     setEDiscount(String(Math.round((base - Number(v)) * 100) / 100));
   };
 
@@ -441,6 +453,20 @@ export default function VendasPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <Label>Itens (valor unitário)</Label>
+                {editSale.items.map((i) => (
+                  <div key={i.id} className="flex items-center gap-2">
+                    <span className="flex-1 truncate text-sm" title={i.name}>{i.quantity}× {i.name}</span>
+                    <Input
+                      type="number"
+                      className="h-8 w-28"
+                      value={eItemPrices[i.id] ?? ""}
+                      onChange={(e) => setEItemPrices((prev) => ({ ...prev, [i.id]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Desconto (R$)</Label>
@@ -486,7 +512,7 @@ export default function VendasPage() {
                 <span className="font-medium">Novo total</span>
                 <span className="font-semibold">{fmt(editTotalPreview)}</span>
               </div>
-              <p className="text-xs text-muted-foreground">A edição não altera os itens nem o estoque. Para trocar produtos, faça a devolução e uma nova venda.</p>
+              <p className="text-xs text-muted-foreground">A edição de valores não altera o estoque. Para trocar produtos, faça a devolução e uma nova venda.</p>
               <div className="flex justify-end gap-2 pt-1">
                 <Button variant="outline" onClick={() => setEditSale(null)}>Cancelar</Button>
                 <Button onClick={handleSaveEdit} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>

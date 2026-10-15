@@ -1,3 +1,4 @@
+import { capitalizeName } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import { Search, UserPlus, Trash2, Pencil, Download, Upload, ShoppingBag, Cake } from "lucide-react";
 import { toast } from "sonner";
@@ -306,7 +307,7 @@ export default function CustomersPage() {
           <div className="space-y-3 py-2">
             <div className="space-y-1">
               <Label>Nome *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" />
+              <Input value={name} onChange={(e) => setName(capitalizeName(e.target.value))} placeholder="Nome completo" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

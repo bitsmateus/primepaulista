@@ -336,6 +336,7 @@ export async function saleRoutes(app: FastifyInstance) {
         notes: z.string().max(2000).optional(),
         paymentMethod: paymentMethod.optional(),
         installments: z.coerce.number().int().min(1).optional(),
+        items: z.array(z.object({ id: z.string().uuid(), price: z.coerce.number() })).optional(),
       })
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: "Dados inválidos" });
@@ -364,10 +365,33 @@ export async function saleRoutes(app: FastifyInstance) {
         if (p.data.giftsCost !== undefined) update.giftsCost = String(p.data.giftsCost);
         if (p.data.requiresInvoice !== undefined) update.requiresInvoice = p.data.requiresInvoice;
 
+        // Preço unitário dos itens (não mexe no estoque): recalcula subtotal e total
+        let subtotal = Number(sale.subtotal);
+        let itemsChanged = false;
+        if (p.data.items?.length) {
+          const current = await tx.select().from(saleItems).where(eq(saleItems.saleId, id));
+          const priceChanges: Record<string, unknown>[] = [];
+          for (const it of p.data.items) {
+            const row = current.find((c) => c.id === it.id);
+            if (!row || Number(row.price) === it.price) continue;
+            await tx.update(saleItems).set({ price: String(it.price) }).where(eq(saleItems.id, it.id));
+            priceChanges.push({ item: row.name, de: Number(row.price), para: it.price });
+            row.price = String(it.price);
+            itemsChanged = true;
+          }
+          if (itemsChanged) {
+            subtotal = current.reduce((sum, r) => sum + Number(r.price) * r.quantity, 0);
+            update.subtotal = String(subtotal);
+            changes.precoItens = priceChanges;
+            audit = { desc: audit.desc.replace(/(.*)$/, "(" + Object.keys(changes).join(", ") + ")"), details: changes };
+          }
+        }
+
         let total = Number(sale.total);
-        if (p.data.discount !== undefined) {
-          total = Math.max(0, Number(sale.subtotal) - Number(sale.tradeInDiscount) - p.data.discount);
-          update.discount = String(p.data.discount);
+        if (p.data.discount !== undefined || itemsChanged) {
+          const discount = p.data.discount ?? Number(sale.discount);
+          total = Math.max(0, subtotal - Number(sale.tradeInDiscount) - discount);
+          update.discount = String(discount);
           update.total = String(total);
         }
         if (Object.keys(update).length) {

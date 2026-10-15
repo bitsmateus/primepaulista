@@ -15,7 +15,7 @@ import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { resolveQuoteForSale } from "@/lib/quotes";
 import { customerMatchesSearch } from "@/lib/customers";
 import { tradeInModelLine } from "@/lib/sales";
-import { formatCapacity } from "@/lib/utils";
+import { formatCapacity, capitalizeName } from "@/lib/utils";
 import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue, resolveDiscount } from "@/lib/pdv";
 import { warrantyDaysForCondition } from "@/lib/warranty";
 import { Button } from "@/components/ui/button";
@@ -1107,7 +1107,7 @@ export default function PDVPage() {
           <div className="space-y-3 py-2">
             <div className="space-y-1">
               <Label>Nome *</Label>
-              <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome completo" />
+              <Input value={newName} onChange={(e) => setNewName(capitalizeName(e.target.value))} placeholder="Nome completo" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

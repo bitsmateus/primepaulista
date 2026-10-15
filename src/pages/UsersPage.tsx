@@ -1,3 +1,4 @@
+import { capitalizeName } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -174,7 +175,7 @@ export default function UsersPage() {
               <div className="space-y-4">
                 <div>
                   <Label>Nome</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do funcionário" />
+                  <Input value={name} onChange={(e) => setName(capitalizeName(e.target.value))} placeholder="Nome do funcionário" />
                 </div>
                 <div>
                   <Label>E-mail (login)</Label>

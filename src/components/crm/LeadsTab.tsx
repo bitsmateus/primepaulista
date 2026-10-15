@@ -1,3 +1,4 @@
+import { capitalizeName } from "@/lib/utils";
 import { useState } from "react";
 import { Plus, Search, Trash2, MessageCircle, History, Settings2, X, GripVertical, Pencil, ShoppingBag, ListChecks, BarChart3, Check, ArrowUp, ArrowDown, RotateCcw, Inbox } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -443,7 +444,7 @@ export default function LeadsTab() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editingId ? "Editar Lead" : "Novo Lead"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" /></div>
+            <div><Label>Nome *</Label><Input value={name} onChange={(e) => setName(capitalizeName(e.target.value))} placeholder="Nome completo" /></div>
             <div><Label>WhatsApp *</Label><Input value={phone} onChange={(e) => setPhone(formatPhoneInput(e.target.value))} placeholder="(11) 99999-9999" /></div>
             <div>
               <Label>Modelo de Interesse</Label>
