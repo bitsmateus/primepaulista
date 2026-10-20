@@ -75,6 +75,7 @@ export default function VendasPage() {
   const [eSeller, setESeller] = useState("");
   const [eDiscount, setEDiscount] = useState("");
   const [ePays, setEPays] = useState<{ method: PaymentMethod; amount: string; installments: string }[]>([]);
+  const [eTrade, setETrade] = useState("");
   const [eFinal, setEFinal] = useState<string | null>(null); // valor final manual (null = calculado)
   const [eNotes, setENotes] = useState("");
   const [eGiftsCost, setEGiftsCost] = useState("");
@@ -121,6 +122,7 @@ export default function VendasPage() {
     // se o total salvo foi ajustado à mão (≠ cálculo), mantém como valor final manual
     setEFinal(Math.abs(computeSaleTotal(s.subtotal, s.tradeInDiscount, s.discount ?? 0) - s.total) > 0.005 ? String(s.total) : null);
     setEGiftsCost(String(s.giftsCost ?? 0));
+    setETrade(String(s.tradeInDiscount ?? 0));
     setEItemPrices(Object.fromEntries(s.items.map((i) => [i.id, String(i.price)])));
     setERequiresInvoice(s.requiresInvoice ?? false);
   };
@@ -140,6 +142,7 @@ export default function VendasPage() {
         requiresInvoice: eRequiresInvoice,
         notes: eNotes,
         total: editFinal,
+        tradeInValue: editSale.tradeIn ? editTrade : undefined,
         payments: editPayRows.map((r) => ({
           method: r.method,
           amount: r.amount,
@@ -162,8 +165,9 @@ export default function VendasPage() {
         return sum + price * i.quantity;
       }, 0)
     : 0;
+  const editTrade = editSale?.tradeIn && eTrade.trim() !== "" && Number.isFinite(Number(eTrade)) ? Number(eTrade) : editSale?.tradeInDiscount ?? 0;
   const editTotalPreview = editSale
-    ? computeSaleTotal(editSubtotal, editSale.tradeInDiscount, Number(eDiscount) || 0)
+    ? computeSaleTotal(editSubtotal, editTrade, Number(eDiscount) || 0)
     : 0;
 
   // Valor final: manual (não altera o desconto); se não for digitado, vale o cálculo
@@ -481,6 +485,13 @@ export default function VendasPage() {
                   </div>
                 ))}
               </div>
+              {editSale.tradeIn && (
+                <div>
+                  <Label>Aparelho de troca — valor da entrada (R$)</Label>
+                  <Input type="number" min={0} value={eTrade} onChange={(e) => setETrade(e.target.value)} />
+                  <p className="mt-0.5 text-xs text-muted-foreground">{editSale.tradeIn.model}</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Desconto (R$)</Label>

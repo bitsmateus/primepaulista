@@ -339,6 +339,8 @@ export async function saleRoutes(app: FastifyInstance) {
         items: z.array(z.object({ id: z.string().uuid(), price: z.coerce.number() })).optional(),
         // valor final manual (não mexe no desconto)
         total: z.coerce.number().min(0).optional(),
+        // valor do aparelho de troca (entrada)
+        tradeInValue: z.coerce.number().min(0).optional(),
         // várias formas de pagamento (ex.: parte no Pix, parte no cartão)
         payments: z
           .array(z.object({ method: paymentMethod, amount: z.coerce.number().min(0), installments: z.coerce.number().int().min(1).default(1) }))
@@ -396,10 +398,31 @@ export async function saleRoutes(app: FastifyInstance) {
           }
         }
 
+        // Valor do aparelho de troca: atualiza a troca, o abatimento e o custo do aparelho que entrou no estoque
+        let tradeDisc = Number(sale.tradeInDiscount);
+        let tradeChanged = false;
+        if (p.data.tradeInValue !== undefined && p.data.tradeInValue !== tradeDisc) {
+          const [ti] = await tx.select().from(tradeIns).where(eq(tradeIns.saleId, id)).limit(1);
+          if (ti) {
+            await tx.update(tradeIns).set({ value: String(p.data.tradeInValue) }).where(eq(tradeIns.id, ti.id));
+            if (ti.imei) {
+              await tx
+                .update(devices)
+                .set({ cost: String(p.data.tradeInValue) })
+                .where(and(eq(devices.serialImei, ti.imei), eq(devices.supplier, "Troca (PDV)")));
+            }
+            changes.valorTroca = { de: tradeDisc, para: p.data.tradeInValue };
+            audit = { desc: audit.desc.replace(/(.*)$/, "(" + Object.keys(changes).join(", ") + ")"), details: changes };
+            tradeDisc = p.data.tradeInValue;
+            update.tradeInDiscount = String(tradeDisc);
+            tradeChanged = true;
+          }
+        }
+
         let total = Number(sale.total);
-        if (p.data.discount !== undefined || itemsChanged) {
+        if (p.data.discount !== undefined || itemsChanged || tradeChanged) {
           const discount = p.data.discount ?? Number(sale.discount);
-          total = Math.max(0, subtotal - Number(sale.tradeInDiscount) - discount);
+          total = Math.max(0, subtotal - tradeDisc - discount);
           update.discount = String(discount);
           update.total = String(total);
         }

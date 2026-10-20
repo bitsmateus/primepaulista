@@ -1309,6 +1309,7 @@ export interface SaleUpdate {
   installments?: number;
   items?: { id: string; price: number }[];
   total?: number;
+  tradeInValue?: number;
   payments?: { method: PaymentMethod; amount: number; installments: number }[];
 }
 
