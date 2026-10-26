@@ -160,7 +160,7 @@ export default function VendasPage() {
           warrantyDays: a.warrantyDays,
         })),
         total: editFinal,
-        tradeInValue: editSale.tradeIn ? editTrade : undefined,
+        tradeInValue: editTrade,
         payments: editPayRows.map((r) => ({
           method: r.method,
           amount: r.amount,
@@ -183,7 +183,7 @@ export default function VendasPage() {
         return sum + price * i.quantity;
       }, 0) + eAdded.reduce((sum, a) => sum + (Number(a.price) || 0) * a.quantity, 0)
     : 0;
-  const editTrade = editSale?.tradeIn && eTrade.trim() !== "" && Number.isFinite(Number(eTrade)) ? Number(eTrade) : editSale?.tradeInDiscount ?? 0;
+  const editTrade = editSale && eTrade.trim() !== "" && Number.isFinite(Number(eTrade)) ? Number(eTrade) : editSale?.tradeInDiscount ?? 0;
   const addQ = eAddQuery.trim().toLowerCase();
   const addResults =
     addQ.length >= 2
@@ -574,13 +574,13 @@ export default function VendasPage() {
                 </div>
                 {eAdded.length > 0 && <p className="text-xs text-muted-foreground">Os itens adicionados dão baixa no estoque ao salvar.</p>}
               </div>
-              {editSale.tradeIn && (
-                <div>
-                  <Label>Aparelho de troca — valor da entrada (R$)</Label>
-                  <Input type="number" min={0} value={eTrade} onChange={(e) => setETrade(e.target.value)} />
-                  <p className="mt-0.5 text-xs text-muted-foreground">{editSale.tradeIn.model}</p>
-                </div>
-              )}
+              <div>
+                <Label>Aparelho de troca — valor da entrada (R$)</Label>
+                <Input type="number" min={0} value={eTrade} onChange={(e) => setETrade(e.target.value)} />
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {editSale.tradeIn ? editSale.tradeIn.model : "Sem aparelho de troca. Preencha só para abater um valor de entrada."}
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Desconto (R$)</Label>

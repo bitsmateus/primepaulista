@@ -458,7 +458,14 @@ export async function saleRoutes(app: FastifyInstance) {
         let tradeChanged = false;
         if (p.data.tradeInValue !== undefined && p.data.tradeInValue !== tradeDisc) {
           const [ti] = await tx.select().from(tradeIns).where(eq(tradeIns.saleId, id)).limit(1);
-          if (ti) {
+          if (!ti) {
+            // venda sem aparelho de troca cadastrado: só ajusta o abatimento da entrada
+            changes.valorTroca = { de: tradeDisc, para: p.data.tradeInValue };
+            audit = { desc: audit.desc.replace(/(.*)$/, "(" + Object.keys(changes).join(", ") + ")"), details: changes };
+            tradeDisc = p.data.tradeInValue;
+            update.tradeInDiscount = String(tradeDisc);
+            tradeChanged = true;
+          } else {
             await tx.update(tradeIns).set({ value: String(p.data.tradeInValue) }).where(eq(tradeIns.id, ti.id));
             if (ti.imei) {
               await tx
