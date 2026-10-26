@@ -14,6 +14,9 @@ import {
 import { buildDeviceMap, buildAccessoryMap, saleNetProfit, saleDeviceSaleValue, INVOICE_COST_RATE } from "@/lib/profit";
 import { isReturned, canReturn } from "@/lib/returns";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
+import { deviceSellPrice, accessorySellPrice } from "@/lib/pdv";
+import { warrantyDaysForCondition } from "@/lib/warranty";
+import { formatCapacity } from "@/lib/utils";
 import { AUDIT_STATUS_LABEL } from "@/lib/reconciliation";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { DailySalesDialog } from "@/components/vendas/DailySalesDialog";
@@ -76,6 +79,10 @@ export default function VendasPage() {
   const [eDiscount, setEDiscount] = useState("");
   const [ePays, setEPays] = useState<{ method: PaymentMethod; amount: string; installments: string }[]>([]);
   const [eTrade, setETrade] = useState("");
+  // itens acrescentados à venda já fechada (dão baixa no estoque ao salvar)
+  type AddedItem = { key: string; type: "device" | "accessory"; productId: string; name: string; serial?: string; price: string; quantity: number; warrantyDays: number; max: number };
+  const [eAdded, setEAdded] = useState<AddedItem[]>([]);
+  const [eAddQuery, setEAddQuery] = useState("");
   const [eFinal, setEFinal] = useState<string | null>(null); // valor final manual (null = calculado)
   const [eNotes, setENotes] = useState("");
   const [eGiftsCost, setEGiftsCost] = useState("");
@@ -123,6 +130,8 @@ export default function VendasPage() {
     setEFinal(Math.abs(computeSaleTotal(s.subtotal, s.tradeInDiscount, s.discount ?? 0) - s.total) > 0.005 ? String(s.total) : null);
     setEGiftsCost(String(s.giftsCost ?? 0));
     setETrade(String(s.tradeInDiscount ?? 0));
+    setEAdded([]);
+    setEAddQuery("");
     setEItemPrices(Object.fromEntries(s.items.map((i) => [i.id, String(i.price)])));
     setERequiresInvoice(s.requiresInvoice ?? false);
   };
@@ -141,6 +150,15 @@ export default function VendasPage() {
         giftsCost: Number(eGiftsCost) || 0,
         requiresInvoice: eRequiresInvoice,
         notes: eNotes,
+        addItems: eAdded.map((a) => ({
+          productType: a.type,
+          productId: a.productId,
+          name: a.name,
+          serial: a.serial,
+          price: Number(a.price) || 0,
+          quantity: a.quantity,
+          warrantyDays: a.warrantyDays,
+        })),
         total: editFinal,
         tradeInValue: editSale.tradeIn ? editTrade : undefined,
         payments: editPayRows.map((r) => ({
@@ -163,9 +181,26 @@ export default function VendasPage() {
         const raw = eItemPrices[i.id];
         const price = raw === undefined || raw === "" || !Number.isFinite(Number(raw)) ? i.price : Number(raw);
         return sum + price * i.quantity;
-      }, 0)
+      }, 0) + eAdded.reduce((sum, a) => sum + (Number(a.price) || 0) * a.quantity, 0)
     : 0;
   const editTrade = editSale?.tradeIn && eTrade.trim() !== "" && Number.isFinite(Number(eTrade)) ? Number(eTrade) : editSale?.tradeInDiscount ?? 0;
+  const addQ = eAddQuery.trim().toLowerCase();
+  const addResults =
+    addQ.length >= 2
+      ? [
+          ...accessories
+            .filter((a) => a.quantity > 0 && a.name.toLowerCase().includes(addQ))
+            .slice(0, 6)
+            .map((a) => ({ key: "a" + a.id, label: a.name, sub: a.quantity + " em estoque", price: accessorySellPrice(a), pick: () => ({ key: crypto.randomUUID(), type: "accessory" as const, productId: a.id, name: a.name, price: String(accessorySellPrice(a)), quantity: 1, warrantyDays: 0, max: a.quantity }) })),
+          ...devices
+            .filter((d) => d.status === "Disponível" && `${d.model} ${d.color} ${d.serialImei} ${d.serial ?? ""}`.toLowerCase().includes(addQ))
+            .slice(0, 6)
+            .map((d) => {
+              const name = `${d.model} ${formatCapacity(d.capacity)} ${d.color}`.trim();
+              return { key: "d" + d.id, label: name, sub: d.condition + " · " + (d.serialImei || d.internalSerial), price: deviceSellPrice(d), pick: () => ({ key: crypto.randomUUID(), type: "device" as const, productId: d.id, name, serial: d.serialImei || d.internalSerial, price: String(deviceSellPrice(d)), quantity: 1, warrantyDays: warrantyDaysForCondition(d.condition), max: 1 }) };
+            }),
+        ]
+      : [];
   const editTotalPreview = editSale
     ? computeSaleTotal(editSubtotal, editTrade, Number(eDiscount) || 0)
     : 0;
@@ -484,6 +519,60 @@ export default function VendasPage() {
                     />
                   </div>
                 ))}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Adicionar item / acessório</Label>
+                {eAdded.map((a) => (
+                  <div key={a.key} className="flex items-center gap-2">
+                    <span className="flex-1 truncate text-sm" title={a.name}>{a.quantity}× {a.name}</span>
+                    {a.type === "accessory" && a.max > 1 && (
+                      <Input
+                        type="number"
+                        min={1}
+                        max={a.max}
+                        className="h-8 w-14"
+                        title="Quantidade"
+                        value={a.quantity}
+                        onChange={(e) => setEAdded((prev) => prev.map((x) => x.key === a.key ? { ...x, quantity: Math.min(a.max, Math.max(1, Number(e.target.value) || 1)) } : x))}
+                      />
+                    )}
+                    <Input
+                      type="number"
+                      className="h-8 w-24"
+                      title="Valor unitário"
+                      value={a.price}
+                      onChange={(e) => setEAdded((prev) => prev.map((x) => x.key === a.key ? { ...x, price: e.target.value } : x))}
+                    />
+                    <Button variant="ghost" size="sm" onClick={() => setEAdded((prev) => prev.filter((x) => x.key !== a.key))}>Remover</Button>
+                  </div>
+                ))}
+                <div className="relative">
+                  <Input placeholder="Buscar acessório ou aparelho (ex.: carregador)..." value={eAddQuery} onChange={(e) => setEAddQuery(e.target.value)} />
+                  {addResults.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg">
+                      {addResults.map((r) => (
+                        <button
+                          key={r.key}
+                          type="button"
+                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
+                          onClick={() => {
+                            const item = r.pick();
+                            if (item.type === "device" && eAdded.some((x) => x.productId === item.productId)) return;
+                            setEAdded((prev) => [...prev, item]);
+                            setEAddQuery("");
+                          }}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium">{r.label}</span>
+                            <span className="block text-xs text-muted-foreground">{r.sub}</span>
+                          </span>
+                          <span className="ml-2 whitespace-nowrap font-semibold">{fmt(r.price)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {eAdded.length > 0 && <p className="text-xs text-muted-foreground">Os itens adicionados dão baixa no estoque ao salvar.</p>}
               </div>
               {editSale.tradeIn && (
                 <div>

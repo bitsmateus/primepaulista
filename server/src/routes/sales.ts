@@ -339,6 +339,20 @@ export async function saleRoutes(app: FastifyInstance) {
         items: z.array(z.object({ id: z.string().uuid(), price: z.coerce.number() })).optional(),
         // valor final manual (não mexe no desconto)
         total: z.coerce.number().min(0).optional(),
+        // itens novos acrescentados à venda já fechada (dão baixa no estoque)
+        addItems: z
+          .array(
+            z.object({
+              productType: z.enum(["device", "accessory"]),
+              productId: z.string().uuid(),
+              name: z.string(),
+              serial: z.string().optional(),
+              price: z.coerce.number().min(0),
+              quantity: z.coerce.number().int().min(1),
+              warrantyDays: z.coerce.number().int().min(0).optional().default(0),
+            })
+          )
+          .optional(),
         // valor do aparelho de troca (entrada)
         tradeInValue: z.coerce.number().min(0).optional(),
         // várias formas de pagamento (ex.: parte no Pix, parte no cartão)
@@ -396,6 +410,47 @@ export async function saleRoutes(app: FastifyInstance) {
             changes.precoItens = priceChanges;
             audit = { desc: audit.desc.replace(/(.*)$/, "(" + Object.keys(changes).join(", ") + ")"), details: changes };
           }
+        }
+
+        // Itens acrescentados depois do fechamento: valida estoque, insere e dá baixa
+        if (p.data.addItems?.length) {
+          const sellerId = (req.user as JwtUser).sub;
+          for (const it of p.data.addItems) {
+            if (it.productType === "device") {
+              const [dev] = await tx.select({ status: devices.status }).from(devices).where(eq(devices.id, it.productId)).for("update").limit(1);
+              if (!dev) throw saleError(`Aparelho não encontrado: ${it.name}`);
+              if (dev.status === "Vendido") throw saleError(`O aparelho "${it.name}" já foi vendido.`);
+              await tx.update(devices).set({ status: "Vendido" }).where(eq(devices.id, it.productId));
+            } else {
+              const [acc] = await tx.select({ quantity: accessories.quantity }).from(accessories).where(eq(accessories.id, it.productId)).for("update").limit(1);
+              if (!acc) throw saleError(`Acessório não encontrado: ${it.name}`);
+              if (acc.quantity < it.quantity) throw saleError(`Estoque insuficiente de "${it.name}" (disponível: ${acc.quantity}).`);
+              await tx.update(accessories).set({ quantity: acc.quantity - it.quantity }).where(eq(accessories.id, it.productId));
+            }
+            await tx.insert(saleItems).values({
+              saleId: id,
+              productType: it.productType,
+              productId: it.productId,
+              name: it.name,
+              serial: it.serial ?? null,
+              price: String(it.price),
+              quantity: it.quantity,
+              warrantyDays: it.warrantyDays ?? 0,
+            });
+            await tx.insert(stockMovements).values({
+              productType: it.productType,
+              productId: it.productId,
+              movementType: "saida",
+              quantity: it.quantity,
+              reason: "Venda (item adicionado)",
+              userId: sellerId,
+            });
+            subtotal += it.price * it.quantity;
+          }
+          itemsChanged = true;
+          update.subtotal = String(subtotal);
+          changes.itensAdicionados = p.data.addItems.map((it) => ({ item: it.name, qtd: it.quantity, preco: it.price }));
+          audit = { desc: audit.desc.replace(/(.*)$/, "(" + Object.keys(changes).join(", ") + ")"), details: changes };
         }
 
         // Valor do aparelho de troca: atualiza a troca, o abatimento e o custo do aparelho que entrou no estoque

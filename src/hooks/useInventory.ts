@@ -225,7 +225,11 @@ export function useInventory() {
   // Edição de dados da venda (cliente/vendedor/desconto/pagamento), sem mexer no estoque
   const updateSaleMut = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: SaleUpdate }) => api.updateSale(id, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      invalidateDevices();
+      invalidateAccessories();
+    },
     onError: (err) =>
       toast.error(err instanceof ApiError ? err.message : "Não foi possível editar a venda."),
   });

@@ -1310,6 +1310,15 @@ export interface SaleUpdate {
   items?: { id: string; price: number }[];
   total?: number;
   tradeInValue?: number;
+  addItems?: {
+    productType: "device" | "accessory";
+    productId: string;
+    name: string;
+    serial?: string;
+    price: number;
+    quantity: number;
+    warrantyDays?: number;
+  }[];
   payments?: { method: PaymentMethod; amount: number; installments: number }[];
 }
 
