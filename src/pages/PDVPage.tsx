@@ -14,6 +14,7 @@ import { api, ApiError } from "@/lib/api";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { resolveQuoteForSale } from "@/lib/quotes";
 import { customerMatchesSearch } from "@/lib/customers";
+import { rankBySearch } from "@/lib/search";
 import { tradeInModelLine } from "@/lib/sales";
 import { formatCapacity, capitalizeName } from "@/lib/utils";
 import { deviceSellPrice, accessorySellPrice, cartSubtotal, saleTotal, remainingToPay, changeDue, resolveDiscount } from "@/lib/pdv";
@@ -146,7 +147,7 @@ export default function PDVPage() {
   const [showCustomerResults, setShowCustomerResults] = useState(false);
 
   const filteredCustomers = customerQuery.trim().length >= 2
-    ? customers.filter((c) => customerMatchesSearch(c, customerQuery))
+    ? rankBySearch(customers.filter((c) => customerMatchesSearch(c, customerQuery)), customerQuery, (c) => c.name)
     : [];
 
   const selectCustomer = (c: Customer) => {
@@ -157,7 +158,7 @@ export default function PDVPage() {
   };
 
   const filteredCustomers2 = customer2Query.trim().length >= 2
-    ? customers.filter((c) => customerMatchesSearch(c, customer2Query))
+    ? rankBySearch(customers.filter((c) => customerMatchesSearch(c, customer2Query)), customer2Query, (c) => c.name)
     : [];
 
   const handleCustomerSearch = () => {
@@ -282,9 +283,7 @@ export default function PDVPage() {
 
   // ---------- Busca avulsa de acessório ----------
   const filteredAccessories = accQuery.trim().length >= 1
-    ? accessories
-        .filter((a) => a.quantity > 0 && a.name.toLowerCase().includes(accQuery.trim().toLowerCase()))
-        .slice(0, 8)
+    ? rankBySearch(accessories.filter((a) => a.quantity > 0), accQuery, (a) => a.name).slice(0, 8)
     : [];
 
   const handlePickAccessory = (id: string) => {
