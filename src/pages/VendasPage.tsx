@@ -17,6 +17,8 @@ import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { deviceSellPrice, accessorySellPrice } from "@/lib/pdv";
 import { warrantyDaysForCondition } from "@/lib/warranty";
 import { formatCapacity } from "@/lib/utils";
+import { rankBySearch } from "@/lib/search";
+import { customerMatchesSearch } from "@/lib/customers";
 import { AUDIT_STATUS_LABEL } from "@/lib/reconciliation";
 import { SaleAttachments } from "@/components/vendas/SaleAttachments";
 import { DailySalesDialog } from "@/components/vendas/DailySalesDialog";
@@ -83,6 +85,9 @@ export default function VendasPage() {
   type AddedItem = { key: string; type: "device" | "accessory"; productId: string; name: string; serial?: string; price: string; quantity: number; warrantyDays: number; max: number };
   const [eAdded, setEAdded] = useState<AddedItem[]>([]);
   const [eAddQuery, setEAddQuery] = useState("");
+  const [eRemoved, setERemoved] = useState<Set<string>>(new Set()); // itens existentes retirados da venda
+  const [eCustQuery, setECustQuery] = useState("");
+  const [eCustOpen, setECustOpen] = useState(false);
   const [eFinal, setEFinal] = useState<string | null>(null); // valor final manual (null = calculado)
   const [eNotes, setENotes] = useState("");
   const [eGiftsCost, setEGiftsCost] = useState("");
@@ -132,6 +137,9 @@ export default function VendasPage() {
     setETrade(String(s.tradeInDiscount ?? 0));
     setEAdded([]);
     setEAddQuery("");
+    setERemoved(new Set());
+    setECustQuery("");
+    setECustOpen(false);
     setEItemPrices(Object.fromEntries(s.items.map((i) => [i.id, String(i.price)])));
     setERequiresInvoice(s.requiresInvoice ?? false);
   };
@@ -144,8 +152,9 @@ export default function VendasPage() {
         customerId: eCustomer || undefined,
         sellerName: eSeller,
         discount: Number(eDiscount) || 0,
+        removeItemIds: [...eRemoved],
         items: editSale.items
-          .filter((i) => eItemPrices[i.id] !== undefined && eItemPrices[i.id] !== "" && Number(eItemPrices[i.id]) !== i.price)
+          .filter((i) => !eRemoved.has(i.id) && eItemPrices[i.id] !== undefined && eItemPrices[i.id] !== "" && Number(eItemPrices[i.id]) !== i.price)
           .map((i) => ({ id: i.id, price: Number(eItemPrices[i.id]) })),
         giftsCost: Number(eGiftsCost) || 0,
         requiresInvoice: eRequiresInvoice,
@@ -177,7 +186,7 @@ export default function VendasPage() {
   };
 
   const editSubtotal = editSale
-    ? editSale.items.reduce((sum, i) => {
+    ? editSale.items.filter((i) => !eRemoved.has(i.id)).reduce((sum, i) => {
         const raw = eItemPrices[i.id];
         const price = raw === undefined || raw === "" || !Number.isFinite(Number(raw)) ? i.price : Number(raw);
         return sum + price * i.quantity;
@@ -188,12 +197,10 @@ export default function VendasPage() {
   const addResults =
     addQ.length >= 2
       ? [
-          ...accessories
-            .filter((a) => a.quantity > 0 && a.name.toLowerCase().includes(addQ))
+          ...rankBySearch(accessories.filter((a) => a.quantity > 0), addQ, (a) => a.name)
             .slice(0, 6)
             .map((a) => ({ key: "a" + a.id, label: a.name, sub: a.quantity + " em estoque", price: accessorySellPrice(a), pick: () => ({ key: crypto.randomUUID(), type: "accessory" as const, productId: a.id, name: a.name, price: String(accessorySellPrice(a)), quantity: 1, warrantyDays: 0, max: a.quantity }) })),
-          ...devices
-            .filter((d) => d.status === "Disponível" && `${d.model} ${d.color} ${d.serialImei} ${d.serial ?? ""}`.toLowerCase().includes(addQ))
+          ...rankBySearch(devices.filter((d) => d.status === "Disponível"), addQ, (d) => `${d.model} ${formatCapacity(d.capacity)} ${d.color} ${d.serialImei} ${d.serial ?? ""}`)
             .slice(0, 6)
             .map((d) => {
               const name = `${d.model} ${formatCapacity(d.capacity)} ${d.color}`.trim();
@@ -490,12 +497,33 @@ export default function VendasPage() {
             <div className="space-y-3">
               <div>
                 <Label>Cliente</Label>
-                <Select value={eCustomer} onValueChange={setECustomer}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
-                  <SelectContent>
-                    {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Input
+                    placeholder="Buscar cliente por nome, CPF ou telefone..."
+                    value={eCustOpen ? eCustQuery : customers.find((c) => c.id === eCustomer)?.name ?? ""}
+                    onFocus={() => { setECustQuery(""); setECustOpen(true); }}
+                    onChange={(e) => { setECustQuery(e.target.value); setECustOpen(true); }}
+                    onBlur={() => setTimeout(() => setECustOpen(false), 150)}
+                  />
+                  {eCustOpen && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg">
+                      {(eCustQuery.trim()
+                        ? rankBySearch(customers.filter((c) => customerMatchesSearch(c, eCustQuery)), eCustQuery, (c) => c.name)
+                        : customers
+                      ).slice(0, 8).map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setECustomer(c.id); setECustOpen(false); }}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <Label>Vendedor</Label>
@@ -508,17 +536,29 @@ export default function VendasPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Itens (valor unitário)</Label>
-                {editSale.items.map((i) => (
-                  <div key={i.id} className="flex items-center gap-2">
-                    <span className="flex-1 truncate text-sm" title={i.name}>{i.quantity}× {i.name}</span>
-                    <Input
-                      type="number"
-                      className="h-8 w-28"
-                      value={eItemPrices[i.id] ?? ""}
-                      onChange={(e) => setEItemPrices((prev) => ({ ...prev, [i.id]: e.target.value }))}
-                    />
-                  </div>
-                ))}
+                {editSale.items.map((i) => {
+                  const removed = eRemoved.has(i.id);
+                  return (
+                    <div key={i.id} className="flex items-center gap-2">
+                      <span className={`flex-1 truncate text-sm ${removed ? "text-muted-foreground line-through" : ""}`} title={i.name}>{i.quantity}× {i.name}</span>
+                      <Input
+                        type="number"
+                        className="h-8 w-24"
+                        disabled={removed}
+                        value={eItemPrices[i.id] ?? ""}
+                        onChange={(e) => setEItemPrices((prev) => ({ ...prev, [i.id]: e.target.value }))}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setERemoved((prev) => { const n = new Set(prev); if (n.has(i.id)) n.delete(i.id); else n.add(i.id); return n; })}
+                      >
+                        {removed ? "Desfazer" : "Remover"}
+                      </Button>
+                    </div>
+                  );
+                })}
+                {eRemoved.size > 0 && <p className="text-xs text-muted-foreground">Os itens removidos voltam ao estoque ao salvar.</p>}
               </div>
               <div className="space-y-1.5">
                 <Label>Adicionar item / acessório</Label>

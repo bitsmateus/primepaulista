@@ -1310,6 +1310,7 @@ export interface SaleUpdate {
   items?: { id: string; price: number }[];
   total?: number;
   tradeInValue?: number;
+  removeItemIds?: string[];
   addItems?: {
     productType: "device" | "accessory";
     productId: string;

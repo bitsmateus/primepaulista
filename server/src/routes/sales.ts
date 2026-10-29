@@ -337,6 +337,8 @@ export async function saleRoutes(app: FastifyInstance) {
         paymentMethod: paymentMethod.optional(),
         installments: z.coerce.number().int().min(1).optional(),
         items: z.array(z.object({ id: z.string().uuid(), price: z.coerce.number() })).optional(),
+        // itens retirados da venda (voltam ao estoque)
+        removeItemIds: z.array(z.string().uuid()).optional(),
         // valor final manual (não mexe no desconto)
         total: z.coerce.number().min(0).optional(),
         // itens novos acrescentados à venda já fechada (dão baixa no estoque)
@@ -390,9 +392,44 @@ export async function saleRoutes(app: FastifyInstance) {
         if (p.data.giftsCost !== undefined) update.giftsCost = String(p.data.giftsCost);
         if (p.data.requiresInvoice !== undefined) update.requiresInvoice = p.data.requiresInvoice;
 
-        // Preço unitário dos itens (não mexe no estoque): recalcula subtotal e total
         let subtotal = Number(sale.subtotal);
         let itemsChanged = false;
+
+        // Itens removidos: devolvem ao estoque e saem do subtotal
+        if (p.data.removeItemIds?.length) {
+          const sellerId = (req.user as JwtUser).sub;
+          const all = await tx.select().from(saleItems).where(eq(saleItems.saleId, id));
+          const toRemove = all.filter((r) => p.data.removeItemIds!.includes(r.id));
+          if (toRemove.length !== new Set(p.data.removeItemIds).size) throw saleError("Item não pertence a esta venda.");
+          if (toRemove.length >= all.length && !p.data.addItems?.length) throw saleError("A venda precisa ter ao menos um item. Para cancelar tudo, use a devolução.");
+          for (const it of toRemove) {
+            if (it.productId) {
+              if (it.productType === "device") {
+                await tx.update(devices).set({ status: "Disponível" }).where(and(eq(devices.id, it.productId), eq(devices.status, "Vendido")));
+              } else {
+                const [acc] = await tx.select({ quantity: accessories.quantity }).from(accessories).where(eq(accessories.id, it.productId)).for("update").limit(1);
+                if (acc) await tx.update(accessories).set({ quantity: acc.quantity + it.quantity }).where(eq(accessories.id, it.productId));
+              }
+              await tx.insert(stockMovements).values({
+                productType: it.productType,
+                productId: it.productId,
+                movementType: "entrada",
+                quantity: it.quantity,
+                reason: "Venda (item removido)",
+                userId: sellerId,
+              });
+            }
+            await tx.delete(saleItems).where(eq(saleItems.id, it.id));
+            subtotal -= Number(it.price) * it.quantity;
+          }
+          subtotal = Math.max(0, subtotal);
+          itemsChanged = true;
+          update.subtotal = String(subtotal);
+          changes.itensRemovidos = toRemove.map((it) => ({ item: it.name, qtd: it.quantity, preco: Number(it.price) }));
+          audit = { desc: audit.desc.replace(/(.*)$/, "(" + Object.keys(changes).join(", ") + ")"), details: changes };
+        }
+
+        // Preço unitário dos itens (não mexe no estoque): recalcula subtotal e total
         if (p.data.items?.length) {
           const current = await tx.select().from(saleItems).where(eq(saleItems.saleId, id));
           const priceChanges: Record<string, unknown>[] = [];
@@ -404,7 +441,7 @@ export async function saleRoutes(app: FastifyInstance) {
             row.price = String(it.price);
             itemsChanged = true;
           }
-          if (itemsChanged) {
+          if (priceChanges.length) {
             subtotal = current.reduce((sum, r) => sum + Number(r.price) * r.quantity, 0);
             update.subtotal = String(subtotal);
             changes.precoItens = priceChanges;
