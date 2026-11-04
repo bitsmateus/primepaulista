@@ -21,6 +21,57 @@ export function formatCpf(cpf: string): string {
   return `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}`;
 }
 
+// Validação de CNPJ (algoritmo dos dígitos verificadores)
+export function isValidCnpj(cnpj: string): boolean {
+  const c = onlyDigits(cnpj);
+  if (c.length !== 14 || /^(\d)\1{13}$/.test(c)) return false;
+  const calc = (len: number) => {
+    const weights = len === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    let sum = 0;
+    for (let i = 0; i < len; i++) sum += Number(c[i]) * weights[i];
+    const r = sum % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return calc(12) === Number(c[12]) && calc(13) === Number(c[13]);
+}
+
+export function formatCnpj(cnpj: string): string {
+  const c = onlyDigits(cnpj);
+  if (c.length !== 14) return cnpj;
+  return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}`;
+}
+
+// Pessoa física (CPF) ou jurídica (CNPJ). O documento fica no mesmo campo `cpf`.
+export type PersonType = "PF" | "PJ";
+
+export function documentType(doc: string): PersonType {
+  return onlyDigits(doc).length === 14 ? "PJ" : "PF";
+}
+
+export function isValidDocument(doc: string, type: PersonType = documentType(doc)): boolean {
+  return type === "PJ" ? isValidCnpj(doc) : isValidCpf(doc);
+}
+
+export function formatDocument(doc: string): string {
+  return documentType(doc) === "PJ" ? formatCnpj(doc) : formatCpf(doc);
+}
+
+// Máscara progressiva enquanto digita
+export function maskDocument(value: string, type: PersonType): string {
+  const d = onlyDigits(value).slice(0, type === "PJ" ? 14 : 11);
+  if (type === "PJ") {
+    return d
+      .replace(/^(\d{2})(\d)/, "$1.$2")
+      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1/$2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  }
+  return d
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
 export function formatPhone(phone: string): string {
   const p = onlyDigits(phone);
   if (p.length === 11) return `(${p.slice(0, 2)}) ${p.slice(2, 7)}-${p.slice(7)}`;

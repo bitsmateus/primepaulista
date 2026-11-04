@@ -11,7 +11,7 @@ import { isReturned, canReturn } from "@/lib/returns";
 import { parseCustomersCsv, dedupeCustomers, ParsedCustomersCsv } from "@/lib/customerCsv";
 import { ApiError } from "@/lib/api";
 import {
-  isValidCpf, formatCpf, formatPhone, customerMatchesSearch,
+  isValidDocument, formatDocument, maskDocument, documentType, PersonType, formatPhone, customerMatchesSearch,
   buildCustomerStats, buildCustomerReport, birthdayMonth, formatBirthday,
 } from "@/lib/customers";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,7 @@ export default function CustomersPage() {
 
   // Form
   const [name, setName] = useState("");
+  const [personType, setPersonType] = useState<PersonType>("PF");
   const [cpf, setCpf] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [birthday, setBirthday] = useState("");
@@ -91,19 +92,19 @@ export default function CustomersPage() {
   const [notes, setNotes] = useState("");
 
   const resetForm = () => {
-    setName(""); setCpf(""); setWhatsapp(""); setBirthday(""); setLeadOrigin("Instagram"); setNotes("");
+    setName(""); setPersonType("PF"); setCpf(""); setWhatsapp(""); setBirthday(""); setLeadOrigin("Instagram"); setNotes("");
   };
   const openCreate = () => { resetForm(); setEditingId(null); setOpen(true); };
   const openEdit = (c: Customer) => {
     setEditingId(c.id);
-    setName(c.name); setCpf(c.cpf || ""); setWhatsapp(c.whatsapp || "");
+    setName(c.name); setPersonType(documentType(c.cpf || "")); setCpf(c.cpf ? formatDocument(c.cpf) : ""); setWhatsapp(c.whatsapp || "");
     setBirthday(c.birthday || ""); setLeadOrigin(c.leadOrigin || "Instagram"); setNotes(c.notes || "");
     setOpen(true);
   };
 
   const handleSubmit = async () => {
     if (!name.trim()) { toast.error("Informe o nome do cliente."); return; }
-    if (cpf.trim() && !isValidCpf(cpf)) { toast.error("CPF inválido."); return; }
+    if (cpf.trim() && !isValidDocument(cpf, personType)) { toast.error(personType === "PJ" ? "CNPJ inválido." : "CPF inválido."); return; }
     const payload = { name: name.trim(), cpf: cpf.trim(), whatsapp: whatsapp.trim(), birthday, leadOrigin, notes: notes.trim() };
     setSaving(true);
     try {
@@ -131,7 +132,7 @@ export default function CustomersPage() {
   }, [customers, search, filterOrigin, onlyBirthdays]);
 
   const exportCSV = () => {
-    const headers = ["Nome", "CPF", "WhatsApp", "Aniversário", "Origem", "Compras", "Total gasto", "Cadastro"];
+    const headers = ["Nome", "CPF/CNPJ", "WhatsApp", "Aniversário", "Origem", "Compras", "Total gasto", "Cadastro"];
     const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = filtered.map((c) => {
       const st = stats[c.id];
@@ -197,7 +198,7 @@ export default function CustomersPage() {
           <div className="relative max-w-sm flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome, CPF ou WhatsApp..."
+              placeholder="Buscar por nome, CPF/CNPJ ou WhatsApp..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -234,7 +235,7 @@ export default function CustomersPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
+                    <TableHead>CPF/CNPJ</TableHead>
                     <TableHead>WhatsApp</TableHead>
                     <TableHead>Aniversário</TableHead>
                     <TableHead>Origem</TableHead>
@@ -249,7 +250,7 @@ export default function CustomersPage() {
                     return (
                       <TableRow key={c.id}>
                         <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell>{c.cpf ? formatCpf(c.cpf) : "—"}</TableCell>
+                        <TableCell>{c.cpf ? formatDocument(c.cpf) : "—"}</TableCell>
                         <TableCell>{c.whatsapp ? formatPhone(c.whatsapp) : "—"}</TableCell>
                         <TableCell>{formatBirthday(c.birthday)}</TableCell>
                         <TableCell><Badge variant="secondary">{c.leadOrigin}</Badge></TableCell>
@@ -306,13 +307,26 @@ export default function CustomersPage() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1">
-              <Label>Nome *</Label>
-              <Input value={name} onChange={(e) => setName(capitalizeName(e.target.value))} placeholder="Nome completo" />
+              <Label>Tipo de cliente</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(["PF", "PJ"] as PersonType[]).map((t) => (
+                  <Button key={t} type="button" variant={personType === t ? "default" : "outline"} size="sm"
+                    onClick={() => { setPersonType(t); setCpf(maskDocument(cpf, t)); }}>
+                    {t === "PF" ? "Pessoa Física (CPF)" : "Pessoa Jurídica (CNPJ)"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>{personType === "PJ" ? "Razão social / Nome fantasia *" : "Nome *"}</Label>
+              <Input value={name} onChange={(e) => setName(capitalizeName(e.target.value))}
+                placeholder={personType === "PJ" ? "Nome da empresa" : "Nome completo"} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label>CPF</Label>
-                <Input value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
+                <Label>{personType === "PJ" ? "CNPJ" : "CPF"}</Label>
+                <Input value={cpf} onChange={(e) => setCpf(maskDocument(e.target.value, personType))}
+                  placeholder={personType === "PJ" ? "00.000.000/0000-00" : "000.000.000-00"} />
               </div>
               <div className="space-y-1">
                 <Label>WhatsApp</Label>
@@ -321,7 +335,7 @@ export default function CustomersPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label>Aniversário</Label>
+                <Label>{personType === "PJ" ? "Data de fundação" : "Aniversário"}</Label>
                 <Input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
               </div>
               <div className="space-y-1">
@@ -436,8 +450,8 @@ export default function CustomersPage() {
           <DialogHeader><DialogTitle>Importar clientes (CSV)</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              O arquivo deve ter cabeçalho com as colunas <strong>Nome</strong>, e opcionalmente CPF, WhatsApp,
-              Aniversário e Origem. Clientes com CPF ou WhatsApp já cadastrados são ignorados.
+              O arquivo deve ter cabeçalho com as colunas <strong>Nome</strong>, e opcionalmente CPF/CNPJ, WhatsApp,
+              Aniversário e Origem. Clientes com CPF/CNPJ ou WhatsApp já cadastrados são ignorados.
             </p>
             <Input type="file" accept=".csv,text/csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
 

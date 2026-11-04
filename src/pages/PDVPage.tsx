@@ -13,7 +13,7 @@ import { printReceipt } from "@/utils/receiptGenerator";
 import { api, ApiError } from "@/lib/api";
 import { PAYMENT_METHODS, allowsInstallments } from "@/lib/payments";
 import { resolveQuoteForSale } from "@/lib/quotes";
-import { customerMatchesSearch } from "@/lib/customers";
+import { customerMatchesSearch, documentType, formatDocument, isValidDocument, maskDocument, onlyDigits, PersonType } from "@/lib/customers";
 import { rankBySearch } from "@/lib/search";
 import { tradeInModelLine } from "@/lib/sales";
 import { formatCapacity, capitalizeName } from "@/lib/utils";
@@ -59,6 +59,7 @@ export default function PDVPage() {
   const [lastSale2, setLastSale2] = useState<Sale | null>(null);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newPersonType, setNewPersonType] = useState<PersonType>("PF");
   const [newCpf, setNewCpf] = useState("");
   const [newWhatsapp, setNewWhatsapp] = useState("");
   const [newBirthday, setNewBirthday] = useState("");
@@ -167,12 +168,22 @@ export default function PDVPage() {
     } else if (filteredCustomers.length === 0) {
       toast.info("Cliente não encontrado. Cadastre um novo.");
       setShowNewCustomer(true);
-      setNewCpf(customerQuery);
+      if (onlyDigits(customerQuery)) {
+        const t = documentType(customerQuery);
+        setNewPersonType(t);
+        setNewCpf(maskDocument(customerQuery, t));
+      } else {
+        setNewName(capitalizeName(customerQuery));
+      }
     }
   };
 
   const handleCreateCustomer = async () => {
     if (!newName || !newCpf) return;
+    if (!isValidDocument(newCpf, newPersonType)) {
+      toast.error(newPersonType === "PJ" ? "CNPJ inválido." : "CPF inválido.");
+      return;
+    }
     try {
       const c = await addCustomer({
         name: newName, cpf: newCpf, whatsapp: newWhatsapp,
@@ -180,7 +191,7 @@ export default function PDVPage() {
       });
       setCustomer(c);
       setShowNewCustomer(false);
-      setNewName(""); setNewCpf(""); setNewWhatsapp(""); setNewBirthday("");
+      setNewName(""); setNewPersonType("PF"); setNewCpf(""); setNewWhatsapp(""); setNewBirthday("");
       toast.success("Cliente cadastrado!");
     } catch {
       toast.error("Não foi possível cadastrar o cliente.");
@@ -569,7 +580,7 @@ export default function PDVPage() {
                   <div className="flex items-center justify-between rounded-lg bg-muted p-3">
                     <div>
                       <p className="font-medium text-foreground">{customer.name}</p>
-                      <p className="text-xs text-muted-foreground">CPF: {customer.cpf} · WhatsApp: {customer.whatsapp}</p>
+                      <p className="text-xs text-muted-foreground">CPF/CNPJ: {formatDocument(customer.cpf)} · WhatsApp: {customer.whatsapp}</p>
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => setCustomer(null)}>Trocar</Button>
                   </div>
@@ -602,7 +613,7 @@ export default function PDVPage() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="font-medium text-foreground truncate">{c.name}</p>
-                              <p className="text-xs text-muted-foreground">CPF: {c.cpf} · {c.whatsapp}</p>
+                              <p className="text-xs text-muted-foreground">CPF/CNPJ: {formatDocument(c.cpf)} · {c.whatsapp}</p>
                             </div>
                           </button>
                         ))}
@@ -633,7 +644,7 @@ export default function PDVPage() {
                       <div className="flex items-center justify-between rounded-lg bg-muted p-3">
                         <div>
                           <p className="font-medium text-foreground">{customer2.name}</p>
-                          <p className="text-xs text-muted-foreground">CPF: {customer2.cpf} · WhatsApp: {customer2.whatsapp}</p>
+                          <p className="text-xs text-muted-foreground">CPF/CNPJ: {formatDocument(customer2.cpf)} · WhatsApp: {customer2.whatsapp}</p>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => setCustomer2(null)}>Trocar</Button>
                       </div>
@@ -655,7 +666,7 @@ export default function PDVPage() {
                               >
                                 <div className="min-w-0 flex-1">
                                   <p className="font-medium text-foreground truncate">{c.name}</p>
-                                  <p className="text-xs text-muted-foreground">CPF: {c.cpf} · {c.whatsapp}</p>
+                                  <p className="text-xs text-muted-foreground">CPF/CNPJ: {formatDocument(c.cpf)} · {c.whatsapp}</p>
                                 </div>
                               </button>
                             ))}
@@ -1105,13 +1116,26 @@ export default function PDVPage() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1">
-              <Label>Nome *</Label>
-              <Input value={newName} onChange={(e) => setNewName(capitalizeName(e.target.value))} placeholder="Nome completo" />
+              <Label>Tipo de cliente</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(["PF", "PJ"] as PersonType[]).map((t) => (
+                  <Button key={t} type="button" variant={newPersonType === t ? "default" : "outline"} size="sm"
+                    onClick={() => { setNewPersonType(t); setNewCpf(maskDocument(newCpf, t)); }}>
+                    {t === "PF" ? "Pessoa Física (CPF)" : "Pessoa Jurídica (CNPJ)"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>{newPersonType === "PJ" ? "Razão social / Nome fantasia *" : "Nome *"}</Label>
+              <Input value={newName} onChange={(e) => setNewName(capitalizeName(e.target.value))}
+                placeholder={newPersonType === "PJ" ? "Nome da empresa" : "Nome completo"} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label>CPF *</Label>
-                <Input value={newCpf} onChange={(e) => setNewCpf(e.target.value)} placeholder="000.000.000-00" />
+                <Label>{newPersonType === "PJ" ? "CNPJ *" : "CPF *"}</Label>
+                <Input value={newCpf} onChange={(e) => setNewCpf(maskDocument(e.target.value, newPersonType))}
+                  placeholder={newPersonType === "PJ" ? "00.000.000/0000-00" : "000.000.000-00"} />
               </div>
               <div className="space-y-1">
                 <Label>WhatsApp</Label>
