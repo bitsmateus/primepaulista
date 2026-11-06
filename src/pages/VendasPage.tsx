@@ -204,7 +204,7 @@ export default function VendasPage() {
             .slice(0, 6)
             .map((d) => {
               const name = `${d.model} ${formatCapacity(d.capacity)} ${d.color}`.trim();
-              return { key: "d" + d.id, label: name, sub: d.condition + " · " + (d.serialImei || d.internalSerial), price: deviceSellPrice(d), pick: () => ({ key: crypto.randomUUID(), type: "device" as const, productId: d.id, name, serial: d.serialImei || d.internalSerial, price: String(deviceSellPrice(d)), quantity: 1, warrantyDays: warrantyDaysForCondition(d.condition), max: 1 }) };
+              return { key: "d" + d.id, label: name, sub: d.condition + " · " + (d.serial || d.internalSerial || "sem serial"), price: deviceSellPrice(d), pick: () => ({ key: crypto.randomUUID(), type: "device" as const, productId: d.id, name, serial: d.serialImei || d.internalSerial, price: String(deviceSellPrice(d)), quantity: 1, warrantyDays: warrantyDaysForCondition(d.condition), max: 1 }) };
             }),
         ]
       : [];

@@ -721,7 +721,7 @@ export default function PDVPage() {
                               {d.model} · {formatCapacity(d.capacity)} · {d.color}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {d.condition} · Bateria: {d.batteryHealth}% · {d.serialImei || d.internalSerial}
+                              {d.condition} · Bateria: {d.batteryHealth}% · {d.serial || d.internalSerial}
                             </p>
                           </div>
                           <span className="ml-3 whitespace-nowrap text-sm font-semibold">
