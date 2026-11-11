@@ -184,12 +184,18 @@ export default function SuppliersPage() {
                     <TableHead className="text-center">Aparelhos</TableHead>
                     <TableHead className="text-center">Contas</TableHead>
                     <TableHead>Situação</TableHead>
-                    <TableHead className="w-40" />
+                    <TableHead className="sticky right-0 w-40 bg-background text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map((s) => (
-                    <TableRow key={s.id} data-supplier={s.name}>
+                    <TableRow
+                      key={s.id}
+                      data-supplier={s.name}
+                      className="cursor-pointer"
+                      title="Clique para abrir a ficha"
+                      onClick={() => setDetailId(s.id)}
+                    >
                       <TableCell className="font-medium">{s.name}</TableCell>
                       <TableCell className="text-xs">{formatDocument(s.document) || "—"}</TableCell>
                       <TableCell className="text-xs">{s.phone || "—"}</TableCell>
@@ -197,7 +203,7 @@ export default function SuppliersPage() {
                       <TableCell className="text-center">{s.deviceCount ?? 0}</TableCell>
                       <TableCell className="text-center">{s.payableCount ?? 0}</TableCell>
                       <TableCell>{s.active ? <Badge>Ativo</Badge> : <Badge variant="secondary">Inativo</Badge>}</TableCell>
-                      <TableCell>
+                      <TableCell className="sticky right-0 bg-background" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" title="Ver ficha" aria-label={`Ver ficha de ${s.name}`} onClick={() => setDetailId(s.id)}>
                             <Eye className="h-4 w-4 text-muted-foreground" />
@@ -282,7 +288,23 @@ export default function SuppliersPage() {
       <Dialog open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{d?.supplier.name ?? "Fornecedor"}</DialogTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
+              <DialogTitle>{d?.supplier.name ?? "Fornecedor"}</DialogTitle>
+              {canManage && d && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => {
+                    const sup = d.supplier;
+                    setDetailId(null);
+                    openEdit(sup);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" /> Editar
+                </Button>
+              )}
+            </div>
             <DialogDescription>
               {d ? [formatDocument(d.supplier.document), d.supplier.phone, d.supplier.email].filter(Boolean).join(" · ") || "Sem dados de contato" : "Carregando…"}
             </DialogDescription>
